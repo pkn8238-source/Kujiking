@@ -1219,14 +1219,15 @@
         p_board_id: args.boardId,
         p_ticket_no: args.n,
         p_coupon_id: args.couponId || null,
-        p_code: args.code || null
+        p_code: args.code || null,
+        p_use_points: !!args.usePoints
       });
       if (res.error) throw new Error(res.error.message || '뽑기에 실패했어요.');
       var r = res.data || {};
       return {
         grade: r.grade, tierLabel: r.tier_label, points: r.points || 0,
         itemStatus: r.item_status, isLast: !!r.is_last, remaining: r.remaining,
-        source: r.source, demo: r.source === 'demo'
+        source: r.source, demo: r.source === 'demo', pointsBalance: r.points_balance
       };
     },
 
@@ -1622,8 +1623,19 @@
         rec.usedBy = state.me ? state.me.id : null;
         source = 'code';
       }
+    } else if (args.usePoints || args.withPoints) {
+      /* 굿즈 포인트로 뽑기 (v3.6): 판 가격만큼 회원 포인트를 차감한다 */
+      if (!state.me) throw new Error('포인트로 뽑으려면 로그인이 필요합니다.');
+      var meU = userById(state.me.id);
+      if (!meU) throw new Error('회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
+      var priceP = Number(board.price) || 0;
+      var balP = Number(meU.points) || 0;
+      if (priceP <= 0) throw new Error('이 판은 포인트로 뽑을 수 없습니다.');
+      if (balP < priceP) throw new Error('굿즈 포인트가 부족합니다. (필요 ' + fmt(priceP) + 'P · 보유 ' + fmt(balP) + 'P)');
+      meU.points = balP - priceP;
+      source = 'points';
     } else {
-      throw new Error('쿠폰 또는 교환 코드가 필요합니다.');
+      throw new Error('쿠폰 · 교환 코드 · 굿즈 포인트 중 하나가 필요합니다.');
     }
 
     var map = await getMapping(board);
@@ -1669,7 +1681,8 @@
     return {
       grade: grade, tierLabel: tier.label || '', points: points,
       itemStatus: itemStatus, isLast: isLast, remaining: remaining(board),
-      source: source, demo: demo, guest: !state.me
+      source: source, demo: demo, guest: !state.me,
+      pointsBalance: state.me ? Number((userById(state.me.id) || {}).points || 0) : null
     };
   }
 
@@ -1682,6 +1695,7 @@
   function openModal(html, opts) {
     opts = opts || {};
     modalRoot.hidden = false;
+    modalShell.classList.remove('is-quake');
     modalShell.classList.toggle('wide', !!opts.wide);
     modalShell.classList.toggle('dark', !!opts.dark);
     modalShell.classList.toggle('is-drag', !!opts.dragLock);
@@ -2320,6 +2334,7 @@
       '<li>라스트원상은 한 판의 마지막 1장을 뽑은 분께 추가로 지급됩니다.</li>' +
       '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다.</li>' +
+      '<li>굿즈 포인트로도 뽑을 수 있습니다. 뽑으면 이 판 가격(' + won(board.price) + ')만큼 회원 포인트에서 차감됩니다.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
@@ -2360,6 +2375,16 @@
       dragLock: d.step === 'peel' || d.step === 'seal',
       resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel'
     });
+    /* B상 · A상 · 라스트원은 결과가 터질 때 모달 전체가 흔들린다 */
+    if (d.step === 'result' && modalShell) {
+      var hitLv = gradeLevel(d.result && d.result.grade);
+      if (hitLv >= 2) {
+        modalShell.style.setProperty('--quake', hitLv >= 3 ? '1.75' : '1');
+        modalShell.classList.remove('is-quake');
+        void modalShell.offsetWidth;
+        modalShell.classList.add('is-quake');
+      }
+    }
     if (d.step === 'source') {
       var input = $('#drawCodeInput');
       if (input && ui.pendingCode) input.value = ui.pendingCode;
@@ -2374,6 +2399,10 @@
   function drawSourceHTML(board, d) {
     var user = me();
     var mine = couponsFor(board);
+    var price = Math.max(0, Number(board.price) || 0);
+    var have = user ? Number(user.points || 0) : 0;
+    var gap = Math.max(0, price - have);
+    var canPoints = !!user && price > 0 && have >= price;
     var html = '<h2 class="modal-title" id="modalTitle">' + d.n + '번 뽑기</h2>' +
       '<p class="modal-sub">' + h(board.title) + ' · ' + won(board.price) + '</p>';
 
@@ -2382,8 +2411,7 @@
         '<div class="pay-head"><span class="pay-badge">보유 뽑기권</span><b>' + fmt(mine.length) + '장 사용 가능</b></div>' +
         '<p class="pay-desc">' + h(mine[0].boardId ? '이 판 전용 쿠폰을 먼저 사용합니다.' : '모든 판에 쓸 수 있는 쿠폰입니다.') + '</p>' +
         '<button class="btn btn-primary btn-block" data-action="draw-coupon" data-id="' + h(mine[0].id) + '">쿠폰 1장으로 뽑기</button>' +
-      '</div>' +
-      '<div class="pay-divider"><span>또는 교환 코드</span></div>';
+      '</div>';
     } else if (!user) {
       html += '<div class="pay-option login-hint">' +
         '<div class="pay-head"><span class="pay-badge">회원 혜택</span><b>로그인하면 뽑기권으로 뽑기</b></div>' +
@@ -2398,7 +2426,29 @@
       '</div>';
     }
 
-    html += '<form class="code-form" data-form="draw-code" novalidate>' +
+    /* 굿즈 포인트로 뽑기 — 로그인 회원이면 항상 보이고, 잔액이 모자라면 안내와 함께 잠근다 */
+    if (user) {
+      html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
+        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: ' + fmt(have) + 'P)</em></b></div>' +
+        '<p class="pay-desc">' + (canPoints
+          ? '보관함 상품을 포인트로 바꾼 잔액으로 바로 뽑을 수 있어요. 뽑으면 <b>' + fmt(price) + 'P</b>가 차감됩니다.'
+          : '<b class="pay-gap">' + fmt(gap) + 'P</b> 부족해요. 내 보관함에서 당첨 상품을 <b>포인트 전환</b>하면 바로 뽑을 수 있어요.') + '</p>' +
+        (canPoints
+          ? '<button class="btn btn-gold btn-block" data-action="draw-points">포인트로 뽑기 (' + fmt(price) + 'P 사용)</button>'
+          : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>') +
+        '</div>';
+    } else {
+      html += '<div class="pay-option is-points is-off">' +
+        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: 0P)</em></b></div>' +
+        '<p class="pay-desc">로그인하면 보유 굿즈 포인트로도 뽑을 수 있어요. 하위 등급을 포인트로 바꿔 모을 수 있습니다.</p>' +
+        '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>' +
+        '</div>';
+    }
+
+    html += '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+      '<form class="code-form" data-form="draw-code" novalidate>' +
       '<label class="sr-only" for="drawCodeInput">교환 코드</label>' +
       '<input id="drawCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
       '<p class="field-error" data-role="code-error" role="alert"></p>' +
@@ -2413,9 +2463,9 @@
     return html;
   }
 
-  /* ---------- 개봉 효과음 (종이 찢기 · 스냅 · 팡파레) ---------- */
+  /* ---------- 개봉 효과음 (종이 찢기 · 두근두근 · 스냅 · 등급별 팡파레) ---------- */
   var kujiSound = (function () {
-    var ctx = null, noiseBuf = null, muted = null, lastTick = 0;
+    var ctx = null, noiseBuf = null, muted = null, lastTick = 0, unlocked = false;
 
     function isMuted() {
       if (muted === null) {
@@ -2435,95 +2485,243 @@
       btn.setAttribute('aria-pressed', off ? 'false' : 'true');
       btn.title = off ? '개봉 효과음 켜기' : '개봉 효과음 끄기';
     }
-    function ac() {
-      if (isMuted()) return null;
+    function makeCtx() {
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
       if (!ctx) { try { ctx = new C(); } catch (e) { return null; } }
       if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
       return ctx;
     }
+    function ac() {
+      if (isMuted()) return null;
+      return makeCtx();
+    }
+    /* iOS Safari: 첫 터치·클릭에서 AudioContext 를 즉시 깨운다 (무음 1샘플 재생) */
+    function unlock() {
+      var c = makeCtx();
+      if (!c) return;
+      if (unlocked) return;
+      unlocked = true;
+      try {
+        var b = c.createBuffer(1, 1, c.sampleRate);
+        var s = c.createBufferSource(); s.buffer = b;
+        var g = c.createGain(); g.gain.value = 0.0001;
+        s.connect(g); g.connect(c.destination);
+        s.start(0);
+      } catch (e) {}
+    }
     function noise(c) {
       if (noiseBuf) return noiseBuf;
-      var len = Math.floor(c.sampleRate * 0.4);
+      var len = Math.floor(c.sampleRate * 0.6);
       noiseBuf = c.createBuffer(1, len, c.sampleRate);
       var data = noiseBuf.getChannelData(0);
       for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       return noiseBuf;
     }
-    function blip(c, at, freq, dur, vol, type) {
+    /* 기본 사인·삼각·톱니 음 하나 (endFreq 로 피치 글라이드) */
+    function blip(c, at, freq, dur, vol, type, endFreq) {
       var o = c.createOscillator(), g = c.createGain();
       o.type = type || 'sine';
-      o.frequency.setValueAtTime(freq, at);
+      o.frequency.setValueAtTime(Math.max(20, freq), at);
+      if (endFreq && endFreq !== freq) o.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), at + dur);
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + 0.012);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol), at + Math.min(0.014, dur * 0.35));
       g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
       o.connect(g); g.connect(c.destination);
-      o.start(at); o.stop(at + dur + 0.03);
+      o.start(at); o.stop(at + dur + 0.05);
     }
-    /* 절취선이 한 칸씩 찢길 때 나는 짧은 지직 */
+    /* 배를 때리는 저음 (두근 / 쿵) */
+    function thump(c, at, from, to, dur, vol) {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(Math.max(20, from), at);
+      o.frequency.exponentialRampToValueAtTime(Math.max(18, to), at + dur * 0.82);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol), at + 0.016);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(at); o.stop(at + dur + 0.06);
+    }
+    /* 필터를 건 노이즈 한 방 (찢김·지직·펀치) */
+    function noiseHit(c, at, o) {
+      o = o || {};
+      var dur = o.dur || 0.2;
+      var src = c.createBufferSource(); src.buffer = noise(c);
+      var f = c.createBiquadFilter();
+      f.type = o.type || 'bandpass';
+      f.Q.value = o.q == null ? 1 : o.q;
+      f.frequency.setValueAtTime(o.f0 || 2000, at);
+      if (o.f1) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.f1), at + (o.sweep || dur * 0.8));
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, o.vol || 0.1), at + (o.attack == null ? 0.004 : o.attack));
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      src.connect(f); f.connect(g); g.connect(c.destination);
+      src.start(at, Math.random() * 0.3, dur + 0.06);
+    }
+    /* 짧게 흩뿌리는 반짝임 */
+    function sparkle(c, at, n, base, vol) {
+      for (var i = 0; i < n; i++) {
+        blip(c, at + i * 0.026 + Math.random() * 0.02, (base || 2400) + Math.random() * 1700, 0.08 + Math.random() * 0.07, vol || 0.02, 'sine');
+      }
+    }
+    function heartbeat(c, at, gain) {
+      thump(c, at, 98, 45, 0.3, 0.2 * gain);
+      thump(c, at + 0.2, 84, 38, 0.26, 0.15 * gain);
+      blip(c, at, 156, 0.1, 0.05 * gain, 'sine', 62);
+    }
+    function buzz(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+    }
+
+    /* 절취선이 한 칸씩 찢길 때: 종이 결이 끊기는 지직 + 진행률에 따라 올라가는 음 */
     function tear(amount) {
       var c = ac();
       if (!c) return;
       var now = c.currentTime;
-      if (now - lastTick < 0.05) return;
+      var a = Math.max(0, Math.min(1, Number(amount) || 0));
+      if (now - lastTick < (a > 0.45 ? 0.035 : 0.045)) return;
       lastTick = now;
-      var lvl = 0.03 + Math.min(0.045, (amount || 0) * 0.05);
-      var src = c.createBufferSource(); src.buffer = noise(c);
-      var bp = c.createBiquadFilter(); bp.type = 'bandpass';
-      bp.frequency.value = 1700 + Math.random() * 2500; bp.Q.value = 0.8;
-      var hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
-      var g = c.createGain();
-      g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(lvl, now + 0.008);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.05 + Math.random() * 0.06);
-      src.connect(bp); bp.connect(hp); hp.connect(g); g.connect(c.destination);
-      src.start(now, Math.random() * 0.25, 0.16);
-    }
-    /* 활짝 열리는 순간: 찢김 + 짧은 상승음 */
-    function snap() {
-      var c = ac();
-      if (!c) return;
-      var now = c.currentTime;
-      var src = c.createBufferSource(); src.buffer = noise(c);
-      var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
-      bp.frequency.setValueAtTime(2800, now);
-      bp.frequency.exponentialRampToValueAtTime(760, now + 0.22);
-      var g = c.createGain();
-      g.gain.setValueAtTime(0.11, now);
-      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
-      src.connect(bp); bp.connect(g); g.connect(c.destination);
-      src.start(now, 0, 0.3);
-      blip(c, now + 0.01, 300, 0.16, 0.06, 'sine');
-      blip(c, now + 0.06, 620, 0.2, 0.05, 'triangle');
-    }
-    /* 결과가 나올 때: 등급이 높으면 화려한 팡파레 */
-    function fanfare(epic) {
-      var c = ac();
-      if (!c) return;
-      var now = c.currentTime + 0.06;
-      var notes = epic ? [523.25, 659.25, 783.99, 1046.5, 1318.51] : [523.25, 659.25, 783.99];
-      var step = epic ? 0.085 : 0.1;
-      for (var i = 0; i < notes.length; i++) blip(c, now + i * step, notes[i], epic ? 0.4 : 0.28, epic ? 0.07 : 0.045, 'triangle');
-      if (epic) {
-        blip(c, now + notes.length * step, 1567.98, 0.65, 0.055, 'sine');
-        for (var k = 0; k < 6; k++) {
-          blip(c, now + 0.14 + k * 0.06, 2100 + Math.random() * 1300, 0.16, 0.022, 'sine');
-        }
+      noiseHit(c, now, {
+        f0: 1000 + a * 2400 + Math.random() * 600,
+        f1: 1700 + a * 3600,
+        sweep: 0.055,
+        q: 0.7 + a * 0.9,
+        vol: 0.032 + a * 0.05,
+        dur: 0.05 + Math.random() * 0.05,
+        attack: 0.005
+      });
+      /* 종이 섬유가 끊기는 아주 짧은 클릭 (진행할수록 촘촘하고 높게) */
+      if (Math.random() < 0.45 + a * 0.35) {
+        blip(c, now + 0.004, 2200 + a * 3000 + Math.random() * 1200, 0.026, 0.012 + a * 0.02, 'square');
       }
+      /* 0 → 75% 로 갈수록 살짝 올라가는 낮은 음 */
+      if (a > 0.1) blip(c, now, 170 + a * 280, 0.07, 0.012 + a * 0.022, 'triangle');
+      if (a > 0.55) sparkle(c, now + 0.01, 2, 2700, 0.012);
     }
-    /* 황금 봉인이 나타날 때: 낮게 울리는 긴장음 */
+
+    /* 결과가 나올 때: 등급별로 완전히 다른 팡파레 */
+    function snap(level) {
+      var c = ac();
+      if (!c) return;
+      var lv = Number(level) || 0;
+      var now = c.currentTime;
+      /* 찢어지는 트랜지언트 */
+      noiseHit(c, now, { type: 'highpass', f0: 1400, vol: 0.16 + lv * 0.03, dur: 0.11, attack: 0.001 });
+      noiseHit(c, now, { f0: 3000, f1: 680, sweep: 0.22, q: 0.7, vol: 0.14, dur: 0.3 });
+      /* 펀치 */
+      thump(c, now, 180, 52, 0.24, 0.16 + lv * 0.035);
+      blip(c, now + 0.01, 330, 0.14, 0.06, 'sine', 140);
+      /* 반짝이는 종소리 버스트 */
+      sparkle(c, now + 0.05, 4 + lv * 3, 2200 + lv * 250, 0.03);
+      if (lv >= 2) {
+        [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
+          blip(c, now + 0.16 + i * 0.05, f, 0.5, 0.045, 'sine');
+        });
+      }
+      buzz(lv >= 2 ? [0, 26, 30, 18, 44, 36] : [0, 18, 26, 16]);
+    }
+
+    /* 황금 봉인이 나타날 때: 두근-두근 심장박동 + 전기가 지직이는 긴장 */
     function sealCharge() {
       var c = ac();
       if (!c) return;
-      var now = c.currentTime + 0.05;
-      blip(c, now, 196, 0.5, 0.055, 'sawtooth');
-      blip(c, now + 0.2, 261.63, 0.5, 0.05, 'triangle');
-      blip(c, now + 0.4, 392, 0.55, 0.045, 'triangle');
-      blip(c, now + 0.56, 1046.5, 0.3, 0.028, 'sine');
+      var now = c.currentTime + 0.02;
+      heartbeat(c, now, 1);
+      heartbeat(c, now + 0.54, 0.82);
+      /* 낮게 깔리며 올라가는 서브 베이스 */
+      var o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
+      lp.type = 'lowpass'; lp.frequency.setValueAtTime(170, now);
+      o.type = 'sine';
+      o.frequency.setValueAtTime(56, now);
+      o.frequency.linearRampToValueAtTime(96, now + 1.6);
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(0.075, now + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 1.95);
+      o.connect(lp); lp.connect(g); g.connect(c.destination);
+      o.start(now); o.stop(now + 2.05);
+      /* 전기 셔머 */
+      noiseHit(c, now + 0.08, { type: 'highpass', f0: 5200, vol: 0.022, dur: 1.15, attack: 0.16 });
+      for (var i = 0; i < 7; i++) {
+        blip(c, now + 0.24 + i * 0.105, 1800 + Math.random() * 2400, 0.14, 0.016, 'sine');
+      }
+      /* 금빛으로 올라가는 화음 */
+      [261.63, 329.63, 392].forEach(function (f, i) {
+        blip(c, now + 0.42 + i * 0.18, f, 0.7, 0.038, 'triangle');
+      });
+      buzz([0, 40, 60, 32]);
     }
+
+    /* 등급별 팡파레 — 0: D~L 팝 · 1: C 신스 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
+    function fanfare(level) {
+      var c = ac();
+      if (!c) return;
+      var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
+      var t0 = c.currentTime + 0.05;
+      if (lv <= 0) {
+        blip(c, t0, 783.99, 0.18, 0.05, 'triangle');
+        blip(c, t0 + 0.09, 1046.5, 0.3, 0.045, 'sine');
+        sparkle(c, t0 + 0.12, 3, 2600, 0.014);
+        buzz(12);
+        return;
+      }
+      if (lv === 1) {
+        /* C: 밝은 신스 화음 */
+        [523.25, 659.25, 783.99].forEach(function (f, i) {
+          blip(c, t0 + i * 0.06, f, 0.52, 0.042, 'sawtooth');
+          blip(c, t0 + i * 0.06, f * 2, 0.3, 0.012, 'sine');
+        });
+        [1046.5, 1318.51].forEach(function (f, i) {
+          blip(c, t0 + 0.22 + i * 0.06, f, 0.55, 0.03, 'triangle');
+        });
+        thump(c, t0, 140, 60, 0.24, 0.09);
+        sparkle(c, t0 + 0.3, 6, 2500, 0.016);
+        buzz([0, 16, 22, 20]);
+        return;
+      }
+      if (lv === 2) {
+        /* B: 금빛 브라스 팡파레 */
+        var notes = [392, 523.25, 659.25, 783.99, 1046.5];
+        notes.forEach(function (f, i) {
+          var at = t0 + i * 0.105;
+          blip(c, at, f, 0.44, 0.05, 'sawtooth');
+          blip(c, at + 0.005, f * 2, 0.28, 0.022, 'triangle');
+        });
+        thump(c, t0, 150, 52, 0.3, 0.12);
+        thump(c, t0 + 0.55, 132, 48, 0.34, 0.1);
+        blip(c, t0 + 0.56, 1567.98, 0.8, 0.05, 'sine');
+        sparkle(c, t0 + 0.5, 10, 2400, 0.018);
+        buzz([0, 26, 34, 22, 40, 30]);
+        return;
+      }
+      /* A · 라스트원: 두 옥타브를 올라가는 웅장한 아르페지오 + 반짝이는 피날레 */
+      var rise = [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
+      rise.forEach(function (f, i) {
+        var at = t0 + i * 0.082;
+        blip(c, at, f, 0.42, 0.04 + i * 0.002, 'sawtooth');
+        blip(c, at + 0.004, f * 2, 0.22, 0.016, 'triangle');
+      });
+      var tail = t0 + rise.length * 0.082;
+      [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
+        blip(c, tail + i * 0.07, f, 0.9, 0.045, 'sine');
+      });
+      thump(c, t0, 170, 46, 0.42, 0.16);
+      thump(c, tail, 148, 42, 0.5, 0.15);
+      noiseHit(c, tail, { type: 'highpass', f0: 7000, vol: 0.03, dur: 1.2, attack: 0.05 });
+      sparkle(c, tail + 0.04, 16, 2600, 0.02);
+      buzz([0, 30, 30, 24, 24, 20, 60, 40]);
+    }
+
+    /* 첫 제스처에서 오디오 잠금 해제 */
+    try {
+      ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'keydown'].forEach(function (ev) {
+        document.addEventListener(ev, unlock, { capture: true, passive: true });
+      });
+    } catch (e) {}
+
     return {
       tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge,
+      unlock: unlock, buzz: buzz,
       isMuted: isMuted, setMuted: setMuted, refreshToggle: refreshToggle,
       toggle: function () { setMuted(!isMuted()); }
     };
@@ -2594,7 +2792,7 @@
         '</span>' +
       '</div>' +
       '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
-      '<p class="result-meta">' + (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || ''))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
+      '<p class="result-meta">' + (d.usePoints ? '굿즈 포인트 ' + fmt(board.price) + 'P 사용' : (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || '')))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
   }
 
@@ -2609,6 +2807,7 @@
       boardId: d.boardId, n: d.n, step: 'peel',
       couponId: opts.couponId || null,
       code: opts.code || null,
+      usePoints: !!opts.usePoints,
       demo: !!opts.demo, busy: true, ready: false, revealing: false, result: null
     };
     renderDrawModal();
@@ -2624,7 +2823,8 @@
       var res = await Backend.draw({
         boardId: board.id, n: d.n,
         couponId: d.couponId || null,
-        code: d.code || null
+        code: d.code || null,
+        usePoints: !!d.usePoints
       });
       var tuned = tierOf(board, res.grade);
       if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
@@ -2871,12 +3071,17 @@
       flap.style.transform = 'translate3d(0,' + (PEEL_TEAR_PX + hgt * 0.05).toFixed(0) + 'px,0) rotateX(122deg)';
       flap.style.opacity = '0';
     }
-    if (peelDrag && peelDrag.dust) peelDrag.dust(20, 160);
+    if (peelDrag && peelDrag.dust) peelDrag.dust(28, 180);
     var fill = $('#peelMeterFill');
     if (fill) fill.style.width = '100%';
     updatePeelText(1);
-    kujiSound.snap();
-    try { navigator.vibrate && navigator.vibrate([0, 22, 34, 30]); } catch (err) {}
+    var snapLv = gradeLevel(d.result && d.result.grade);
+    kujiSound.snap(snapLv);
+    /* 봉인·상위상은 종이가 뜯기는 순간 카드 전체가 황금빛으로 번쩍인다 */
+    if (card && snapLv >= 1) {
+      card.classList.add('is-boom');
+      setTimeout(function () { if (card) card.classList.remove('is-boom'); }, 760);
+    }
 
     var waited = 0;
     while (ui.draw === d && !d.ready && waited < 9000) { await waitMs(120); waited += 120; }
@@ -2895,11 +3100,10 @@
       renderDrawModal();
       renderAll();
       kujiSound.sealCharge();
-      try { navigator.vibrate && navigator.vibrate([0, 14, 60, 14]); } catch (err) {}
       return;
     }
     d.step = 'result';
-    kujiSound.fanfare(isEpicGrade(d.result.grade));
+    kujiSound.fanfare(gradeLevel(d.result.grade));
     renderDrawModal();
     renderAll();
     toast(d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + d.result.grade + '상', 'ok');
@@ -2917,9 +3121,12 @@
 
   function drawSealHTML(board, d) {
     var no = ('00' + d.n).slice(-3);
-    return '<div class="seal-stage seal-lv2" id="sealStage">' +
-      '<p class="seal-kicker"><span class="seal-bolt">⚡</span> 상위상 기운 감지</p>' +
-      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">C상 이상 확정!</h2>' +
+    var sealLv = gradeLevel(d.result && d.result.grade) >= 3 ? 3 : 2;
+    return '<div class="seal-stage seal-lv' + sealLv + '" id="sealStage">' +
+      '<div class="seal-banner">' +
+        '<p class="seal-kicker"><span class="seal-bolt">⚡</span> 상위상 기운 감지</p>' +
+        '<h2 class="modal-title seal-title" id="modalTitle">C상 이상 확정!</h2>' +
+      '</div>' +
       '<p class="modal-sub">종이 속에서 <b>황금 봉인</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.</p>' +
       '<div class="seal-card" id="sealCard">' +
         '<div class="seal-halo" aria-hidden="true"></div>' +
@@ -3103,14 +3310,18 @@
     if (fill) fill.style.width = '100%';
     var txt = $('#sealMeterText');
     if (txt) { txt.textContent = '봉인 해제!'; txt.classList.add('is-armed'); }
-    kujiSound.snap();
-    try { navigator.vibrate && navigator.vibrate([0, 26, 40, 70]); } catch (err) {}
+    kujiSound.snap(3);
+    var stage3 = document.getElementById('sealStage');
+    if (stage3) {
+      stage3.classList.add('is-burst');
+      setTimeout(function () { if (stage3) stage3.classList.remove('is-burst'); }, 900);
+    }
     await waitMs(620);
     if (!ui.draw || ui.draw !== d || d.step !== 'seal') return;
     if (!d.result) { d.revealing = false; return; }
     d.step = 'result';
     d.revealing = false;
-    kujiSound.fanfare(true);
+    kujiSound.fanfare(gradeLevel(d.result && d.result.grade));
     renderDrawModal();
   }
 
@@ -3127,8 +3338,8 @@
   }
   function isEpicGrade(grade) { return gradeLevel(grade) >= 1; }
 
-  var REVEAL_CONF = [0, 18, 34, 56];
-  var REVEAL_SPARK = [4, 10, 16, 26];
+  var REVEAL_CONF = [0, 20, 72, 120];
+  var REVEAL_SPARK = [4, 10, 34, 56];
 
   function confettiHTML(count, opts) {
     opts = opts || {};
@@ -3185,14 +3396,16 @@
       ? '<div class="reveal-stage is-epic lv' + lv + ' grade-' + h(gkey) + '" id="revealStage">' +
           '<div class="rv-sky" aria-hidden="true"></div>' +
           '<div class="rv-beams" aria-hidden="true"></div>' +
-          (lv >= 3 ? '<div class="rv-beams rv-beams-alt" aria-hidden="true"></div><div class="rv-spot" aria-hidden="true"></div>' : '') +
+          (lv >= 2 ? '<div class="rv-beams rv-beams-alt" aria-hidden="true"></div><div class="rv-spot" aria-hidden="true"></div>' : '') +
           '<div class="rv-rings" aria-hidden="true"><i></i><i></i>' + (lv >= 2 ? '<i></i>' : '') + '</div>' +
           '<div class="rv-sparks" aria-hidden="true">' + sparkleHTML(REVEAL_SPARK[lv]) + '</div>' +
           '<div class="rv-confetti" aria-hidden="true">' + confettiHTML(REVEAL_CONF[lv], { drop: 380 + lv * 40, drift: 150 + lv * 40, spread: .55 + lv * .1, colors: confColors }) + '</div>' +
           '<div class="rv-flash" aria-hidden="true"></div>' +
+          (lv >= 2 ? '<div class="rv-boom" aria-hidden="true"></div>' : '') +
           '<div class="rv-hero">' +
             '<span class="rv-halo" aria-hidden="true"></span>' +
             '<span class="rv-burst" aria-hidden="true"></span>' +
+            (lv >= 2 ? '<span class="rv-frame" aria-hidden="true"></span>' : '') +
             hero +
             emblem +
           '</div>' +
@@ -3229,7 +3442,7 @@
       (r.itemStatus === '보관중' ? '<p class="result-hold">' + icon('box') + ' <b>내 보관함</b>에 담겼어요. 배송 신청은 내 보관함에서.</p>' : '') +
       (!me() && r.itemStatus !== '포인트지급' ? '<p class="result-meta">로그인하지 않아 보관함에 담기지 않았어요. 로그인 후 뽑으면 배송 신청까지 한 번에 됩니다.</p>' : '') +
       '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
-      '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : '') + '</p>' +
+      '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : (r.source === 'points' ? ' · 굿즈 포인트 사용' : '')) + '</p>' +
       '<div class="modal-actions">' +
         (me() && r.itemStatus === '보관중' ? '<button class="btn btn-outline" data-action="go-my">내 보관함 보기</button>' : '') +
         '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
@@ -4526,6 +4739,18 @@
         case 'draw-coupon': {
           if (!ui.draw) break;
           enterPeel({ couponId: id });
+          break;
+        }
+        case 'draw-points': {
+          if (!ui.draw) break;
+          enterPeel({ usePoints: true });
+          break;
+        }
+        case 'go-my-points': {
+          closeModal();
+          ui.myTab = 'inventory';
+          if (location.hash !== '#/my') location.hash = '#/my';
+          else renderMy();
           break;
         }
 
