@@ -4734,7 +4734,8 @@
   }
 
   function renderSettingsTab() {
-    var card = $('#backendCard');    if (card) {
+    var card = $('#backendCard');
+    if (card) {
       var cfg = Backend.config || {};
       var live = Backend.mode === 'supabase';
       card.innerHTML = '<div class="admin-card-head"><h2>Supabase 연결</h2>' +
