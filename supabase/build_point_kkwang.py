@@ -333,6 +333,7 @@ for b in blocks:
   v_tiers   := $json$%s$json$::jsonb;
   v_manual  := $json$%s$json$::jsonb;
 
+  v_id := null;
   select id into v_id from public.boards where id = '%s' or title = v_title limit 1;
   if v_id is null then
     v_id := '%s';
