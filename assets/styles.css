@@ -1420,3 +1420,6 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 @media (max-width:1080px){
   .board-hero{grid-template-columns:150px minmax(0,1fr)}
 }
+
+/* 서버(실시간) 모드에서는 체험용 UI를 숨깁니다 */
+body.is-live .demo-only{display:none !important}

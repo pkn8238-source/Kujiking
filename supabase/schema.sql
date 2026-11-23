@@ -157,9 +157,10 @@ create table if not exists public.app_settings (
   key   text primary key,
   value text
 );
-insert into public.app_settings (key, value)
-values ('demo_code', 'DEMO-KUJI')
-on conflict (key) do nothing;
+-- 실제 서비스에서는 체험용 무료 코드를 두지 않습니다.
+-- (데모 모드는 브라우저 localStorage 로만 동작하므로 서버 설정이 필요 없습니다)
+-- 데모 코드가 남아 있으면 로그인한 누구나 무료로 뽑을 수 있으니, 이미 넣었다면 지워 주세요:
+--   delete from public.app_settings where key = 'demo_code';
 
 -- ---------------------------------------------------------
 -- 2. 가입 시 프로필 자동 생성

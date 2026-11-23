@@ -1521,6 +1521,13 @@
   }
 
   function renderHeader() {
+    var live = Backend.mode === 'supabase';
+    document.body.classList.toggle('is-live', live);
+    var ad = $('.announce-demo');
+    var al = $('.announce-live');
+    if (ad) ad.hidden = live;
+    if (al) al.hidden = !live;
+
     var btn = $('#authBtn');
     var chip = $('#userChip');
     var user = me();
@@ -1792,8 +1799,8 @@
       el.innerHTML = '<h2>뽑기권으로 뽑기</h2>' +
         '<p class="aside-hint">로그인하면 구매확인으로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
         '<button class="btn btn-primary btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>' +
-        '<button class="btn btn-ghost btn-block btn-sm" data-action="demo-login">체험 계정으로 시작</button>' +
-        '<div class="aside-note">교환 코드만 있으면 로그인 없이도 뽑을 수 있어요.</div>';
+        '<button class="btn btn-ghost btn-block btn-sm demo-only" data-action="demo-login">체험 계정으로 시작</button>' +
+        '<div class="aside-note">교환 코드가 있으면 로그인 없이도 번호를 열 수 있어요.</div>';
       return;
     }
     var mine = couponsFor(board);
@@ -3149,7 +3156,7 @@
             '<p class="form-error" data-role="auth-error" role="alert"></p>' +
             '<button class="btn btn-primary btn-block" type="submit">가입하고 시작하기</button>' +
           '</form>') +
-      '<div class="auth-demo">' +
+      '<div class="auth-demo demo-only">' +
         '<p>처음이신가요? 체험 계정으로 바로 둘러볼 수 있어요.</p>' +
         '<button class="btn btn-outline btn-sm" type="button" data-action="demo-login">체험 계정으로 시작 (쿠지러버)</button>' +
       '</div>' +
@@ -3838,7 +3845,7 @@
         '<p class="field-error" data-role="code-error" role="alert"></p>' +
         '<button class="btn btn-primary" type="submit">코드 확인</button>' +
       '</form>' +
-      '<div class="demo-box">' +
+      '<div class="demo-box demo-only">' +
         '<p><strong>체험용 무료 코드</strong>' + h(state.settings.demoCode) + ' — 결제 없이 뽑기를 미리 체험해 볼 수 있어요.</p>' +
         '<button class="btn btn-outline btn-sm" type="button" data-action="fill-demo-code">' + h(state.settings.demoCode) + ' 넣기</button>' +
       '</div>' +
