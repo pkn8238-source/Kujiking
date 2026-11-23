@@ -1296,3 +1296,125 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
   .board-card-cover.has-image{min-height:220px}
   .board-cover.has-image{min-height:170px}
 }
+
+/* =========================================================
+   v2.1 — 컴팩트 보드 그리드 (모바일 2열 / PC 3열) + PC 최적화
+   ========================================================= */
+:root{--max:1060px}
+
+/* ---------- 히어로: 높이 축소 ---------- */
+.hero-inner{padding-top:30px;padding-bottom:34px;gap:26px}
+.hero-copy h1{font-size:clamp(30px,4.2vw,46px);margin:12px 0 10px}
+.hero-sub{font-size:14.5px;line-height:1.6;max-width:460px}
+.hero-cta{margin-top:18px;gap:10px}
+.hero-cta .btn-lg{min-height:48px;padding:12px 20px;font-size:15.5px}
+.hero-facts{margin-top:18px;gap:8px}
+.hero-facts li{padding:8px 12px;min-width:86px;border-radius:11px}
+.hero-facts strong{font-size:16px}
+.hero-facts span{font-size:11px}
+.hero-art{min-height:270px}
+.hero-logo{width:min(292px,80%)}
+.hero-disc{width:min(306px,80%)}
+.hero-burst{width:640px;height:640px}
+.float-chip{font-size:11.5px;padding:6px 11px;border-width:2px}
+.pill{padding:5px 12px;font-size:12px}
+
+/* ---------- 보드 그리드 ---------- */
+.board-list{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (min-width:900px){
+  .board-list{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+}
+
+/* ---------- 카드: 세로형 컴팩트 ---------- */
+.board-card{border-width:2.5px;border-radius:16px;box-shadow:0 5px 0 var(--ink)}
+.board-card:hover{transform:translateY(-3px);box-shadow:0 8px 0 var(--ink)}
+.board-card-cover,
+.board-card-cover.has-image{
+  min-height:0;aspect-ratio:4/3;padding:9px;
+}
+@media (min-width:900px){
+  .board-card-cover,
+  .board-card-cover.has-image{aspect-ratio:16/11}
+}
+.board-card-cover .cover-kicker{display:none}
+.board-card-cover .cover-title{font-size:clamp(19px,2.4vw,26px);line-height:1.05}
+.board-card-cover .cover-sub{font-size:10px}
+.board-card-cover .cover-price{font-size:9.5px;padding:2px 7px;margin-top:3px;border-width:1.5px}
+.board-card-cover .cover-tag{top:8px;left:8px;font-size:9.5px;padding:2px 8px;border-width:2px;box-shadow:none}
+.board-card-cover .cover-status{top:8px;right:8px;font-size:9px;padding:2px 7px;border-width:2px}
+.board-card-cover .cover-mini{display:none}
+.board-card-body{padding:11px 11px 13px;gap:7px}
+.board-card-top .band-tag{font-size:9px;padding:2px 6px;border-width:1.5px}
+.sold-line{font-size:10px}
+.board-card-body h3{font-size:13.5px;line-height:1.35;letter-spacing:-.02em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+.progress{gap:4px}
+.progress-track{height:8px;border-width:1.5px}
+.progress-labels{font-size:10px}
+.grade-chips{gap:3px}
+.grade-chip{font-size:9.5px;padding:2px 5px;gap:3px;border-width:1.5px;border-radius:6px}
+.grade-chip i{width:7px;height:7px}
+.board-card-foot{padding-top:2px;gap:6px}
+.price-tag strong{font-size:19px}
+.price-tag span{font-size:10.5px}
+.board-card-foot .btn{min-height:34px;padding:6px 12px;font-size:12.5px;border-width:2px;box-shadow:0 3px 0 var(--ink)}
+.empty.filter-empty{padding:40px 18px}
+
+/* 모바일: 2열에 맞춘 미세 조정 */
+@media (max-width:760px){
+  .hero-inner{padding-top:18px;padding-bottom:26px;gap:14px}
+  .hero-art{min-height:210px;max-width:420px}
+  .hero-logo{width:min(230px,74%)}
+  .hero-disc{width:min(242px,76%)}
+  .hero-copy h1{font-size:clamp(27px,7.4vw,34px);margin:10px 0 8px}
+  .hero-sub{font-size:13px}
+  .hero-cta .btn{min-height:44px;padding:10px 14px;font-size:14px}
+  .hero-facts li{min-width:74px;padding:7px 10px}
+  .hero-facts strong{font-size:15px}
+  .float-chip{font-size:10px;padding:5px 9px}
+  .board-list{gap:10px}
+  .board-card{border-radius:13px}
+  .board-card-cover,.board-card-cover.has-image{padding:7px}
+  .board-card-cover .cover-title{font-size:17px}
+  .board-card-cover .cover-price{font-size:8.5px;padding:2px 6px}
+  .board-card-body{padding:9px 9px 11px;gap:6px}
+  .board-card-body h3{font-size:12px;min-height:32px}
+  .board-card-top .band-tag{font-size:8px;padding:1px 5px}
+  .sold-line{font-size:9px}
+  .board-card-foot{flex-direction:row;align-items:center;gap:4px}
+  .price-tag{flex-wrap:wrap}
+  .price-tag strong{font-size:15px}
+  .price-tag span{font-size:9px}
+  .board-card-foot .btn{min-height:30px;font-size:11px;padding:4px 9px;flex:0 0 auto}
+  .grade-chips{flex-wrap:nowrap;overflow:hidden}
+  .board-card .progress-labels span:first-child{display:none}
+  .live-ticker{margin-top:-6px}
+}
+
+/* ---------- 판 상세: 컴팩트 ---------- */
+.board-page{padding:18px 0 60px}
+.board-hero{grid-template-columns:170px minmax(0,1fr) auto;gap:18px;padding:14px;margin-bottom:16px}
+.board-cover,.board-cover.has-image{min-height:132px;border-radius:12px}
+.board-hero-body h1{font-size:clamp(19px,2.2vw,25px);margin:6px 0 8px}
+.board-meta{font-size:12.5px;gap:6px 12px;margin-bottom:10px}
+.board-hero-cta .price-tag strong{font-size:24px}
+.board-hero-cta .btn{min-height:40px;padding:9px 16px;font-size:13.5px}
+.board-hero-cta small{font-size:11px;max-width:170px}
+.board-tabs{margin-bottom:12px}
+.board-tab{padding:7px 13px;font-size:12.5px}
+.board-toolbar{padding:10px 14px;margin-bottom:12px}
+.ticket-grid{gap:6px;padding:12px;border-radius:18px}
+.ticket{border-radius:8px;font-size:13px}
+.ticket-num{font-size:14px}
+.ticket-hint{font-size:8px}
+.ticket-buyer{font-size:7.5px}
+.ticket-grade{width:22px;height:22px;font-size:11px;border-radius:6px}
+.ticket.is-open .ticket-num{font-size:11px}
+.aside-card{padding:16px}
+@media (min-width:961px){
+  .board-layout{grid-template-columns:minmax(0,1fr) 300px;gap:18px}
+  .ticket-grid{grid-template-columns:repeat(10,minmax(0,1fr))}
+}
+@media (max-width:1080px){
+  .board-hero{grid-template-columns:150px minmax(0,1fr)}
+}
