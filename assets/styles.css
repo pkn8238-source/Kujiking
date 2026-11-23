@@ -1387,7 +1387,8 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
   .price-tag strong{font-size:15px}
   .price-tag span{font-size:9px}
   .board-card-foot .btn{min-height:30px;font-size:11px;padding:4px 9px;flex:0 0 auto}
-  .grade-chips{flex-wrap:nowrap;overflow:hidden}
+  .grade-chips{flex-wrap:wrap;gap:2px}
+  .grade-chip{font-size:8.5px;padding:1px 4px}
   .board-card .progress-labels span:first-child{display:none}
   .live-ticker{margin-top:-6px}
 }
