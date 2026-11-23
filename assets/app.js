@@ -2478,7 +2478,17 @@
 
   /* ---------- 개봉 효과음 (종이 찢기 · 두근두근 · 스냅 · 등급별 팡파레) ---------- */
   var kujiSound = (function () {
-    var ctx = null, noiseBuf = null, muted = null, lastTick = 0, unlocked = false;
+    var ctx = null, noiseBuf = null, muted = null, lastTick = 0;
+    var running = false, silentEl = null, silentURL = null, lastSilent = 0;
+
+    /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 웹오디오가 소리를 내도록
+       오디오 세션 종류를 'playback'(미디어 재생)으로 잡아 준다. */
+    function markPlayback() {
+      try {
+        var s = window.navigator && window.navigator.audioSession;
+        if (s && s.type !== 'playback') s.type = 'playback';
+      } catch (e) {}
+    }
 
     function isMuted() {
       if (muted === null) {
@@ -2499,29 +2509,79 @@
       btn.title = off ? '개봉 효과음 켜기' : '개봉 효과음 끄기';
     }
     function makeCtx() {
+      markPlayback();
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
-      if (!ctx) { try { ctx = new C(); } catch (e) { return null; } }
-      if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      if (!ctx) {
+        try { ctx = new C(); } catch (e) { return null; }
+        try {
+          ctx.onstatechange = function () { running = (ctx.state === 'running'); };
+        } catch (e) {}
+      }
+      /* 'suspended' 뿐 아니라 iOS 의 'interrupted' 상태에서도 다시 깨운다 */
+      if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
       return ctx;
     }
     function ac() {
       if (isMuted()) return null;
       return makeCtx();
     }
-    /* iOS Safari: 첫 터치·클릭에서 AudioContext 를 즉시 깨운다 (무음 1샘플 재생) */
-    function unlock() {
-      var c = makeCtx();
-      if (!c) return;
-      if (unlocked) return;
-      unlocked = true;
+    /* 0.4초짜리 완전 무음 WAV 를 메모리에서 만들어 <audio> 로 쓴다 */
+    function buildSilentWav() {
       try {
-        var b = c.createBuffer(1, 1, c.sampleRate);
-        var s = c.createBufferSource(); s.buffer = b;
-        var g = c.createGain(); g.gain.value = 0.0001;
-        s.connect(g); g.connect(c.destination);
-        s.start(0);
+        var rate = 8000, n = Math.round(rate * 0.4), size = 44 + n * 2;
+        var ab = new ArrayBuffer(size), dv = new DataView(ab);
+        function str(off, s) { for (var i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); }
+        str(0, 'RIFF'); dv.setUint32(4, size - 8, true); str(8, 'WAVE');
+        str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+        dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true);
+        dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+        str(36, 'data'); dv.setUint32(40, n * 2, true);
+        var blob = new Blob([ab], { type: 'audio/wav' });
+        if (window.URL && window.URL.createObjectURL) return window.URL.createObjectURL(blob);
       } catch (e) {}
+      return '';
+    }
+    /* iOS 사파리는 제스처 안에서 <audio> 재생을 한 번 걸어야
+       웹오디오도 '미디어 재생' 채널로 라우팅된다(무음 스위치 무시됨). */
+    function playSilentAudioElement(force) {
+      try {
+        var now = Date.now();
+        if (!force && now - lastSilent < 250) return;
+        lastSilent = now;
+        if (!silentEl) {
+          if (!silentURL) silentURL = buildSilentWav();
+          if (!silentURL) return;
+          silentEl = new Audio(silentURL);
+          silentEl.preload = 'auto';
+          silentEl.volume = 1;
+          silentEl.setAttribute('playsinline', '');
+          silentEl.setAttribute('webkit-playsinline', '');
+          silentEl.setAttribute('aria-hidden', 'true');
+        }
+        try { silentEl.pause(); } catch (e) {}
+        try { silentEl.currentTime = 0; } catch (e) {}
+        var p = silentEl.play();
+        if (p && p.catch) p.catch(function () {});
+      } catch (e) {}
+    }
+    /* 첫 터치·클릭에서 무음 오디오 + AudioContext 를 함께 깨운다.
+       ctx 가 'running' 이 되기 전에는 잠그지 않고 다음 제스처마다 다시 시도한다. */
+    function unlock() {
+      markPlayback();
+      var c = makeCtx();
+      if (!c) { playSilentAudioElement(); return; }
+      if (c.state === 'running') { running = true; return; }
+      playSilentAudioElement();
+      var p = null;
+      try { p = c.resume(); } catch (e) {}
+      var settle = function () {
+        running = (c.state === 'running');
+        if (running) { try { if (silentEl) silentEl.pause(); } catch (e) {} }
+      };
+      if (p && p.then) { try { p.then(settle, settle); } catch (e) {} }
+      setTimeout(settle, 140);
+      setTimeout(settle, 420);
     }
     function noise(c) {
       if (noiseBuf) return noiseBuf;
@@ -2725,11 +2785,16 @@
       buzz([0, 30, 30, 24, 24, 20, 60, 40]);
     }
 
-    /* 첫 제스처에서 오디오 잠금 해제 */
+    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께) */
     try {
-      ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'keydown'].forEach(function (ev) {
+      ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(function (ev) {
         document.addEventListener(ev, unlock, { capture: true, passive: true });
       });
+      /* 탭을 다시 열었을 때 iOS 가 오디오 세션을 되돌려 놓는 경우 대비 */
+      document.addEventListener('visibilitychange', function () {
+        if (!document.hidden) { markPlayback(); if (ctx && ctx.state === 'running') running = true; }
+      }, { passive: true });
+      markPlayback();
     } catch (e) {}
 
     return {
@@ -4746,7 +4811,7 @@
         case 'toggle-sound': {
           kujiSound.toggle();
           kujiSound.refreshToggle();
-          if (!kujiSound.isMuted()) kujiSound.tear(0.6);
+          if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.tear(0.6); }
           break;
         }
         case 'draw-coupon': {
