@@ -52,8 +52,11 @@ create table if not exists public.boards (
   cover          text,                              -- 커버 이미지 경로/URL (비우면 카테고리 색상 커버)
   price          integer not null check (price > 0),
   ticket_count   integer not null check (ticket_count between 1 and 300),
-  tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly}]
+  tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly,image,desc}]
   last_one_label text,
+  last_one_image text,                              -- 라스트원 이미지 경로
+  last_one_desc  text,                              -- 라스트원 설명 (크기·특징)
+  manual         jsonb,                             -- {summary, specs:[{k,v}], lineup:[..], notes:[..]} 상품 설명서
   status         text not null default 'open' check (status in ('open','closed')),
   seed           text not null,
   seed_hash      text not null,
@@ -73,6 +76,9 @@ create table if not exists public.tickets (
   unique (board_id, n)
 );
 alter table public.boards add column if not exists cover text;
+alter table public.boards add column if not exists last_one_image text;
+alter table public.boards add column if not exists last_one_desc text;
+alter table public.boards add column if not exists manual jsonb;
 create index if not exists tickets_board_idx on public.tickets (board_id, status);
 
 create table if not exists public.exchange_codes (
@@ -157,16 +163,17 @@ create table if not exists public.app_settings (
   key   text primary key,
   value text
 );
-insert into public.app_settings (key, value)
-values ('demo_code', 'DEMO-KUJI')
-on conflict (key) do nothing;
+-- 실제 서비스에서는 체험용 무료 코드를 두지 않습니다.
+-- (데모 모드는 브라우저 localStorage 로만 동작하므로 서버 설정이 필요 없습니다)
+-- 데모 코드가 남아 있으면 로그인한 누구나 무료로 뽑을 수 있으니, 이미 넣었다면 지워 주세요:
+--   delete from public.app_settings where key = 'demo_code';
 
 -- ---------------------------------------------------------
 -- 2. 가입 시 프로필 자동 생성
 -- ---------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 begin
   insert into public.profiles (id, email, nickname, phone)
@@ -191,7 +198,7 @@ for each row execute function public.handle_new_user();
 -- ---------------------------------------------------------
 create or replace function public.is_admin(p_uid uuid default auth.uid())
 returns boolean
-language sql stable security definer set search_path = public
+language sql stable security definer set search_path = public, extensions
 as $$
   select coalesce((select is_admin from public.profiles where id = p_uid), false);
 $$;
@@ -283,7 +290,7 @@ create or replace function public.ticket_grade(
   p_tiers jsonb,
   p_n integer
 ) returns text
-language plpgsql immutable
+language plpgsql immutable security definer set search_path = public, extensions
 as $$
 declare
   v_rn integer;
@@ -323,7 +330,7 @@ $$;
 -- ---------------------------------------------------------
 create or replace function public.admin_members(p_search text default '')
 returns setof jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -365,6 +372,37 @@ revoke insert on public.profiles from anon;
 grant insert (id, email, nickname, phone) on public.profiles to authenticated;
 
 -- ---------------------------------------------------------
+-- 5-3. 테이블 접근 권한 (GRANT)
+--   RLS 만 켜 두면 anon/authenticated 롤이 테이블 자체에 접근하지 못해
+--   "permission denied for table boards" (42501) 가 납니다. 반드시 함께 실행하세요.
+-- ---------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+
+-- 비로그인 방문자: 판 · 번호표 · 설정 읽기 (개인 데이터는 RLS 가 막습니다)
+grant select on public.boards, public.tickets, public.draws, public.app_settings to anon;
+
+-- 로그인 회원: 조회 + 본인 데이터 쓰기 (행 제한은 RLS 가 담당)
+grant select on public.boards, public.tickets, public.app_settings,
+                public.profiles, public.coupons, public.draws,
+                public.purchase_claims, public.deliveries, public.exchange_codes
+  to authenticated;
+
+grant insert, update on public.purchase_claims to authenticated;
+grant insert on public.deliveries to authenticated;
+
+-- 관리자 동작 (RLS 의 is_admin() 가 실제 허용 범위를 제한)
+grant select, insert, update, delete on public.boards, public.tickets,
+      public.coupons, public.draws, public.exchange_codes, public.app_settings
+  to authenticated;
+
+-- 프로필은 닉네임·전화만 수정 가능 (is_admin / points 는 못 바꿈)
+grant update (nickname, phone) on public.profiles to authenticated;
+grant insert (id, email, nickname, phone) on public.profiles to authenticated;
+
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on all functions in schema public to anon, authenticated;
+
+-- ---------------------------------------------------------
 -- 6. 뽑기 (쿠폰 또는 교환 코드) — 동시에 두 명이 같은 번호를 뽑을 수 없도록
 --    한 트랜잭션 안에서 티켓 행을 FOR UPDATE 로 잠급니다.
 -- ---------------------------------------------------------
@@ -374,7 +412,7 @@ create or replace function public.draw_ticket(
   p_coupon_id uuid default null,
   p_code text default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid     uuid := auth.uid();
@@ -512,7 +550,7 @@ create or replace function public.admin_grant_coupons(
   p_qty integer,
   p_note text default null
 ) returns integer
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_i integer;
@@ -548,7 +586,7 @@ create or replace function public.admin_decide_claim(
   p_approve boolean,
   p_qty integer default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_claim public.purchase_claims%rowtype;
@@ -597,7 +635,7 @@ create or replace function public.request_delivery(
   p_address text,
   p_memo text default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -629,7 +667,7 @@ $$;
 
 create or replace function public.convert_to_points(p_draw_id uuid)
 returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -665,7 +703,7 @@ create or replace function public.admin_ship_delivery(
   p_carrier text,
   p_tracking text
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_del public.deliveries%rowtype;
@@ -692,6 +730,8 @@ $$;
 -- 8. 새 판 만들기 (관리자) — 번호표 1..N 자동 생성 + 봉인 해시
 --    p_seed 를 비우면 서버에서 무작위 시드를 만듭니다.
 -- ---------------------------------------------------------
+drop function if exists public.admin_create_board(text, text, integer, integer, jsonb, text, text, text, text);
+
 create or replace function public.admin_create_board(
   p_title text,
   p_category text,
@@ -701,9 +741,12 @@ create or replace function public.admin_create_board(
   p_last_one_label text default null,
   p_seed text default null,
   p_status text default 'open',
-  p_cover text default null
+  p_cover text default null,
+  p_last_one_image text default null,
+  p_last_one_desc text default null,
+  p_manual jsonb default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_id uuid := gen_random_uuid();
@@ -724,10 +767,12 @@ begin
 
   v_seed := coalesce(nullif(btrim(coalesce(p_seed, '')), ''), encode(gen_random_bytes(32), 'hex'));
 
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover,
+                             last_one_image, last_one_desc, manual)
   values (v_id, p_title, coalesce(nullif(p_category, ''), '자체 스페셜'), p_price, p_ticket_count,
           p_tiers, p_last_one_label, coalesce(p_status, 'open'), v_seed,
-          encode(digest(v_seed, 'sha256'), 'hex'), p_cover);
+          encode(digest(v_seed, 'sha256'), 'hex'), p_cover,
+          p_last_one_image, p_last_one_desc, p_manual);
 
   insert into public.tickets (board_id, n, status)
   select v_id, g.n, 'available' from generate_series(1, p_ticket_count) as g(n);
