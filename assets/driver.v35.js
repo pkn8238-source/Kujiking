@@ -12,9 +12,15 @@
   var logEl = document.createElement('div');
   logEl.id = 'devlog';
   logEl.style.cssText = 'position:fixed;left:0;right:0;bottom:0;z-index:9999;background:rgba(0,0,0,.82);' +
-    'color:#6f6;font:11px/1.45 ui-monospace,monospace;padding:4px 8px;max-height:38vh;overflow:auto;white-space:pre-wrap';
+    'color:#6f6;font:11px/1.45 ui-monospace,monospace;padding:4px 8px;max-height:38vh;overflow:auto;white-space:pre-wrap' +
+    (q.get('log') === '1' ? '' : ';display:none');
   function say(m) { if (!logEl.parentNode) return; logEl.textContent += m + '\n'; }
-  function mount() { document.body.appendChild(logEl); }
+  function mount() {
+    document.body.appendChild(logEl);
+    /* 스크린샷은 그대로, 접근성 스냅샷은 모달만 남도록 뒤 배경을 숨긴다 */
+    var bg = document.querySelectorAll('.announce, .site-header, .mode-bar, main, footer, .toast-root');
+    for (var i = 0; i < bg.length; i++) bg[i].setAttribute('aria-hidden', 'true');
+  }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mount);
   else mount();
   window.addEventListener('error', function (e) {
