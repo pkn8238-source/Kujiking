@@ -734,7 +734,8 @@
     async init() {
       var cfg = (window.KUJI_CONFIG || {});
       this.config = cfg;
-      if (cfg.FORCE_DEMO || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) return 'local';
+      if (cfg.FORCE_DEMO) { this.fallbackReason = 'forced'; return 'local'; }
+      if (!cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) { this.fallbackReason = 'no_config'; return 'local'; }
       try {
         await withTimeout(loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'), 7000, 'script load failed: timeout');
         if (!window.supabase || !window.supabase.createClient) throw new Error('supabase-js unavailable');
@@ -1534,7 +1535,7 @@
           barText = 'Supabase에 연결했지만 데이터베이스 테이블이 아직 없어 데모 모드로 실행 중입니다 · SQL Editor에서 schema.sql을 실행해 주세요';
         } else if (Backend.fallbackReason === 'network') {
           barText = 'Supabase 서버에 닿지 않아 데모 모드로 실행 중입니다 · 데이터는 이 브라우저에만 저장됩니다';
-        } else if (Backend.fallbackReason === 'error') {
+        } else if (Backend.justFellBack) {
           barText = 'Supabase 설정을 확인하지 못해 데모 모드로 실행 중입니다 · 데이터는 이 브라우저에만 저장됩니다';
         } else {
           barText = '데모 모드 · 데이터는 이 브라우저에만 저장됩니다 · Supabase 키를 넣으면 실시간 서버 모드로 전환됩니다';
@@ -3878,6 +3879,7 @@
       Backend.mode = 'local';
     }
     window.KUJIKING.mode = Backend.mode;
+    window.KUJIKING.backend = { reason: Backend.fallbackReason, detail: Backend.fallbackDetail };
 
     if (Backend.mode === 'local') {
       state = await loadLocalState();
@@ -3895,6 +3897,8 @@
         console.warn('[쿠지킹] 서버 데이터 로드 실패 → 데모 모드로 전환', e);
         Backend.mode = 'local';
         Backend.justFellBack = true;
+        Backend.fallbackReason = Backend.fallbackReason || 'data_load';
+        Backend.fallbackDetail = Backend.fallbackDetail || ((e && e.message) || String(e || ''));
         window.KUJIKING.mode = 'local';
         state = await loadLocalState();
         buildLocalViews();
