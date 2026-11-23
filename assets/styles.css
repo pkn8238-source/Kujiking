@@ -32,6 +32,7 @@
   --grade-f:#3d7bfd;
   --grade-g:#a855f7;
   --grade-h:#0f766e;
+  --grade-p:#e0a400;
 
   --radius:20px;
   --radius-sm:14px;
@@ -2200,4 +2201,76 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 @media (prefers-reduced-motion:reduce){
   .modal-shell.is-quake,.seal-stage.is-burst,.rv-boom,.peel-card.is-boom::after{animation:none}
   .rv-frame{animation:rv-frame-in .5s ease both}
+}
+
+/* =========================================================
+   v3.7 — P상 (굿즈 포인트 당첨) 카드 · 등급 배지
+   ========================================================= */
+.rank-badge.grade-p{background:var(--grade-p);color:#fff}
+#userPoints.is-bump{animation:points-bump .9s cubic-bezier(.2,1.5,.4,1) 1}
+@keyframes points-bump{
+  0%{transform:scale(1)}
+  28%{transform:scale(1.28);color:var(--red)}
+  60%{transform:scale(1.06)}
+  100%{transform:scale(1)}
+}
+
+/* 상품 구성 카드의 P상 */
+.prize-card.is-point{border-color:var(--ink)}
+.prize-card.is-point .prize-media{background:radial-gradient(120% 120% at 30% 18%,#fff9e0,#ffe9a8 60%,#ffd96a)}
+.prize-media-point{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+.prize-media-point b{
+  width:62px;height:62px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-display);font-size:34px;line-height:1;color:var(--ink);
+  background:radial-gradient(120% 120% at 30% 20%,#fff6cf,#ffd51e 60%,#f5b800);
+  border:3px solid var(--ink);box-shadow:0 4px 0 var(--ink);
+}
+.prize-media-point em{font-style:normal;font-size:12px;font-weight:900;color:#7a5a00;letter-spacing:.04em}
+
+/* 등급 확대 보기의 P상 */
+.zoom-point{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;aspect-ratio:1/1;
+  background:radial-gradient(120% 120% at 30% 18%,#fff9e0,#ffe9a8 60%,#ffd96a)}
+.zoom-point b{width:104px;height:104px;border-radius:50%;display:grid;place-items:center;
+  font-family:var(--font-display);font-size:58px;line-height:1;color:var(--ink);
+  background:radial-gradient(120% 120% at 30% 20%,#fff6cf,#ffd51e 60%,#f5b800);
+  border:3px solid var(--ink);box-shadow:0 6px 0 var(--ink)}
+.zoom-point em{font-style:normal;font-size:15px;font-weight:900;color:#7a5a00}
+
+/* 당첨 결과 — P상 카드 */
+.result-wrap.is-point .result-meta{color:var(--muted)}
+.pc-stage{position:relative;text-align:center;padding:6px 2px 2px;overflow:hidden}
+.pc-sparks{position:absolute;inset:0;pointer-events:none}
+.pc-spark{position:absolute;color:var(--gold);animation:pc-twinkle 1.9s ease-in-out infinite}
+@keyframes pc-twinkle{0%,100%{opacity:.15;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+.pc-coin{
+  width:96px;height:96px;margin:4px auto 12px;border-radius:50%;position:relative;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  background:radial-gradient(120% 120% at 30% 20%,#fff6cf,#ffd51e 58%,#f5b800);
+  border:3px solid var(--ink);box-shadow:0 6px 0 var(--ink),inset 0 0 0 6px rgba(255,255,255,.5);
+  animation:pc-pop .55s cubic-bezier(.2,1.4,.4,1) both;
+}
+.pc-coin b{font-family:var(--font-display);font-size:40px;line-height:.95;color:var(--ink)}
+.pc-coin i{font-style:normal;font-size:11px;font-weight:900;letter-spacing:.16em;color:#7a5a00}
+@keyframes pc-pop{0%{transform:scale(.55) rotate(-12deg);opacity:0}70%{transform:scale(1.06) rotate(3deg)}100%{transform:scale(1) rotate(0);opacity:1}}
+.pc-kicker{margin:0 0 4px;font-size:11px;font-weight:900;letter-spacing:.22em;color:#a5842b}
+.pc-title{margin:0 0 8px;font-size:clamp(20px,5.2vw,25px);font-weight:900;line-height:1.28;color:var(--ink)}
+.pc-title em{font-style:normal;color:var(--red);font-size:1.06em}
+.pc-desc{margin:0 0 4px;font-size:14px;line-height:1.6;color:var(--ink-soft)}
+.pc-wallet{display:flex;align-items:center;justify-content:space-between;gap:10px;
+  margin:14px 0 8px;padding:11px 15px;border-radius:var(--radius-sm);
+  background:var(--cream);border:2px solid var(--line-strong);font-weight:800;font-size:13.5px}
+.pc-wallet b{font-size:19px;color:var(--ink)}
+.pc-progress{text-align:left;margin:0 0 8px;padding:12px 14px;border-radius:var(--radius-sm);
+  background:#fff;border:2px dashed var(--line-strong)}
+.pc-progress-head{display:flex;justify-content:space-between;gap:8px;font-size:13px;font-weight:900;margin-bottom:8px}
+.pc-progress.is-full .pc-progress-head{color:var(--mint)}
+.pc-bar{display:block;height:10px;border-radius:99px;background:#f0e7d3;overflow:hidden}
+.pc-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--yellow),var(--orange));
+  transition:width .7s cubic-bezier(.2,.9,.3,1)}
+.pc-progress.is-full .pc-bar i{background:linear-gradient(90deg,#35d39c,var(--mint))}
+.pc-progress small{display:block;margin-top:7px;font-size:12px;color:var(--muted);font-weight:600}
+.pc-guest{margin:14px 0 8px;padding:11px 14px;border-radius:var(--radius-sm);
+  background:#fff4f0;border:2px solid #ffd3c7;font-size:13px;line-height:1.55;color:#8a3a25;font-weight:700}
+@media (prefers-reduced-motion:reduce){
+  .pc-coin,.pc-spark,#userPoints.is-bump{animation:none}
 }

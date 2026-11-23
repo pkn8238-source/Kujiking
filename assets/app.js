@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v2, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v3.7, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -15,7 +15,7 @@
   var SESSION_KEY = 'kujiking.session.v2';
   var ADMIN_KEY = 'kujiking.admin.session.v2';
   var APP_TAG = 'kujiking';
-  var STATE_VERSION = 4;   // v4: 상품 종류×20장 판(160~240장) 구성으로 재시드
+  var STATE_VERSION = 5;   // v5: 실물 등급 각 1개 + P상(굿즈 포인트 1,200P) 구성으로 재시드
   var MAX_TICKETS = 500;
 
   var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
@@ -26,6 +26,8 @@
     { id: 'premium', label: '프리미엄' }
   ];
   var GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+  /* 관리자 판 편집에서는 P상(굿즈 포인트)도 등급으로 고를 수 있다 */
+  var TIER_GRADES = GRADES.concat(['P']);
 
   var state = null;
   var mapCache = new Map();
@@ -374,33 +376,35 @@
         { grade: 'A', label: '손오공 MASTERLISE', count: 1, points: 35000,
           image: 'assets/products/dragonball-saiyan/tier_a.jpg',
           desc: '약 20cm · 카메하메하 포즈의 MASTERLISE 피규어' },
-        { grade: 'B', label: '초사이어인 손오반 MASTERLISE', count: 2, points: 20000,
+        { grade: 'B', label: '초사이어인 손오반 MASTERLISE', count: 1, points: 20000,
           image: 'assets/products/dragonball-saiyan/tier_b.jpg',
           desc: '약 19cm · 아버지와 같은 카메하메하 포즈' },
-        { grade: 'C', label: '손오천 MASTERLISE', count: 3, points: 14000,
+        { grade: 'C', label: '손오천 MASTERLISE', count: 1, points: 14000,
           image: 'assets/products/dragonball-saiyan/tier_c.jpg',
           desc: '약 13cm · 어린 손오천의 경쾌한 포즈' },
-        { grade: 'D', label: '바닥 MASTERLISE', count: 4, points: 12000,
+        { grade: 'D', label: '바닥 MASTERLISE', count: 1, points: 12000,
           image: 'assets/products/dragonball-saiyan/tier_d.jpg',
           desc: '약 25cm · 사이어인 정예전사 바닥' },
-        { grade: 'E', label: '라디츠 MASTERLISE', count: 5, points: 12000,
+        { grade: 'E', label: '라디츠 MASTERLISE', count: 1, points: 12000,
           image: 'assets/products/dragonball-saiyan/tier_e.jpg',
           desc: '약 25cm · 스카우터를 쓴 손오공의 형' },
-        { grade: 'F', label: '피규어 마그넷', count: 10, points: 6000,
+        { grade: 'F', label: '피규어 마그넷', count: 1, points: 6000,
           image: 'assets/products/dragonball-saiyan/tier_f.jpg',
           desc: '약 5cm · 전 3종 중 1종 랜덤' },
-        { grade: 'G', label: '파우치', count: 15, points: 5000,
+        { grade: 'G', label: '파우치', count: 1, points: 5000,
           image: 'assets/products/dragonball-saiyan/tier_g.jpg',
           desc: '약 13cm · 전 7종 중 1종 랜덤' },
-        { grade: 'H', label: '아크릴 스탠드', count: 25, points: 4000,
+        { grade: 'H', label: '아크릴 스탠드', count: 1, points: 4000,
           image: 'assets/products/dragonball-saiyan/tier_h.jpg',
           desc: '약 7~10cm · 전 9종 중 1종 랜덤' },
-        { grade: 'I', label: '고무 어소트', count: 45, points: 3000,
+        { grade: 'I', label: '고무 어소트', count: 1, points: 3000,
           image: 'assets/products/dragonball-saiyan/tier_i.jpg',
           desc: '약 5.5~6.5cm · 전 7종 중 1종 랜덤' },
-        { grade: 'J', label: '다이컷 타월', count: 90, points: 2000,
+        { grade: 'J', label: '다이컷 타월', count: 1, points: 2000,
           image: 'assets/products/dragonball-saiyan/tier_j.jpg',
-          desc: '약 24cm · 전 9종 중 1종 랜덤' }
+          desc: '약 24cm · 전 9종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
       ],
       lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
       lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
@@ -413,7 +417,7 @@
           { k: '일본 발매', v: '2026.10.17' },
           { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
           { k: '세트 구성', v: 'A~J상 10종 + 라스트원상 · 총 11종' },
-          { k: '이 판 구성', v: '10종 × 20장 = 200장' },
+          { k: '이 판 구성', v: '실물 10종 각 1개 + P상 190장 = 200장' },
           { k: '주요 크기', v: 'MASTERLISE 약 13~25cm' }
         ],
         lineup: [
@@ -430,7 +434,8 @@
           '라스트원상 손오공&손오반 MASTERLISE PLUS (약 21cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~J상 10종을 등급별로 나눠 종류마다 20장씩, 총 200장으로 구성했습니다. F~J상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~J상 10종을 등급별로 각 1개씩(실물 10개) 두고, 나머지 190장을 P상(굿즈 포인트 1,200P)으로 채운 총 200장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
           '피규어는 공장 조립·도색 상태에 따라 개체 차이가 있을 수 있습니다.'
         ]
       }
@@ -449,30 +454,32 @@
         { grade: 'A', label: '메르엠 MASTERLISE', count: 1, points: 40000,
           image: 'assets/products/hunter-chimera-ant/tier_a.jpg',
           desc: '약 23cm · 개미의 왕, 압도적인 조형' },
-        { grade: 'B', label: '네테로 MASTERLISE', count: 2, points: 22000,
+        { grade: 'B', label: '네테로 MASTERLISE', count: 1, points: 22000,
           image: 'assets/products/hunter-chimera-ant/tier_b.jpg',
           desc: '약 22cm · 감사의 정권찌르기 장면' },
-        { grade: 'C', label: '곤 MASTERLISE', count: 3, points: 14000,
+        { grade: 'C', label: '곤 MASTERLISE', count: 1, points: 14000,
           image: 'assets/products/hunter-chimera-ant/tier_c.jpg',
           desc: '약 10cm · 네페르피토와 대치한 순간' },
-        { grade: 'D', label: '키르아 MASTERLISE', count: 4, points: 16000,
+        { grade: 'D', label: '키르아 MASTERLISE', count: 1, points: 16000,
           image: 'assets/products/hunter-chimera-ant/tier_d.jpg',
           desc: '약 21cm · 전격의 순간' },
-        { grade: 'E', label: '네페르피토 MASTERLISE', count: 4, points: 16000,
+        { grade: 'E', label: '네페르피토 MASTERLISE', count: 1, points: 16000,
           image: 'assets/products/hunter-chimera-ant/tier_e.jpg',
           desc: '약 24cm · 왕의 근위대' },
-        { grade: 'F', label: '샤우아푸프 · 몬투투유피 MASTERLISE', count: 6, points: 12000,
+        { grade: 'F', label: '샤우아푸프 · 몬투투유피 MASTERLISE', count: 1, points: 12000,
           image: 'assets/products/hunter-chimera-ant/tier_f.jpg',
           desc: '약 6~7cm · 전 2종 중 1종 랜덤' },
-        { grade: 'G', label: '고무 컬렉션', count: 30, points: 5000,
+        { grade: 'G', label: '고무 컬렉션', count: 1, points: 5000,
           image: 'assets/products/hunter-chimera-ant/tier_g.jpg',
           desc: '약 8~19cm · 전 10종 중 1종 랜덤' },
-        { grade: 'H', label: '문구 어소트', count: 55, points: 4000,
+        { grade: 'H', label: '문구 어소트', count: 1, points: 4000,
           image: 'assets/products/hunter-chimera-ant/tier_h.jpg',
           desc: 'A4 클리어파일·A6 노트 / 전 10종 중 1종' },
-        { grade: 'I', label: '폰탭 · 넥스트랩 · 스티커', count: 75, points: 3000,
+        { grade: 'I', label: '폰탭 · 넥스트랩 · 스티커', count: 1, points: 3000,
           image: 'assets/products/hunter-chimera-ant/tier_i.jpg',
-          desc: '약 5~47cm · 전 10종 중 1종 랜덤' }
+          desc: '약 5~47cm · 전 10종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
       ],
       lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
       lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
@@ -485,7 +492,7 @@
           { k: '일본 발매', v: '2026.11.14 (재판)' },
           { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
           { k: '세트 구성', v: 'A~I상 9종 + 라스트원상 · 총 10종' },
-          { k: '이 판 구성', v: '9종 × 20장 = 180장' },
+          { k: '이 판 구성', v: '실물 9종 각 1개 + P상 171장 = 180장' },
           { k: '주요 크기', v: 'MASTERLISE 약 6~24cm · 라스트원 약 100cm' }
         ],
         lineup: [
@@ -501,7 +508,8 @@
           '라스트원상 곤 ~성장ver.~ MASTERLISE EXTRA (약 100cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~I상 9종을 등급별로 나눠 종류마다 20장씩, 총 180장으로 구성했습니다. F~I상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~I상 9종을 등급별로 각 1개씩(실물 9개) 두고, 나머지 171장을 P상(굿즈 포인트 1,200P)으로 채운 총 180장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
           '라스트원상은 약 100cm 대형 피규어로, 일반 상품과 별도 박스로 발송됩니다.'
         ]
       }
@@ -511,7 +519,7 @@
       title: '[죠죠] The Gathering of RIVALS 쿠지',
       category: '죠죠의 기묘한 모험',
       cover: 'assets/products/jojo-rivals/cover.jpg',
-      price: 13000,
+      price: 12000,
       tickets: 240,
       sold: 18,
       kicker: 'RIVALS',
@@ -520,39 +528,41 @@
         { grade: 'A', label: '디오 브란도 MASTERLISE PLUS', count: 1, points: 32000,
           image: 'assets/products/jojo-rivals/tier_a.jpg',
           desc: '약 18cm · 1부 팬텀 블러드의 디오' },
-        { grade: 'B', label: '카즈 MASTERLISE', count: 2, points: 24000,
+        { grade: 'B', label: '카즈 MASTERLISE', count: 1, points: 24000,
           image: 'assets/products/jojo-rivals/tier_b.jpg',
           desc: '약 25cm · 2부 전투조류의 카즈' },
-        { grade: 'C', label: 'DIO MASTERLISE', count: 2, points: 24000,
+        { grade: 'C', label: 'DIO MASTERLISE', count: 1, points: 24000,
           image: 'assets/products/jojo-rivals/tier_c.jpg',
           desc: '약 26cm · 3부 스타더스트 크루세이더스의 DIO' },
-        { grade: 'D', label: '카와지리 하지메 MASTERLISE', count: 3, points: 18000,
+        { grade: 'D', label: '카와지리 하지메 MASTERLISE', count: 1, points: 18000,
           image: 'assets/products/jojo-rivals/tier_d.jpg',
           desc: '약 24cm · 4부 다이아몬드는 부서지지 않는다' },
-        { grade: 'E', label: '디아볼로 MASTERLISE', count: 3, points: 18000,
+        { grade: 'E', label: '디아볼로 MASTERLISE', count: 1, points: 18000,
           image: 'assets/products/jojo-rivals/tier_e.jpg',
           desc: '약 25cm · 5부 황금의 바람' },
-        { grade: 'F', label: '엔리코 P MASTERLISE', count: 4, points: 18000,
+        { grade: 'F', label: '엔리코 P MASTERLISE', count: 1, points: 18000,
           image: 'assets/products/jojo-rivals/tier_f.jpg',
           desc: '약 22cm · 6부 스톤 오션' },
-        { grade: 'G', label: '스탠드의 화살 MASTERELIVE COLLECTION', count: 6, points: 16000,
+        { grade: 'G', label: '스탠드의 화살 MASTERELIVE COLLECTION', count: 1, points: 16000,
           image: 'assets/products/jojo-rivals/tier_g.jpg',
           desc: '약 21cm · 스탠드를 각성시키는 화살' },
-        { grade: 'H', label: 'LOGO de Collection', count: 15, points: 9000,
+        { grade: 'H', label: 'LOGO de Collection', count: 1, points: 9000,
           image: 'assets/products/jojo-rivals/tier_h.jpg',
           desc: '약 9~10cm · 전 7종 중 1종 랜덤' },
-        { grade: 'I', label: '미니어처 참', count: 20, points: 7000,
+        { grade: 'I', label: '미니어처 참', count: 1, points: 7000,
           image: 'assets/products/jojo-rivals/tier_i.jpg',
           desc: '약 2.5~4.5cm · 전 7종 중 1종 랜덤' },
-        { grade: 'J', label: '고무 어소트', count: 30, points: 5000,
+        { grade: 'J', label: '고무 어소트', count: 1, points: 5000,
           image: 'assets/products/jojo-rivals/tier_j.jpg',
           desc: '약 4~12cm · 전 7종 중 1종 랜덤' },
-        { grade: 'K', label: '클리어 포스터', count: 60, points: 4000,
+        { grade: 'K', label: '클리어 포스터', count: 1, points: 4000,
           image: 'assets/products/jojo-rivals/tier_k.jpg',
           desc: 'A3 · 전 8종 중 1종 랜덤' },
-        { grade: 'L', label: '스티커 컬렉션', count: 94, points: 3000,
+        { grade: 'L', label: '스티커 컬렉션', count: 1, points: 3000,
           image: 'assets/products/jojo-rivals/tier_l.jpg',
-          desc: '약 6~14cm · 전 13종 중 1종 랜덤' }
+          desc: '약 6~14cm · 전 13종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 228, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
       ],
       lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
       lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
@@ -565,7 +575,7 @@
           { k: '일본 발매', v: '2026.11.21' },
           { k: '일본 판매가', v: '1회 850엔 (세금 포함)' },
           { k: '세트 구성', v: 'A~L상 12종 + 라스트원상 · 총 13종' },
-          { k: '이 판 구성', v: '12종 × 20장 = 240장' },
+          { k: '이 판 구성', v: '실물 12종 각 1개 + P상 228장 = 240장' },
           { k: '주요 크기', v: 'MASTERLISE 약 18~26cm' }
         ],
         lineup: [
@@ -584,7 +594,8 @@
           '라스트원상 디에고 브란도 MASTERLISE (약 15cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~L상 12종을 등급별로 나눠 종류마다 20장씩, 총 240장으로 구성했습니다. H~L상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~L상 12종을 등급별로 각 1개씩(실물 12개) 두고, 나머지 228장을 P상(굿즈 포인트 1,200P)으로 채운 총 240장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
           '클리어 포스터는 A3 크기로, 배송 시 접히지 않도록 원통 포장됩니다.'
         ]
       }
@@ -603,27 +614,29 @@
         { grade: 'A', label: '마오마오 Dioramiquemaster', count: 1, points: 30000,
           image: 'assets/products/apothecary-secret/tier_a.jpg',
           desc: '약 15cm · 극장판 의상의 디오라마 피규어' },
-        { grade: 'B', label: '진시 Dioramiquemaster', count: 2, points: 20000,
+        { grade: 'B', label: '진시 Dioramiquemaster', count: 1, points: 20000,
           image: 'assets/products/apothecary-secret/tier_b.jpg',
           desc: '약 16cm · 극장판 의상의 디오라마 피규어' },
-        { grade: 'C', label: '빅 아크릴 스탠드', count: 4, points: 9000,
+        { grade: 'C', label: '빅 아크릴 스탠드', count: 1, points: 9000,
           image: 'assets/products/apothecary-secret/tier_c.jpg',
           desc: '약 16cm · 마오마오 & 진시 일러스트' },
-        { grade: 'D', label: '키라라이즈 마스코트', count: 8, points: 7000,
+        { grade: 'D', label: '키라라이즈 마스코트', count: 1, points: 7000,
           image: 'assets/products/apothecary-secret/tier_d.jpg',
           desc: '약 10cm · 전 2종 중 1종 랜덤' },
-        { grade: 'E', label: '메탈 참', count: 15, points: 6000,
+        { grade: 'E', label: '메탈 참', count: 1, points: 6000,
           image: 'assets/products/apothecary-secret/tier_e.jpg',
           desc: '약 5cm · 전 5종 중 1종 랜덤' },
-        { grade: 'F', label: '고무 컬렉션', count: 30, points: 4000,
+        { grade: 'F', label: '고무 컬렉션', count: 1, points: 4000,
           image: 'assets/products/apothecary-secret/tier_f.jpg',
           desc: '약 6~10cm · 전 5종 중 1종 랜덤' },
-        { grade: 'G', label: '아크릴 스탠드', count: 45, points: 3500,
+        { grade: 'G', label: '아크릴 스탠드', count: 1, points: 3500,
           image: 'assets/products/apothecary-secret/tier_g.jpg',
           desc: '약 6.5~8cm · 전 5종 중 1종 랜덤' },
-        { grade: 'H', label: '미니 색지', count: 55, points: 3000,
+        { grade: 'H', label: '미니 색지', count: 1, points: 3000,
           image: 'assets/products/apothecary-secret/tier_h.jpg',
-          desc: '약 13cm · 전 5종 중 1종 랜덤' }
+          desc: '약 13cm · 전 5종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
       ],
       lastOneLabel: '라스트원상 · 마오마오 피규어',
       lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
@@ -636,7 +649,7 @@
           { k: '일본 발매', v: '2026.12.05' },
           { k: '일본 판매가', v: '1회 800엔 (세금 포함)' },
           { k: '세트 구성', v: 'A~H상 8종 + 라스트원상 · 총 9종' },
-          { k: '이 판 구성', v: '8종 × 20장 = 160장' },
+          { k: '이 판 구성', v: '실물 8종 각 1개 + P상 152장 = 160장' },
           { k: '주요 크기', v: 'Dioramiquemaster 약 15~16cm' }
         ],
         lineup: [
@@ -651,7 +664,8 @@
           '라스트원상 마오마오 피규어 (약 18cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~H상 8종을 등급별로 나눠 종류마다 20장씩, 총 160장으로 구성했습니다. D~H상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~H상 8종을 등급별로 각 1개씩(실물 8개) 두고, 나머지 152장을 P상(굿즈 포인트 1,200P)으로 채운 총 160장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
           '일본 발매가 2026년 12월 5일인 신작으로, 이 판은 입고분에 한해 순차 발송됩니다.'
         ]
       }
@@ -671,6 +685,7 @@
     return (tiers || []).map(function (t) {
       var row = { grade: t.grade, label: t.label, count: Number(t.count) || 0, points: Number(t.points) || 0 };
       if (t.pointOnly) row.pointOnly = true;
+      if (t.points_awarded) row.points_awarded = Number(t.points_awarded) || 0;
       if (t.image) row.image = String(t.image);
       if (t.desc) row.desc = String(t.desc);
       return row;
@@ -809,7 +824,16 @@
     /* 체험 계정의 실제 보관함 (보관중 1건 + 배송요청 1건) */
     var sanrio = boards[1];
     var onePiece = boards[0];
-    var inv1 = sanrio.opens[0];
+    function firstPhysical(b) {
+      var phys = (b.opens || []).filter(function (o) { return String(o.grade || '').toUpperCase() !== 'P'; })[0];
+      if (phys) return phys;
+      /* 판매 기록에 실물이 하나도 없으면(데모 데이터) 보관함 예시를 위해 한 장을 실물로 바꿔 둔다 */
+      var o = (b.opens || [])[0];
+      var t = (b.tiers || []).filter(function (x) { return !x.pointOnly && String(x.grade).toUpperCase() !== 'P'; })[0];
+      if (o && t) o.grade = t.grade;
+      return o || null;
+    }
+    var inv1 = firstPhysical(sanrio);
     if (inv1) {
       inv1.name = maskName('쿠지러버');
       inv1.userId = 'u-demo';
@@ -820,7 +844,7 @@
         itemStatus: '보관중', source: 'coupon', at: inv1.at, deliveryId: null, last: false
       });
     }
-    var inv2 = onePiece.opens[1];
+    var inv2 = firstPhysical(onePiece);
     if (inv2) {
       inv2.name = maskName('쿠지러버');
       inv2.userId = 'u-demo';
@@ -1008,6 +1032,24 @@
     fallbackReason: '',
     fallbackDetail: '',
 
+    /* 연결 확인은 잠깐 끊긴 네트워크 때문에 바로 포기하지 않도록 한 번 더 시도한다 */
+    async probeWithRetry() {
+      var last = null;
+      for (var attempt = 0; attempt < 2; attempt++) {
+        try {
+          var res = await withTimeout(this.sb.from('boards').select('id').limit(1), 7000, 'Failed to fetch: timeout');
+          if (!res.error) return res;
+          last = res;
+          if (this.classify(res.error) === 'missing_tables') return res;
+        } catch (e) {
+          last = { error: e };
+          if (this.classify(e) === 'missing_tables') return last;
+        }
+        if (attempt === 0) await new Promise(function (resolve) { setTimeout(resolve, 700); });
+      }
+      return last || { error: new Error('Failed to fetch: probe') };
+    },
+
     async init() {
       var cfg = (window.KUJI_CONFIG || {});
       this.config = cfg;
@@ -1019,10 +1061,7 @@
         this.sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
           auth: { persistSession: true, autoRefreshToken: true }
         });
-        var probe = await withTimeout(
-          this.sb.from('boards').select('id').limit(1),
-          7000, 'Failed to fetch: timeout'
-        );
+        var probe = await this.probeWithRetry();
         if (probe.error) throw probe.error;
         this.mode = 'supabase';
         this.subscribe();
@@ -1664,8 +1703,9 @@
 
     var itemStatus = null;
     var points = 0;
-    if (tier.pointOnly) {
-      points = Number(tier.points || 0);
+    var pointsAward = Number(tier.points_awarded || 0);
+    if (tier.pointOnly || pointsAward > 0) {
+      points = pointsAward > 0 ? pointsAward : Number(tier.points || 0);
       itemStatus = '포인트지급';
       if (state.me) {
         var u = userById(state.me.id);
@@ -2215,17 +2255,19 @@
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
       var left = Math.max(0, Number(t.count) - sold);
       var pct = (t.count / total * 100).toFixed(1).replace(/\.0$/, '');
-      return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
+      var isP = String(t.grade).toUpperCase() === 'P' || !!t.pointOnly;
+      return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
           '<span class="prize-media">' +
             (t.image ? '<img src="' + h(t.image) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
-                     : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>') +
+                     : (isP ? '<span class="prize-media-point"><b>P</b><em>' + fmt(t.points) + 'P</em></span>'
+                            : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>')) +
             (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
             (left === 0 ? '<span class="prize-out">소진</span>' : '') +
           '</span>' +
           '<span class="prize-body">' +
             '<b class="prize-name">' + h(t.label) + '</b>' +
             (t.desc ? '<span class="prize-desc">' + h(t.desc) + '</span>' : '') +
-            '<span class="prize-meta"><span>수령 ' + fmt(t.count) + '개</span><span>' + pct + '%</span><span>잔여 ' + fmt(left) + '</span></span>' +
+            '<span class="prize-meta"><span>' + (isP ? '당첨 ' + fmt(t.count) + '장' : '수령 ' + fmt(t.count) + '개') + '</span><span>' + pct + '%</span><span>잔여 ' + fmt(left) + '</span></span>' +
           '</span>' +
         '</button>';
     }).join('');
@@ -2259,7 +2301,7 @@
           var pct = board.tickets ? (t.count / board.tickets * 100) : 0;
           return '<tr>' +
             '<td><span class="grade-badge" style="background:' + gradeColor(t.grade) + ';width:28px;height:28px;font-size:12px">' + h(t.grade) + '</span></td>' +
-            '<td>' + h(t.label) + (t.pointOnly ? ' <span class="muted">(포인트)</span>' : '') + '</td>' +
+            '<td>' + h(t.label) + (t.pointOnly ? ' <span class="muted">P상 · 즉시 적립</span>' : '') + '</td>' +
             '<td class="num">' + fmt(t.count) + '개</td>' +
             '<td class="num">' + pct.toFixed(1).replace(/\.0$/, '') + '%</td>' +
             '<td class="num">' + fmt(Math.max(0, t.count - sold)) + '개</td>' +
@@ -2324,15 +2366,17 @@
     var desc = isLast ? board.lastOneDesc : t.desc;
     var badgeCls = isLast ? 'grade-last' : ('grade-' + String(grade).toLowerCase());
     var badgeTxt = isLast ? 'LAST ONE' : grade + '상';
+    var isP = !isLast && (String(grade).toUpperCase() === 'P' || !!t.pointOnly);
     openModal('' +
-      '<div class="zoom-view">' +
+      '<div class="zoom-view' + (isP ? ' is-point' : '') + '">' +
         '<div class="zoom-media">' +
-          (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">' : '<div class="zoom-empty">이미지 준비 중</div>') +
+          (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">'
+                 : (isP ? '<div class="zoom-point"><b>P</b><em>' + fmt(t.points) + 'P</em></div>' : '<div class="zoom-empty">이미지 준비 중</div>')) +
           (image ? '' : '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>') +
         '</div>' +
         '<h2 class="zoom-title">' + h(label) + '</h2>' +
         (desc ? '<p class="zoom-desc">' + h(desc) + '</p>' : '') +
-        '<p class="zoom-meta">' + (isLast ? '마지막 1장을 뽑은 분께 추가 지급' : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P')) + '</p>' +
+        '<p class="zoom-meta">' + (isLast ? '마지막 1장을 뽑은 분께 추가 지급' : (isP ? ('당정 ' + fmt(t.count) + '장 · 바로 ' + fmt(t.points) + 'P 적립') : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P'))) + '</p>' +
         '<div class="modal-actions"><button class="btn btn-dark" data-action="close-modal">닫기</button></div>' +
       '</div>');
   }
@@ -3481,6 +3525,7 @@
     }
     d.busy = false;
     /* B상 이상은 한 번 더 봉인을 까는 2단계 연출로 넘어간다 */
+    syncPointsBalance(d.result);
     if (isSealGrade(d.result.grade)) {
       d.step = 'seal';
       d.revealing = false;
@@ -3708,6 +3753,7 @@
     if (!d.result) { d.revealing = false; return; }
     d.step = 'result';
     d.revealing = false;
+    syncPointsBalance(d.result);
     kujiSound.fanfare(gradeLevel(d.result && d.result.grade));
     renderDrawModal();
   }
@@ -3751,8 +3797,81 @@
     return out;
   }
 
+  function isPointPrize(r) {
+    if (!r) return false;
+    return String(r.grade || '').toUpperCase() === 'P' || r.itemStatus === '포인트지급';
+  }
+
+  /* 결제·당첨으로 바뀜 포인트 잔액을 서버 응답값으로 맞춘다 (헤더·마이페이지에 바로 반영) */
+  function syncPointsBalance(r) {
+    if (!r || r.pointsBalance == null) return;
+    var u = me();
+    if (!u) return;
+    var next = Number(r.pointsBalance);
+    if (isNaN(next)) return;
+    var prev = Number(u.points) || 0;
+    u.points = next;
+    var pEl = $('#userPoints');
+    if (pEl) {
+      pEl.textContent = fmt(next) + 'P';
+      if (next !== prev) {
+        pEl.classList.remove('is-bump');
+        void pEl.offsetWidth;
+        pEl.classList.add('is-bump');
+        setTimeout(function () { try { pEl.classList.remove('is-bump'); } catch (e) {} }, 1200);
+      }
+    }
+    var mp = $('#myPointsStat');
+    if (mp) mp.textContent = fmt(next) + 'P';
+  }
+
+  /* P상 당첨 카드: 실물 배송이 없으므로 보관함 안내 대신 포인트 적립 안내를 보여준다 */
+  function pointResultHTML(board, d, r) {
+    var pts = Number(r.points) || 0;
+    var user = me();
+    var bal = user ? (Number(user.points) || 0) : 0;
+    var price = Math.max(1000, Number(board.price) || 12000);
+    var perFree = pts > 0 ? Math.max(1, Math.round(price / pts)) : 10;
+    var pct = Math.min(100, Math.round(bal / price * 100));
+    var need = Math.max(0, price - bal);
+    var full = bal >= price;
+
+    var sparks = '';
+    for (var i = 0; i < 12; i++) {
+      sparks += '<span class="pc-spark" style="left:' + (6 + Math.random() * 88).toFixed(1) + '%;top:' + (4 + Math.random() * 70).toFixed(1) +
+        '%;font-size:' + (8 + Math.random() * 10).toFixed(0) + 'px;animation-delay:' + (Math.random() * 1.4).toFixed(2) + 's">✦</span>';
+    }
+
+    var wallet = user
+      ? '<div class="pc-wallet"><span>보유 포인트</span><b>' + fmt(bal) + 'P</b></div>' +
+        '<div class="pc-progress' + (full ? ' is-full' : '') + '">' +
+          '<div class="pc-progress-head"><span>' + (full ? '한 판 무료 준비 완료!' : '한 판 무료까지 ' + fmt(need) + 'P') + '</span>' +
+            '<b>' + fmt(bal) + ' / ' + fmt(price) + 'P</b></div>' +
+          '<span class="pc-bar"><i style="width:' + pct + '%"></i></span>' +
+          '<small>P상 ' + perFree + '번 = ' + fmt(price) + 'P = 한 판 무료</small>' +
+        '</div>'
+      : '<div class="pc-guest">로그인하지 않아 포인트가 계정에 쌓이지 않았어요. 로그인하고 뽑으면 적립된 포인트로 다음 뽑기가 가능합니다.</div>';
+
+    return '<div class="result-wrap is-point">' +
+      '<div class="pc-stage" id="revealStage">' +
+        '<span class="pc-sparks" aria-hidden="true">' + sparks + '</span>' +
+        '<div class="pc-coin" aria-hidden="true"><b>P</b><i>상</i></div>' +
+        '<p class="pc-kicker">POINT PRIZE · P상</p>' +
+        '<h3 class="pc-title">굿즈 포인트 <em>+' + fmt(pts) + 'P</em> 적립!</h3>' +
+        '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모아서 다시 뽑기에 사용할 수 있어요.</p>' +
+        wallet +
+        '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
+        '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : (r.source === 'points' ? ' · 굿즈 포인트 사용' : '')) + '</p>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
   function drawResultHTML(board, d) {
     var r = d.result || {};
+    if (isPointPrize(r)) return pointResultHTML(board, d, r);
     var tier = tierOf(board, r.grade) || {};
     var img = r.tierImage || tier.image || '';
     var g = String(r.grade || '').toUpperCase();
@@ -3884,7 +4003,7 @@
         '</div>' +
         '<div class="profile-stats">' +
           '<div class="pstat"><span>보유 쿠폰</span><strong>' + fmt(coupons.length) + '장</strong></div>' +
-          '<div class="pstat"><span>굿즈 포인트</span><strong>' + fmt(user.points || 0) + 'P</strong></div>' +
+          '<div class="pstat"><span>굿즈 포인트</span><strong id="myPointsStat">' + fmt(user.points || 0) + 'P</strong></div>' +
           '<div class="pstat"><span>뽑기</span><strong>' + fmt((state.myDraws || []).length) + '회</strong></div>' +
           '<div class="pstat"><span>보관중</span><strong>' + fmt((state.myDraws || []).filter(function (d) { return d.itemStatus === '보관중'; }).length) + '개</strong></div>' +
         '</div>' +
@@ -4695,13 +4814,13 @@
     return tiers.map(function (t) {
       return '<div class="tier-row">' +
         '<div class="tier-main">' +
-          '<select name="grade">' + GRADES.map(function (g) {
-            return '<option value="' + g + '"' + (g === t.grade ? ' selected' : '') + '>' + g + '상</option>';
+          '<select name="grade">' + TIER_GRADES.map(function (g) {
+            return '<option value="' + g + '"' + (g === t.grade ? ' selected' : '') + '>' + (g === 'P' ? 'P상 (포인트)' : g + '상') + '</option>';
           }).join('') + '</select>' +
           '<input name="label" type="text" maxlength="40" value="' + h(t.label || '') + '" placeholder="상품명">' +
           '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '">' +
           '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '">' +
-          '<label class="tier-point-only" title="이 등급을 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + '><span>P지급</span></label>' +
+          '<label class="tier-point-only" title="이 등급은 실물 대신 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + '><span>P상</span></label>' +
           '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>' +
         '</div>' +
         '<div class="tier-extra">' +
@@ -4772,11 +4891,12 @@
           '</div>' +
         '</div>' +
         '<div class="tier-editor" id="tierEditor">' +
-          '<div class="tier-editor-head"><span>등급</span><span>상품명</span><span>수량</span><span>포인트</span><span>구분</span><span></span></div>' +
+          '<div class="tier-editor-head"><span>등급</span><span>상품명</span><span>수량</span><span>지급 포인트(P)</span><span>구분</span><span></span></div>' +
           '<div id="tierRows">' + tierRowsHTML(tiers) + '</div>' +
           '<div class="tier-summary"><span>등급 수량 합계 <b id="tierSumLabel">0</b> / <b id="ticketTotalLabel">0</b>장</span><span id="tierSumState"></span></div>' +
         '</div>' +
-        '<div class="btn-row tight"><button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button></div>' +
+        '<div class="btn-row tight"><button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add-point">+ P상(포인트) 추가</button></div>' +
         '<div class="manual-editor">' +
           '<div class="manual-editor-head"><span>상품 설명서</span><small>판 상세 하단에 그대로 표시됩니다.</small></div>' +
           '<label class="field"><span>요약</span><textarea name="manualSummary" rows="2" placeholder="상품 소개 2~3문장">' + h(m.summary || '') + '</textarea></label>' +
@@ -5200,6 +5320,21 @@
           var used = readTierRows().map(function (r) { return r.grade; });
           var next = GRADES.filter(function (g) { return used.indexOf(g) === -1; })[0] || 'H';
           rowsBox.insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: next, label: '', count: 0, points: 0 }]));
+          updateTierSummary();
+          break;
+        }
+        case 'tier-add-point': {
+          var pBox = $('#tierRows');
+          if (!pBox) break;
+          if (readTierRows().some(function (r) { return String(r.grade).toUpperCase() === 'P'; })) {
+            toast('P상은 이미 있어요. 수량만 고치면 됩니다.', 'err');
+            break;
+          }
+          var rows = readTierRows();
+          var sum = rows.reduce(function (s, r) { return s + (isNaN(r.count) ? 0 : r.count); }, 0);
+          var totalT = Number(($('input[name="tickets"]') || {}).value || 0);
+          var rest = Math.max(0, totalT - sum);
+          pBox.insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: '굿즈 포인트 1,200P', count: rest, points: 1200, pointOnly: true }]));
           updateTierSummary();
           break;
         }
