@@ -2207,7 +2207,10 @@
     el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
         '<span class="step-no">1</span>' +
         '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
-        '<p class="muted">등급 ' + board.tiers.length + '종 × 20장 = ' + fmt(board.tiers.length * 20) + '장 구성입니다. 실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
+        '<p class="muted">' + (board.tiers.length * 20 === Number(board.tickets)
+            ? '등급 ' + board.tiers.length + '종 × 20장 = ' + fmt(board.tickets) + '장 구성입니다. '
+            : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
+          '실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
         '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
       '<div class="prize-gallery' + (board.tiers.length > 6 ? ' is-dense' : '') + '">' + cards + lo + '</div>' +
       '<div class="prize-table-wrap">' +
