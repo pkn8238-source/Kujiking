@@ -22,10 +22,29 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="assets/styles.css?v=3.6t">
+<link rel="stylesheet" href="assets/styles.css?v=3.6t3">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
+  <style>
+  /* 테스트 전용 — 이 브라우저가 '움직임 줄이기'로 뜨면 축하 연출이 전부 꺼지므로, 연출 확인용으로만 되살린다.
+     실서비스 CSS(prefers-reduced-motion 규칙)는 건드리지 않는다. */
+  @media (prefers-reduced-motion: reduce){
+    .reveal-stage .rv-beams{animation:rv-spin 10s linear infinite!important}
+    .reveal-stage .rv-beams-alt{animation:rv-spin 17s linear infinite reverse!important}
+    .reveal-stage .rv-spark,.reveal-stage .st-spark{animation:spark-twinkle 2.3s ease-in-out infinite!important}
+    .reveal-stage .confetti{animation:confetti-fall 1.7s ease-out forwards!important;animation-delay:0s!important}
+    .reveal-stage .rv-flash{animation:rv-flash-var .6s ease-out forwards!important}
+    .reveal-stage .rv-boom{animation:rv-boom 1.1s ease-out forwards!important}
+    .reveal-stage .rv-halo{animation:rv-halo-pulse 3s ease-in-out infinite!important}
+    .reveal-stage .rv-burst{animation:rv-burst .9s ease-out forwards!important}
+    .reveal-stage .rv-frame{animation:rv-frame-in .78s ease both,rv-frame-glow 2.8s 1s ease-in-out infinite!important}
+    .reveal-stage .rv-emblem{animation:rv-emblem-glow 2.4s ease-in-out infinite!important}
+    .reveal-stage .rv-rings i{animation:rv-ring 2.9s ease-out infinite!important}
+    .seal-stage .seal-halo{animation:seal-halo 2.4s ease-in-out infinite!important}
+    .seal-stage .seal-kicker{animation:seal-kicker 1.6s ease-in-out infinite!important}
+  }
+  </style>
 </head>
 <body>
 <a class="skip-link" href="#main">본문으로 바로가기</a>
@@ -749,7 +768,7 @@
 </div>
 
 <script>window.KUJI_CONFIG={SUPABASE_URL:"",SUPABASE_ANON_KEY:"",FORCE_DEMO:true,STORE_NAME:"쿠지통령",CONTACT:"kujiking@kujiking.co.kr"};</script>
-<script src="assets/app.js?v=3.6t" defer></script>
+<script src="assets/app.js?v=3.6t3" defer></script>
 
   <script>
   /* v3.6 테스트 하네스 — 이 페이지에서만 쓰는 임시 파일. 데모 상태(localStorage)에 체험 계정을 심는다. */

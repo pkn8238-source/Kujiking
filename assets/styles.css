@@ -2134,7 +2134,7 @@ body.is-live .demo-only{display:none !important}
   opacity:0;transform:scale(.2);mix-blend-mode:screen;animation:rv-boom 1s cubic-bezier(.16,.9,.3,1) forwards}
 @keyframes rv-boom{0%{opacity:1;transform:scale(.18)}42%{opacity:.92}100%{opacity:0;transform:scale(1.55)}}
 
-.rv-frame{position:absolute;left:50%;top:52%;width:min(330px,82%);aspect-ratio:1/1.14;
+.rv-frame{position:absolute;left:50%;top:52%;width:min(360px,86%);aspect-ratio:1/1.08;
   transform:translate(-50%,-50%);border-radius:26px;pointer-events:none;z-index:0;
   border:3px solid rgba(255,234,158,.92);
   box-shadow:0 0 0 1px rgba(255,255,255,.35) inset,0 0 26px rgba(255,213,30,.85),0 0 74px rgba(255,176,40,.55),0 0 130px rgba(255,150,20,.35);
@@ -2144,6 +2144,14 @@ body.is-live .demo-only{display:none !important}
   0%,100%{box-shadow:0 0 0 1px rgba(255,255,255,.3) inset,0 0 20px rgba(255,213,30,.7),0 0 58px rgba(255,176,40,.45)}
   50%{box-shadow:0 0 0 2px rgba(255,255,255,.5) inset,0 0 36px rgba(255,230,120,1),0 0 96px rgba(255,176,40,.7)}}
 .reveal-stage.lv3 .rv-frame{border-color:#fff6cf;
+  box-shadow:0 0 0 1px rgba(255,255,255,.5) inset,0 0 32px rgba(255,240,170,.95),0 0 90px rgba(255,176,40,.65),0 0 150px rgba(255,120,220,.35)}
+
+/* 피규어가 무대 밖으로 넘쳐서 등급 글씨를 덮지 않도록 (v3.6) */
+img.rv-figure{height:auto;max-height:100%;max-width:86%}
+.reveal-stage.lv2 .rv-hero{height:min(300px,70vw)}
+.reveal-stage.lv3 .rv-hero{height:min(330px,78vw)}
+.reveal-stage.lv2 .rv-frame{width:min(300px,72%);aspect-ratio:1/1.1;top:50%}
+.reveal-stage.lv3 .rv-frame{width:min(330px,76%);aspect-ratio:1/1.1;top:50%;border-color:#fff6cf;
   box-shadow:0 0 0 1px rgba(255,255,255,.5) inset,0 0 32px rgba(255,240,170,.95),0 0 90px rgba(255,176,40,.65),0 0 150px rgba(255,120,220,.35)}
 
 /* 금빛·무지개 빛줄기를 더 세게 */
