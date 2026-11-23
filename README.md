@@ -182,7 +182,8 @@ git add -A && git commit -m "쿠지킹 v2" && git push origin main
 - 판 커버: `assets/products/{slug}/cover.jpg` (900×1125)
 - 원본 상품 사진: `assets/products/{slug}/raw/*.webp` (시바마루 상품 이미지, 1000×1000)
 - 생성 스크립트: `assets/products/build_assets.py` (Pillow · 흰 배경 제거 · 배지 합성)
-  `python3 assets/products/build_assets.py` 로 다시 만들 수 있습니다. 폰트는 `assets/fonts/Pretendard-*.otf` 를 씁니다.
+  `python3 assets/products/build_assets.py` 로 다시 만들 수 있습니다. 폰트는 Pretendard 릴리스의 `Pretendard-Black.otf`·`Pretendard-Bold.otf` 를 `assets/fonts/` 에 두고 실행하세요(용량 때문에 저장소에는 넣지 않았습니다).
+  원본 상품 사진은 `assets/products/fetch_images.sh` 로 다시 받을 수 있습니다.
 
 ### 판 상세에 추가된 것
 - **상품 구성** 탭: 등급별 실물 썸네일 + `A상`~`E상`·`LAST ONE` 배지 + 상품명 + 크기/소재 설명 + 수량·확률·잔여.

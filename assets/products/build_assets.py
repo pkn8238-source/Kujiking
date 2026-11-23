@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """쿠지킹 — 시바마루야 실물 상품 등급 카드 이미지 생성 (v2).
 
+준비: assets/fonts/Pretendard-Black.otf, Pretendard-Bold.otf
+      assets/products/{slug}/raw/*.webp  (fetch_images.sh 로 다운로드)
+
+
 raw/*.webp (시바마루 스토어 상품 사진, 1000x1000) 의 스튜디오 배경을 투명하게 지우고
 - tier_a.png ~ tier_e.png : 900x900 등급 카드(A상~E상 배지)
 - last_one.png            : 900x900 라스트원 카드
