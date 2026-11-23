@@ -356,6 +356,7 @@
       id: 'b-onepiece',
       title: '[원피스] 루피 기어5 피규어 쿠지',
       category: '원피스',
+      cover: 'assets/board_onepiece.jpg',
       price: 12000,
       tickets: 80,
       sold: 26,
@@ -374,6 +375,7 @@
       id: 'b-sanrio',
       title: '[산리오] 마이멜로디 & 쿠로미 스위트 쿠지',
       category: '산리오',
+      cover: 'assets/board_sanrio.jpg',
       price: 9900,
       tickets: 70,
       sold: 33,
@@ -389,23 +391,30 @@
       lastOneLabel: '라스트원상 · 마이멜로디 대형 인형'
     },
     {
-      id: 'b-chiikawa',
-      title: '[치이카와] 치이카와 & 하치와레 프리미엄 쿠지',
-      category: '치이카와',
+      id: 'b-kimetsu',
+      title: '[귀멸의 칼날] 탄지로 히노카미 피규어 쿠지',
+      category: '귀멸의 칼날',
+      cover: 'assets/board_kimetsu.jpg',
       price: 15000,
       tickets: 60,
       sold: 12,
-      kicker: 'PREMIUM',
-      sub: '치이카와 · 하치와레',
+      kicker: 'HINOKAMI',
+      sub: '카마도 탄지로 · 히노카미 카구라',
       tiers: [
-        { grade: 'A', label: '치이카와 대형 인형', count: 1, points: 30000 },
-        { grade: 'B', label: '하치와레 인형', count: 3, points: 12000 },
-        { grade: 'C', label: '키링', count: 6, points: 4000 },
-        { grade: 'D', label: '미니 파우치', count: 10, points: 2000 },
+        { grade: 'A', label: '탄지로 히노카미 피규어', count: 1, points: 30000 },
+        { grade: 'B', label: '네즈코 피규어', count: 3, points: 12000 },
+        { grade: 'C', label: '아크릴 스탠드', count: 6, points: 4000 },
+        { grade: 'D', label: '금속 키링', count: 10, points: 2000 },
         { grade: 'E', label: '굿즈 포인트 5,000P', count: 40, points: 5000, pointOnly: true }
       ],
-      lastOneLabel: '라스트원상 · 치이카와 메가 인형'
+      lastOneLabel: '라스트원상 · 탄지로 메가 피규어'
     }
+  ];
+
+  var COVER_PRESETS = [
+    { label: '원피스 피규어', url: 'assets/board_onepiece.jpg' },
+    { label: '귀멸의 칼날 피규어', url: 'assets/board_kimetsu.jpg' },
+    { label: '산리오 굿즈', url: 'assets/board_sanrio.jpg' }
   ];
 
   var SEED_BUYERS = ['박*남', '김**영', '이*우', '최*아', '정*호', '한*지', '윤*빈', '강*민', '오*서', '임**준', '서*진', '문*혁'];
@@ -502,6 +511,7 @@
         lastOneLabel: spec.lastOneLabel,
         kicker: spec.kicker,
         sub: spec.sub,
+        cover: spec.cover || '',
         status: 'open',
         seed: seed,
         seedHash: hash,
@@ -783,7 +793,7 @@
         return {
           id: b.id, title: b.title, category: b.category || '자체 스페셜',
           price: b.price, tickets: b.ticket_count, tiers: tiers,
-          lastOneLabel: b.last_one_label, status: b.status,
+          lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
           seed: b.seed, seedHash: b.seed_hash,
           createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
         };
@@ -1107,6 +1117,7 @@
           id: existing ? existing.id : uid('board'),
           title: payload.title, category: payload.category, price: payload.price,
           tickets: payload.tickets, tiers: tiersNorm, lastOneLabel: payload.lastOneLabel,
+          cover: payload.cover || '',
           kicker: payload.kicker || (existing ? existing.kicker : ''),
           sub: payload.sub || (existing ? existing.sub : ''),
           status: payload.status, seed: seed, seedHash: hash, opens: opens,
@@ -1130,7 +1141,7 @@
       if (payload.id) {
         var up = await this.sb.from('boards').update({
           title: payload.title, category: payload.category, price: payload.price,
-          last_one_label: payload.lastOneLabel, status: payload.status
+          last_one_label: payload.lastOneLabel, status: payload.status, cover: payload.cover || null
         }).eq('id', payload.id);
         if (up.error) throw up.error;
         await this.refreshData();
@@ -1139,7 +1150,8 @@
       var res = await this.sb.rpc('admin_create_board', {
         p_title: payload.title, p_category: payload.category, p_price: payload.price,
         p_ticket_count: payload.tickets, p_tiers: payload.tiers,
-        p_last_one_label: payload.lastOneLabel, p_seed: payload.seed || null, p_status: payload.status
+        p_last_one_label: payload.lastOneLabel, p_seed: payload.seed || null, p_status: payload.status,
+        p_cover: payload.cover || null
       });
       if (res.error) throw res.error;
       await this.refreshData();
@@ -1559,14 +1571,18 @@
       : board.status === 'open'
         ? '<span class="badge badge-live cover-status">진행 중</span>'
         : '<span class="badge badge-closed cover-status">종료</span>';
+    var coverInner = board.cover
+      ? '<img class="cover-img" src="' + h(board.cover) + '" alt="' + h(board.category + ' 상품 이미지') + '" loading="lazy" decoding="async">' +
+        '<span class="cover-scrim" aria-hidden="true"></span>'
+      : '<span class="cover-kicker">KUJIKING KUJI</span>' +
+        '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
+        '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>';
     return '' +
       '<article class="board-card">' +
-        '<a class="board-card-cover ' + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
+        '<a class="board-card-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
+          coverInner +
           '<span class="badge cover-tag">' + h(board.category || '자체 스페셜') + '</span>' +
           statusBadge +
-          '<span class="cover-kicker">KUJIKING KUJI</span>' +
-          '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
-          '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>' +
           '<span class="cover-price">1장 ' + won(board.price) + ' · ' + fmt(board.tickets) + '장</span>' +
         '</a>' +
         '<div class="board-card-body">' +
@@ -1735,10 +1751,14 @@
     var left = remaining(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     el.innerHTML = '' +
-      '<div class="board-cover ' + categoryClass(board.category) + '">' +
-        '<span class="cover-kicker">KUJIKING KUJI</span>' +
-        '<strong class="cover-title">' + h(board.category) + '</strong>' +
-        '<span class="cover-sub">' + h(board.sub || '') + '</span>' +
+      '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
+        (board.cover
+          ? '<img class="cover-img" src="' + h(board.cover) + '" alt="' + h(board.category + ' 상품 이미지') + '">' +
+            '<span class="cover-scrim" aria-hidden="true"></span>' +
+            '<span class="cover-mini">KUJIKING KUJI · ' + h(board.category) + '</span>'
+          : '<span class="cover-kicker">KUJIKING KUJI</span>' +
+            '<strong class="cover-title">' + h(board.category) + '</strong>' +
+            '<span class="cover-sub">' + h(board.sub || '') + '</span>') +
       '</div>' +
       '<div class="board-hero-body">' +
         '<span class="pill pill-cream">' + h(board.category) + ' · ' + priceBandLabel(board.price) + '</span>' +
@@ -2648,7 +2668,9 @@
     }
     list.innerHTML = state.boards.map(function (b) {
       return '<div class="admin-board">' +
-        '<div class="admin-board-thumb ' + categoryClass(b.category) + '"><span>' + h(b.category) + '</span></div>' +
+        '<div class="admin-board-thumb ' + categoryClass(b.category) + '">' +
+          (b.cover ? '<img src="' + h(b.cover) + '" alt="">' : '<span>' + h(b.category) + '</span>') +
+        '</div>' +
         '<div class="admin-board-info">' +
           '<h3>' + h(b.title) + '</h3>' +
           '<p>' + h(b.category) + ' · ' + won(b.price) + ' · ' + fmt(b.tickets) + '장 · 판매 ' + fmt(openedCount(b)) + '/' + fmt(b.tickets) +
@@ -2915,6 +2937,17 @@
     }).join('');
   }
 
+  function updateCoverPreview(form) {
+    var box = form.querySelector('#coverPreview');
+    if (!box) return;
+    var input = form.querySelector('input[name="cover"]');
+    var img = box.querySelector('img');
+    var v = input ? input.value.trim() : '';
+    if (!v) { box.hidden = true; if (img) img.removeAttribute('src'); return; }
+    box.hidden = false;
+    if (img) img.src = v;
+  }
+
   function openBoardEditor(boardId) {
     var board = boardId ? getBoard(boardId) : null;
     ui.editingBoardId = board ? board.id : null;
@@ -2941,6 +2974,21 @@
             '<option value="closed"' + (board && board.status === 'closed' ? ' selected' : '') + '>종료</option>' +
           '</select></label>' +
           '<label class="field span-2"><span>라스트원상</span><input name="lastOneLabel" type="text" maxlength="60" value="' + h(board ? board.lastOneLabel : '라스트원상 · 메탈릭 컬러 피규어') + '"></label>' +
+          '<div class="field span-2">' +
+            '<span>커버 이미지</span>' +
+            '<div class="cover-row">' +
+              '<input name="cover" type="text" value="' + h(board ? (board.cover || '') : '') + '" placeholder="assets/board_onepiece.jpg 또는 https://…">' +
+              '<select class="input input-sm" data-role="cover-preset" aria-label="커버 이미지 선택">' +
+                '<option value="">기본(카테고리 컬러)</option>' +
+                COVER_PRESETS.map(function (c) {
+                  return '<option value="' + h(c.url) + '"' + (board && board.cover === c.url ? ' selected' : '') + '>' + h(c.label) + '</option>';
+                }).join('') +
+                '<option value="__url">직접 URL 입력…</option>' +
+              '</select>' +
+            '</div>' +
+            '<span class="field-hint">비워두면 카테고리 색상 커버가 표시됩니다. 이미지는 3:4 세로형이 가장 잘 맞아요.</span>' +
+            '<div class="cover-preview" id="coverPreview" hidden><img alt="커버 미리보기"></div>' +
+          '</div>' +
         '</div>' +
         '<div class="tier-editor" id="tierEditor">' +
           '<div class="tier-editor-head"><span>등급</span><span>상품명</span><span>수량</span><span>포인트</span><span>구분</span><span></span></div>' +
@@ -2960,6 +3008,7 @@
       '</form>';
     openModal(html, { wide: true });
     updateTierSummary();
+    updateCoverPreview($('form[data-form="board-form"]'));
   }
 
   function readTierRows() {
@@ -3005,6 +3054,7 @@
       tickets: Number(fieldValue(form, 'tickets')),
       status: fieldValue(form, 'status'),
       lastOneLabel: fieldValue(form, 'lastOneLabel').trim() || '라스트원상',
+      cover: fieldValue(form, 'cover').trim(),
       tiers: readTierRows(),
       seed: fieldValue(form, 'seed').trim()
     };
@@ -3550,6 +3600,7 @@
 
     document.addEventListener('input', function (e) {
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
+      if (e.target.name === 'cover' && e.target.closest('form[data-form="board-form"]')) updateCoverPreview(e.target.closest('form'));
       if (e.target.id === 'codeSearch') renderCodesTable();
       if (e.target.id === 'memberSearch') {
         ui.memberQuery = e.target.value;
@@ -3580,6 +3631,15 @@
       if (e.target.id === 'boardSort') { ui.filters.sort = e.target.value; renderHome(); }
       if (e.target.id === 'codeFilter') renderCodesTable();
       if (e.target.id === 'claimBoardSelect') autoClaimAmount();
+      if (e.target.matches && e.target.matches('[data-role="cover-preset"]')) {
+        var cform = e.target.closest('form');
+        var cinput = cform ? cform.querySelector('input[name="cover"]') : null;
+        if (cinput) {
+          if (e.target.value === '__url') { cinput.value = ''; cinput.focus(); }
+          else cinput.value = e.target.value;
+          updateCoverPreview(cform);
+        }
+      }
       if (e.target.closest('form[data-form="claim"]') && e.target.name === 'qty') autoClaimAmount();
       if (e.target.id === 'importFile') {
         if (e.target.files && e.target.files[0]) importData(e.target.files[0]);

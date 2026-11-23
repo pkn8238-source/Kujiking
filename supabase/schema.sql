@@ -49,6 +49,7 @@ create table if not exists public.boards (
   id             uuid primary key default gen_random_uuid(),
   title          text not null,
   category       text not null default '자체 스페셜',
+  cover          text,                              -- 커버 이미지 경로/URL (비우면 카테고리 색상 커버)
   price          integer not null check (price > 0),
   ticket_count   integer not null check (ticket_count between 1 and 300),
   tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly}]
@@ -71,6 +72,7 @@ create table if not exists public.tickets (
   drawn_at   timestamptz,
   unique (board_id, n)
 );
+alter table public.boards add column if not exists cover text;
 create index if not exists tickets_board_idx on public.tickets (board_id, status);
 
 create table if not exists public.exchange_codes (
@@ -698,7 +700,8 @@ create or replace function public.admin_create_board(
   p_tiers jsonb,
   p_last_one_label text default null,
   p_seed text default null,
-  p_status text default 'open'
+  p_status text default 'open',
+  p_cover text default null
 ) returns jsonb
 language plpgsql security definer set search_path = public
 as $$
@@ -721,10 +724,10 @@ begin
 
   v_seed := coalesce(nullif(btrim(coalesce(p_seed, '')), ''), encode(gen_random_bytes(32), 'hex'));
 
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash)
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
   values (v_id, p_title, coalesce(nullif(p_category, ''), '자체 스페셜'), p_price, p_ticket_count,
           p_tiers, p_last_one_label, coalesce(p_status, 'open'), v_seed,
-          encode(digest(v_seed, 'sha256'), 'hex'));
+          encode(digest(v_seed, 'sha256'), 'hex'), p_cover);
 
   insert into public.tickets (board_id, n, status)
   select v_id, g.n, 'available' from generate_series(1, p_ticket_count) as g(n);
@@ -768,40 +771,43 @@ begin
   -- 원피스 · 12,000원 · 80장
   v_seed := encode(gen_random_bytes(32), 'hex');
   v_id := gen_random_uuid();
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash)
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
   values (v_id, '[원피스] 루피 기어5 피규어 쿠지', '원피스', 12000, 80,
     '[{"grade":"A","label":"루피 기어5 대형 피규어","count":2,"points":20000},
       {"grade":"B","label":"루피 · 조로 피규어","count":4,"points":8000},
       {"grade":"C","label":"아크릴 스탠드","count":10,"points":3000},
       {"grade":"D","label":"캔배지 3종 세트","count":24,"points":1200},
       {"grade":"E","label":"굿즈 포인트 3,000P","count":40,"points":3000,"pointOnly":true}]'::jsonb,
-    '라스트원상 · 메탈릭 루피 피규어', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'));
+    '라스트원상 · 메탈릭 루피 피규어', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'),
+    'assets/board_onepiece.jpg');
   insert into public.tickets (board_id, n) select v_id, g.n from generate_series(1, 80) as g(n);
 
   -- 산리오 · 9,900원 · 70장
   v_seed := encode(gen_random_bytes(32), 'hex');
   v_id := gen_random_uuid();
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash)
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
   values (v_id, '[산리오] 마이멜로디 & 쿠로미 스위트 쿠지', '산리오', 9900, 70,
     '[{"grade":"A","label":"마이멜로디 봉제인형","count":2,"points":15000},
       {"grade":"B","label":"쿠로미 쿠션","count":4,"points":6000},
       {"grade":"C","label":"아크릴 키링","count":8,"points":2500},
       {"grade":"D","label":"스티커 세트","count":16,"points":1000},
       {"grade":"E","label":"굿즈 포인트 2,000P","count":40,"points":2000,"pointOnly":true}]'::jsonb,
-    '라스트원상 · 마이멜로디 대형 인형', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'));
+    '라스트원상 · 마이멜로디 대형 인형', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'),
+    'assets/board_sanrio.jpg');
   insert into public.tickets (board_id, n) select v_id, g.n from generate_series(1, 70) as g(n);
 
-  -- 치이카와 · 15,000원 · 60장
+  -- 귀멸의 칼날 · 15,000원 · 60장
   v_seed := encode(gen_random_bytes(32), 'hex');
   v_id := gen_random_uuid();
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash)
-  values (v_id, '[치이카와] 치이카와 & 하치와레 프리미엄 쿠지', '치이카와', 15000, 60,
-    '[{"grade":"A","label":"치이카와 대형 인형","count":1,"points":30000},
-      {"grade":"B","label":"하치와레 인형","count":3,"points":12000},
-      {"grade":"C","label":"키링","count":6,"points":4000},
-      {"grade":"D","label":"미니 파우치","count":10,"points":2000},
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
+  values (v_id, '[귀멸의 칼날] 탄지로 히노카미 피규어 쿠지', '귀멸의 칼날', 15000, 60,
+    '[{"grade":"A","label":"탄지로 히노카미 피규어","count":1,"points":30000},
+      {"grade":"B","label":"네즈코 피규어","count":3,"points":12000},
+      {"grade":"C","label":"아크릴 스탠드","count":6,"points":4000},
+      {"grade":"D","label":"금속 키링","count":10,"points":2000},
       {"grade":"E","label":"굿즈 포인트 5,000P","count":40,"points":5000,"pointOnly":true}]'::jsonb,
-    '라스트원상 · 치이카와 메가 인형', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'));
+    '라스트원상 · 탄지로 메가 피규어', 'open', v_seed, encode(digest(v_seed, 'sha256'), 'hex'),
+    'assets/board_kimetsu.jpg');
   insert into public.tickets (board_id, n) select v_id, g.n from generate_series(1, 60) as g(n);
 end;
 $$;

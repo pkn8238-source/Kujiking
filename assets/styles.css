@@ -1246,3 +1246,53 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .fallback-box p{font-size:12.5px;color:var(--ink-soft);line-height:1.6}
 .fallback-box .btn-row{margin-top:10px}
 .fallback-detail{margin-top:8px;font-family:var(--font-mono);font-size:10.5px;color:var(--muted);word-break:break-all}
+
+/* ---------- 실물 커버 이미지 ---------- */
+.board-card-cover.has-image{
+  min-height:252px;padding:14px;align-items:stretch;justify-content:flex-end;
+  background:linear-gradient(150deg,#2b2118,#17120e);
+}
+.board-card-cover.has-image .cover-img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 32%;z-index:0;
+}
+.board-card-cover.has-image .cover-scrim{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,rgba(23,18,14,.42) 0%,rgba(23,18,14,.05) 34%,rgba(23,18,14,0) 58%,rgba(23,18,14,.62) 100%);
+}
+.board-card-cover.has-image .cover-tag,
+.board-card-cover.has-image .cover-status{position:absolute;z-index:2}
+.board-card-cover.has-image .cover-price{
+  position:relative;z-index:2;align-self:flex-start;background:rgba(255,255,255,.94);
+  color:var(--ink);border:1.5px solid rgba(23,18,14,.16);backdrop-filter:blur(2px);
+}
+.board-cover.has-image{
+  position:relative;overflow:hidden;padding:0;align-items:stretch;justify-content:flex-end;
+  background:linear-gradient(150deg,#2b2118,#17120e);
+}
+.board-cover.has-image .cover-img{
+  position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center 30%;z-index:0;
+}
+.board-cover.has-image .cover-scrim{
+  position:absolute;inset:0;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,rgba(23,18,14,.34) 0%,rgba(23,18,14,0) 45%,rgba(23,18,14,.58) 100%);
+}
+.cover-mini{
+  position:relative;z-index:2;margin:10px;align-self:flex-start;
+  font-size:9.5px;font-weight:900;letter-spacing:.1em;color:#fff;
+  background:rgba(23,18,14,.55);border-radius:999px;padding:3px 8px;
+}
+.admin-board-thumb{overflow:hidden;padding:0;position:relative;background:#fff6da}
+.admin-board-thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.admin-board-thumb span{position:relative;z-index:1;padding:6px}
+
+/* 관리자 커버 선택 */
+.cover-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cover-row input{flex:1;min-width:150px;min-height:38px;padding:6px 10px;border:2px solid var(--line-strong);border-radius:8px;font-size:12.5px;font-weight:600}
+.cover-row select{flex:0 0 auto;max-width:190px;min-height:38px}
+.field-hint{display:block;margin-top:5px;font-size:11px;color:var(--muted);font-weight:600}
+.cover-preview{margin-top:10px;border:2px solid var(--line-strong);border-radius:10px;overflow:hidden;max-width:240px;background:#fff6da}
+.cover-preview img{width:100%;height:180px;object-fit:cover;display:block}
+@media (max-width:920px){
+  .board-card-cover.has-image{min-height:220px}
+  .board-cover.has-image{min-height:170px}
+}
