@@ -114,6 +114,12 @@
     await sleep(1000);
     if (!document.getElementById('peelCard')) { say('FAIL: 종이 티켓 안 뜸'); return null; }
     say('OPEN ' + t.boardId + ' #' + t.n + ' (' + want + ')');
+    if (q.get('bare') === '1') {
+      var mn = document.querySelector('main');
+      if (mn) mn.innerHTML = '';
+      var an = document.querySelector('.announce');
+      if (an) an.style.display = 'none';
+    }
     return t;
   }
 
