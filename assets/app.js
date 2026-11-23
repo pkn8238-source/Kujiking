@@ -2567,21 +2567,28 @@
       var d = b.d, n = b.n, rate = b.rate;
       var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
       if (len < 2) return;
-      var fc = Math.min(opt.f || 3000, rate * 0.42);
-      var fco = 2 * Math.sin(Math.PI * fc / rate);
-      var q = 1 / Math.max(0.5, opt.q || 1);
+      var type = opt.type || 'bandpass';
+      var base = Math.min(Math.max(300, opt.f || 3000), rate * 0.4);
+      var fcHi = Math.min(base * 1.7, rate * 0.45);
+      var fcLo = Math.min(Math.max(140, base * 0.55), rate * 0.45);
+      var aHi = 1 - Math.exp(-2 * Math.PI * fcHi / rate);
+      var aLo = 1 - Math.exp(-2 * Math.PI * fcLo / rate);
       var attack = opt.atk == null ? 0.003 : opt.atk;
       var dec = Math.max(0.006, opt.dec || dur * 0.3);
-      var lp = 0, bp = 0;
+      var l1 = 0, l2 = 0, l3 = 0, l4 = 0;
       for (var i = 0; i < len; i++) {
         var idx = i0 + i;
         if (idx >= n) break;
         if (idx < 0) continue;
         var x = Math.random() * 2 - 1;
-        var hp = x - lp - q * bp;
-        bp += fco * hp;
-        lp += fco * bp;
-        var s = opt.type === 'lowpass' ? lp : opt.type === 'highpass' ? hp : bp;
+        /* 1극 저역통과 두 번(2차) — 어떤 컷오프에서도 발진하지 않는다 */
+        l1 += aHi * (x - l1);
+        l2 += aHi * (l1 - l2);
+        l3 += aLo * (x - l3);
+        var hp1 = x - l3;
+        l4 += aLo * (hp1 - l4);
+        var hp2 = hp1 - l4;
+        var s = type === 'lowpass' ? l2 : type === 'highpass' ? hp2 : 2 * (l1 - l3);
         var t = i / rate;
         var e = t < attack ? t / attack : Math.exp(-(t - attack) / dec);
         d[idx] += s * vol * e;
@@ -2631,7 +2638,7 @@
       }
       for (i = 0; i < 3; i++) tone(b, 0.008 + i * 0.022, 0.014, 3400 + Math.random() * 2200, 0.22, 'square', null, 0.001);
       tone(b, 0, 0.1, 240, 0.22, 'triangle', 120, 0.004);
-      return toURL(b, 0.85);
+      return toURL(b, 0.8);
     }
     /* 황금 봉인: 두근-두근 심장박동 + 금빛 셔머 + 낮게 깔리는 서브베이스 (0.7초) */
     function buildSeal() {
