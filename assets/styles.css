@@ -1544,7 +1544,7 @@ body.is-live .demo-only{display:none !important}
 
 /* ---------- 관리자 등급 편집 ---------- */
 .tier-row{display:block;padding:9px 8px 11px}
-.tier-main{display:grid;grid-template-columns:46px minmax(0,1fr) 48px 58px 46px 22px;gap:6px;align-items:center}
+.tier-main{display:grid;grid-template-columns:46px minmax(0,1fr) 46px 76px 46px 22px;gap:6px;align-items:center}
 .tier-extra{display:grid;grid-template-columns:46px minmax(0,1.1fr) minmax(0,1.3fr);gap:8px;align-items:center;margin-top:6px;padding-left:2px}
 .tier-extra input{min-height:34px}
 .tier-thumb-prev{width:42px;height:42px;border-radius:10px;border:2px solid var(--line);background:#fff;overflow:hidden;display:grid;place-items:center}
@@ -1569,7 +1569,7 @@ body.is-live .demo-only{display:none !important}
   .manual-head h2{font-size:19px}
   .manual-grid{grid-template-columns:1fr;gap:16px}
   .manual-stamp{align-self:flex-start}
-  .tier-main{grid-template-columns:44px minmax(0,1fr) 44px 52px 40px 20px;gap:4px}
+  .tier-main{grid-template-columns:42px minmax(0,1fr) 40px 66px 38px 20px;gap:4px}
   .tier-extra{grid-template-columns:40px minmax(0,1fr)}
   .tier-extra input[name="desc"]{grid-column:1/-1}
   .manual-editor{padding:11px}

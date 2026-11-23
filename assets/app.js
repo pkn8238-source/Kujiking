@@ -2226,12 +2226,12 @@
     var probs = board.tiers.map(function (t) {
       return t.grade + ' ' + (t.count / board.tickets * 100).toFixed(1).replace(/\.0$/, '') + '%';
     }).join(' · ');
-    el.innerHTML = '<h3>' + h(board.title) + ' 안내</h3><ul>' +
-      '<li>1장 ' + won(board.price) + ' · 총 ' + fmt(board.tickets) + '장 · 라스트원상 별도 지급</li>' +
-      '<li>등급별 확률: ' + h(probs) + '</li>' +
+    el.innerHTML = '<h3>뽑기 이용 안내</h3><ul>' +
+      '<li>라스트원상은 한 판의 마지막 1장을 뽑은 분께 추가로 지급됩니다.</li>' +
       '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
-      '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 개봉 후 청약철회가 제한됩니다.</li>' +
-      '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에 보관되고, 배송 신청 또는 굿즈 포인트 전환이 가능합니다.</li>' +
+      '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다.</li>' +
+      '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
+      '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
       '<p class="fine">봉인 해시(SHA-256): <code>' + h(String(board.seedHash || '').slice(0, 40)) + '…</code><br>' +
       '결과는 판이 열리기 전 봉인되었으며, <a href="#/fairness/' + h(board.id) + '" class="inline-link">공정성 검증</a>에서 직접 확인할 수 있습니다.</p>';
