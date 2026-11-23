@@ -1215,13 +1215,26 @@
     /* ---------- 뽑기 ---------- */
     async draw(args) {
       if (this.mode === 'local') return localDraw(args);
-      var res = await this.sb.rpc('draw_ticket', {
+      var body = {
         p_board_id: args.boardId,
         p_ticket_no: args.n,
         p_coupon_id: args.couponId || null,
         p_code: args.code || null,
         p_use_points: !!args.usePoints
-      });
+      };
+      var res = await this.sb.rpc('draw_ticket', body);
+      /* 서버 함수가 아직 v3.5(4인자)라면: 포인트 뽑기가 아닐 땐 기존 인자로 한 번 더 시도해 뽑기가 막히지 않게 한다 */
+      if (res.error && /PGRST202|p_use_points|Could not find the function/i.test(String(res.error.code || '') + ' ' + String(res.error.message || ''))) {
+        if (args.usePoints) {
+          throw new Error('포인트로 뽑기는 서버 준비가 필요해요. 관리자 페이지의 안내대로 supabase/upgrade_points_draw.sql 을 한 번 실행해 주세요.');
+        }
+        res = await this.sb.rpc('draw_ticket', {
+          p_board_id: body.p_board_id,
+          p_ticket_no: body.p_ticket_no,
+          p_coupon_id: body.p_coupon_id,
+          p_code: body.p_code
+        });
+      }
       if (res.error) throw new Error(res.error.message || '뽑기에 실패했어요.');
       var r = res.data || {};
       return {
