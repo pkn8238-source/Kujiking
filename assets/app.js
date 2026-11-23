@@ -1337,6 +1337,7 @@
         var up = await this.sb.from('boards').update({
           title: payload.title, category: payload.category, price: payload.price,
           last_one_label: payload.lastOneLabel, status: payload.status, cover: payload.cover || null,
+          tiers: tiersNorm,
           last_one_image: payload.lastOneImage || null, last_one_desc: payload.lastOneDesc || null,
           manual: payload.manual || null
         }).eq('id', payload.id);
