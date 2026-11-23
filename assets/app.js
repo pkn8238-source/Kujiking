@@ -65,6 +65,12 @@
     });
   }
   var h = escapeHtml;
+  /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
+  var COVER_VER = '3.1';
+  function coverSrc(url) {
+    if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
+    return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
+  }
   var ICONS = {
     ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4V7z"/><path d="M14 7v10"/>',
     crown: '<path d="M3 8l4.5 4L12 4l4.5 8L21 8l-2 11H5L3 8z"/><path d="M5 19h14"/>',
@@ -1840,7 +1846,7 @@
         ? '<span class="badge badge-live cover-status">진행 중</span>'
         : '<span class="badge badge-closed cover-status">종료</span>';
     var coverInner = board.cover
-      ? '<img class="cover-img" src="' + h(board.cover) + '" alt="' + h(board.category + ' 상품 이미지') + '" loading="lazy" decoding="async">' +
+      ? '<img class="cover-img" src="' + h(coverSrc(board.cover)) + '" alt="' + h(board.category + ' 상품 이미지') + '" loading="lazy" decoding="async">' +
         '<span class="cover-scrim" aria-hidden="true"></span>'
       : '<span class="cover-kicker">KUJIKING KUJI</span>' +
         '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
@@ -2022,7 +2028,7 @@
     el.innerHTML = '' +
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
         (board.cover
-          ? '<img class="cover-img" src="' + h(board.cover) + '" alt="' + h(board.category + ' 상품 이미지') + '">' +
+          ? '<img class="cover-img" src="' + h(coverSrc(board.cover)) + '" alt="' + h(board.category + ' 상품 이미지') + '">' +
             '<span class="cover-scrim" aria-hidden="true"></span>' +
             '<span class="cover-mini">KUJIKING KUJI · ' + h(board.category) + '</span>'
           : '<span class="cover-kicker">KUJIKING KUJI</span>' +
