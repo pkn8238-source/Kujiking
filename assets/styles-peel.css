@@ -742,6 +742,9 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .peel-jp{margin-top:14px;font-size:13px;font-weight:800;letter-spacing:.34em;color:var(--ink-soft)}
 .peel-no{font-family:var(--font-display);font-size:58px;line-height:1;letter-spacing:.02em;margin-top:2px;color:var(--ink)}
 .peel-line{font-size:10.5px;font-weight:800;letter-spacing:.18em;color:var(--muted);margin-top:4px}
+.peel-barcode{align-self:center;width:58%;height:40px;margin-top:20px;border-radius:3px;opacity:.8;
+  background:repeating-linear-gradient(90deg,var(--ink) 0 2px,transparent 2px 5px,var(--ink) 5px 7px,transparent 7px 11px,var(--ink) 11px 12px,transparent 12px 16px)}
+.peel-tiny{margin-top:8px;font-size:8.5px;font-weight:800;letter-spacing:.14em;color:var(--muted)}
 .peel-perf{display:flex;align-items:center;gap:8px;align-self:stretch;margin:auto 16px 0;color:var(--muted)}
 .peel-perf i{flex:1;height:0;border-top:3px dashed rgba(23,18,14,.4)}
 .peel-perf em{font-style:normal;font-size:9.5px;font-weight:900;letter-spacing:.16em}

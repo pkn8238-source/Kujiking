@@ -2419,6 +2419,8 @@
           '<span class="peel-jp">一番くじ</span>' +
           '<span class="peel-no">#' + no + '</span>' +
           '<span class="peel-line">ONLINE KUJI · 1매 한정</span>' +
+          '<span class="peel-barcode" aria-hidden="true"></span>' +
+          '<span class="peel-tiny">개봉 후 교환·환불 불가 · NO. ' + no + '</span>' +
           '<span class="peel-perf"><i></i><em>절취선</em><i></i></span>' +
           '<span class="peel-handle"><span class="peel-handle-arrow">↓</span>밀어서 뜯기</span>' +
           '<span class="peel-seal">미개봉</span>' +
