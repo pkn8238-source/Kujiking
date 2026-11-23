@@ -717,13 +717,9 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
   background:radial-gradient(closest-side,var(--peel-glow,#ffd51e) 0%,transparent 72%);
   opacity:calc(.3 + var(--peel) * .55);filter:blur(12px);animation:peel-pulse 2.6s ease-in-out infinite}
 @keyframes peel-pulse{0%,100%{transform:scale(.9);opacity:.3}50%{transform:scale(1.06);opacity:.62}}
-.peel-q{position:absolute;font-family:var(--font-display);font-size:180px;line-height:1;color:rgba(255,255,255,.13)}
-.peel-figure{
-  position:relative;width:82%;max-height:62%;object-fit:contain;margin-top:-6%;
-  filter:blur(var(--peel-blur)) saturate(.9) drop-shadow(0 12px 22px rgba(0,0,0,.45));
-  opacity:var(--peel-alpha);transform:scale(var(--peel-zoom));
-  transition:filter .1s linear,opacity .1s linear;
-}
+.peel-q{position:absolute;font-family:var(--font-display);font-size:180px;line-height:1;color:rgba(255,255,255,.15);text-shadow:0 0 46px rgba(255,213,30,.4)}
+.peel-card.is-ready .peel-q{animation:peel-q-pulse 2.2s ease-in-out infinite}
+@keyframes peel-q-pulse{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:.85;transform:scale(1.04)}}
 .peel-inner-tag{position:absolute;left:0;right:0;bottom:14px;display:flex;flex-direction:column;gap:2px;
   font-size:10px;font-weight:900;letter-spacing:.2em;color:rgba(255,255,255,.3)}
 .peel-inner-tag b{font-size:12px;letter-spacing:.02em;color:rgba(255,255,255,.5)}
@@ -807,7 +803,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
   color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
 .peel-fallback:hover{color:var(--ink)}
 .peel-card.is-tearing .peel-aura{opacity:1;filter:blur(3px);animation:none}
-.peel-card.is-tearing .peel-figure{filter:blur(0) saturate(1.1);opacity:1;transform:scale(1.1);transition:all .25s ease}
+.peel-card.is-tearing .peel-q{opacity:.9;transform:scale(1.08);transition:all .3s ease}
 @media (prefers-reduced-motion:reduce){
   .peel-aura,.peel-rays,.peel-grip,.peel-meter-text.is-armed{animation:none}
   .peel-flap{transition:transform .2s ease}

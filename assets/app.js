@@ -1683,7 +1683,10 @@
     opts = opts || {};
     modalRoot.hidden = false;
     modalShell.classList.toggle('wide', !!opts.wide);
+    modalShell.classList.toggle('dark', !!opts.dark);
+    modalShell.classList.toggle('is-drag', !!opts.dragLock);
     modalPanel.innerHTML = html;
+    if (opts.resetScroll && modalShell) { try { modalShell.scrollTop = 0; } catch (e) {} }
     document.body.style.overflow = 'hidden';
     lastFocused = document.activeElement;
     if (!opts.keepFocus) {
@@ -1693,8 +1696,9 @@
   }
   function closeModal() {
     if (!modalRoot || modalRoot.hidden) return;
-    /* 이미 뽑힌 결과를 종이 뒤에 숨긴 채로 닫지 않는다 — 먼저 개봉 연출로 보여준다 */
+    /* 이미 뽑힌 결과를 종이·봉인 뒤에 숨긴 채로 닫지 않는다 — 먼저 개봉 연출로 보여준다 */
     if (ui.draw && ui.draw.step === 'peel' && ui.draw.result && !ui.draw.revealed) { peelSnap(); return; }
+    if (ui.draw && ui.draw.step === 'seal' && ui.draw.result && !ui.draw.revealed) { sealSnap(); return; }
     modalRoot.hidden = true;
     modalPanel.innerHTML = '';
     document.body.style.overflow = '';
@@ -2343,17 +2347,27 @@
     if (!d) return;
     var board = getBoard(d.boardId);
     if (!board) return;
+    var dark = d.step === 'seal' || (d.step === 'result' && isEpicGrade(d.result && d.result.grade));
     var html;
     if (d.step === 'source') html = drawSourceHTML(board, d);
     else if (d.step === 'peel') html = drawPeelHTML(board, d);
+    else if (d.step === 'seal') html = drawSealHTML(board, d);
     else html = drawResultHTML(board, d);
-    openModal(html, { keepFocus: d.step === 'result', noAutofocus: d.step === 'peel' });
+    openModal(html, {
+      keepFocus: d.step === 'result',
+      noAutofocus: d.step === 'peel' || d.step === 'seal',
+      dark: dark,
+      dragLock: d.step === 'peel' || d.step === 'seal',
+      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel'
+    });
     if (d.step === 'source') {
       var input = $('#drawCodeInput');
       if (input && ui.pendingCode) input.value = ui.pendingCode;
     } else if (d.step === 'peel') {
       bindPeel();
       paintPeek(d);
+    } else if (d.step === 'seal') {
+      bindSeal();
     }
   }
 
@@ -2399,34 +2413,186 @@
     return html;
   }
 
-  /* ---------- 종이 티켓 뜯기(peel) 연출 ---------- */
+  /* ---------- 개봉 효과음 (종이 찢기 · 스냅 · 팡파레) ---------- */
+  var kujiSound = (function () {
+    var ctx = null, noiseBuf = null, muted = null, lastTick = 0;
+
+    function isMuted() {
+      if (muted === null) {
+        try { muted = window.localStorage.getItem('kujiking.sound') === 'off'; } catch (e) { muted = false; }
+      }
+      return muted;
+    }
+    function setMuted(v) {
+      muted = !!v;
+      try { window.localStorage.setItem('kujiking.sound', muted ? 'off' : 'on'); } catch (e) {}
+    }
+    function refreshToggle() {
+      var btn = document.getElementById('peelSound');
+      if (!btn) return;
+      var off = isMuted();
+      btn.textContent = off ? '🔇 소리 끔' : '🔊 소리 켬';
+      btn.setAttribute('aria-pressed', off ? 'false' : 'true');
+      btn.title = off ? '개봉 효과음 켜기' : '개봉 효과음 끄기';
+    }
+    function ac() {
+      if (isMuted()) return null;
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      if (!ctx) { try { ctx = new C(); } catch (e) { return null; } }
+      if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      return ctx;
+    }
+    function noise(c) {
+      if (noiseBuf) return noiseBuf;
+      var len = Math.floor(c.sampleRate * 0.4);
+      noiseBuf = c.createBuffer(1, len, c.sampleRate);
+      var data = noiseBuf.getChannelData(0);
+      for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+      return noiseBuf;
+    }
+    function blip(c, at, freq, dur, vol, type) {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(freq, at);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0002, vol), at + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g); g.connect(c.destination);
+      o.start(at); o.stop(at + dur + 0.03);
+    }
+    /* 절취선이 한 칸씩 찢길 때 나는 짧은 지직 */
+    function tear(amount) {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime;
+      if (now - lastTick < 0.05) return;
+      lastTick = now;
+      var lvl = 0.03 + Math.min(0.045, (amount || 0) * 0.05);
+      var src = c.createBufferSource(); src.buffer = noise(c);
+      var bp = c.createBiquadFilter(); bp.type = 'bandpass';
+      bp.frequency.value = 1700 + Math.random() * 2500; bp.Q.value = 0.8;
+      var hp = c.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 1100;
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, now);
+      g.gain.exponentialRampToValueAtTime(lvl, now + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.05 + Math.random() * 0.06);
+      src.connect(bp); bp.connect(hp); hp.connect(g); g.connect(c.destination);
+      src.start(now, Math.random() * 0.25, 0.16);
+    }
+    /* 활짝 열리는 순간: 찢김 + 짧은 상승음 */
+    function snap() {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime;
+      var src = c.createBufferSource(); src.buffer = noise(c);
+      var bp = c.createBiquadFilter(); bp.type = 'bandpass'; bp.Q.value = 0.7;
+      bp.frequency.setValueAtTime(2800, now);
+      bp.frequency.exponentialRampToValueAtTime(760, now + 0.22);
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.11, now);
+      g.gain.exponentialRampToValueAtTime(0.0001, now + 0.26);
+      src.connect(bp); bp.connect(g); g.connect(c.destination);
+      src.start(now, 0, 0.3);
+      blip(c, now + 0.01, 300, 0.16, 0.06, 'sine');
+      blip(c, now + 0.06, 620, 0.2, 0.05, 'triangle');
+    }
+    /* 결과가 나올 때: 등급이 높으면 화려한 팡파레 */
+    function fanfare(epic) {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime + 0.06;
+      var notes = epic ? [523.25, 659.25, 783.99, 1046.5, 1318.51] : [523.25, 659.25, 783.99];
+      var step = epic ? 0.085 : 0.1;
+      for (var i = 0; i < notes.length; i++) blip(c, now + i * step, notes[i], epic ? 0.4 : 0.28, epic ? 0.07 : 0.045, 'triangle');
+      if (epic) {
+        blip(c, now + notes.length * step, 1567.98, 0.65, 0.055, 'sine');
+        for (var k = 0; k < 6; k++) {
+          blip(c, now + 0.14 + k * 0.06, 2100 + Math.random() * 1300, 0.16, 0.022, 'sine');
+        }
+      }
+    }
+    /* 황금 봉인이 나타날 때: 낮게 울리는 긴장음 */
+    function sealCharge() {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime + 0.05;
+      blip(c, now, 196, 0.5, 0.055, 'sawtooth');
+      blip(c, now + 0.2, 261.63, 0.5, 0.05, 'triangle');
+      blip(c, now + 0.4, 392, 0.55, 0.045, 'triangle');
+      blip(c, now + 0.56, 1046.5, 0.3, 0.028, 'sine');
+    }
+    return {
+      tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge,
+      isMuted: isMuted, setMuted: setMuted, refreshToggle: refreshToggle,
+      toggle: function () { setMuted(!isMuted()); }
+    };
+  })();
+
+  /* =========================================================
+     종이 티켓 찢기 · 3D 펼치기(peel) 연출
+     ========================================================= */
+  var PEEL_TEAR = 0.30;      /* 이 진행률까지는 절취선만 찢는다 */
+  var PEEL_TEAR_PX = 34;     /* 찢겨 벌어지는 최대 간격(px) */
+  var PEEL_MAX_ANGLE = 92;   /* 완전히 펼쳐졌을 때의 회전각(deg) */
+
+  /* 찢긴 톱니(종이 이) 모양을 SVG data URI 로 만든다 */
+  function teethURL(fill, teeth, vertical) {
+    var n = teeth || 26, hh = 10, d, i;
+    if (vertical) {
+      d = 'M' + hh + ',0 L' + (hh * 0.6).toFixed(2) + ',0';
+      for (i = 0; i < n; i++) d += ' L0,' + (i + 0.5).toFixed(2) + ' L' + (hh * 0.6).toFixed(2) + ',' + (i + 1).toFixed(2);
+      d += ' L' + hh + ',' + n + ' Z';
+    } else {
+      d = 'M0,' + hh + ' L0,' + (hh * 0.6).toFixed(2);
+      for (i = 0; i < n; i++) d += ' L' + (i + 0.5).toFixed(2) + ',0 L' + (i + 1).toFixed(2) + ',' + (hh * 0.6).toFixed(2);
+      d += ' L' + n + ',' + hh + ' Z';
+    }
+    var vb = vertical ? '0 0 ' + hh + ' ' + n : '0 0 ' + n + ' ' + hh;
+    var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="' + vb + '" preserveAspectRatio="none">' +
+      '<path d="' + d + '" fill="' + fill + '"/></svg>';
+    return 'url("data:image/svg+xml,' + encodeURIComponent(svg) + '")';
+  }
+
   function drawPeelHTML(board, d) {
     var no = ('00' + d.n).slice(-3);
     return '<div class="peel-stage" id="peelStage">' +
       '<p class="result-kicker">TICKET #' + no + ' · ' + h(board.title) + '</p>' +
-      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">종이를 밀어서 뜯어주세요</h2>' +
-      '<p class="modal-sub">끝까지 밀면 안에 든 등급이 나와요. 중간에 놓으면 다시 덮여서 살짝 엿볼 수 있어요.</p>' +
+      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">절취선을 따라 찢어서 열어주세요</h2>' +
+      '<p class="modal-sub">아래로 찢으면 종이가 펼쳐지며 등급이 나와요. 중간에 놓으면 다시 덮여서 살짝 엿볼 수 있어요.</p>' +
       '<div class="peel-card" id="peelCard" role="group" aria-label="쿠지 종이 티켓">' +
         '<div class="peel-inner" aria-hidden="true">' +
+          '<div class="peel-rays"></div>' +
           '<div class="peel-aura"></div>' +
           '<span class="peel-q">?</span>' +
-          '<img class="peel-figure" id="peelFigure" alt="" hidden>' +
-          '<div class="peel-inner-tag"><span>DRAW RESULT</span><b>당첨 등급</b></div>' +
+          '<div class="peel-inner-tag"><span>MYSTERY</span><b>개봉하면 등급이 나와요</b></div>' +
         '</div>' +
-        '<div class="peel-flap" id="peelFlap" role="button" tabindex="0" aria-label="종이를 아래로 밀어 개봉">' +
+        '<div class="peel-stub" aria-hidden="true">' +
           '<span class="peel-stripe"></span>' +
-          '<span class="peel-head"><em>쿠지킹</em><b>KUJIKING</b></span>' +
+          '<span class="peel-stub-row"><b>쿠지킹</b><em>KUJIKING</em><span class="peel-tearlabel">✂ 절취선</span></span>' +
+          '<span class="peel-stub-teeth" id="peelStubTeeth"></span>' +
+        '</div>' +
+        '<div class="peel-flap" id="peelFlap" role="button" tabindex="0" aria-label="종이를 아래로 찢어 개봉">' +
+          '<span class="peel-teeth" id="peelTeeth" aria-hidden="true"></span>' +
+          '<span class="peel-shade" aria-hidden="true"></span>' +
+          '<span class="peel-seal" aria-hidden="true">미개봉</span>' +
           '<span class="peel-jp">一番くじ</span>' +
           '<span class="peel-no">#' + no + '</span>' +
           '<span class="peel-line">ONLINE KUJI · 1매 한정</span>' +
           '<span class="peel-barcode" aria-hidden="true"></span>' +
           '<span class="peel-tiny">개봉 후 교환·환불 불가 · NO. ' + no + '</span>' +
-          '<span class="peel-perf"><i></i><em>절취선</em><i></i></span>' +
-          '<span class="peel-handle"><span class="peel-handle-arrow">↓</span>밀어서 뜯기</span>' +
-          '<span class="peel-seal">미개봉</span>' +
+          '<span class="peel-grip"><span class="peel-grip-arrow">↓</span><span class="peel-grip-text">찢어서 열기</span></span>' +
+          '<span class="peel-edge" aria-hidden="true"></span>' +
         '</div>' +
+        '<span class="peel-dust" id="peelDust" aria-hidden="true"></span>' +
       '</div>' +
-      '<div class="peel-meter" aria-hidden="true"><span class="peel-meter-bar"><i id="peelMeterFill"></i></span><span class="peel-meter-text" id="peelMeterText">밀어서 뜯기 ↓</span></div>' +
+      '<div class="peel-meter">' +
+        '<span class="peel-meter-bar" aria-hidden="true"><i id="peelMeterFill"></i></span>' +
+        '<span class="peel-meter-row">' +
+          '<span class="peel-meter-text" id="peelMeterText">아래로 찢어서 열기 ↓</span>' +
+          '<button class="peel-sound" id="peelSound" type="button" data-action="toggle-sound" aria-pressed="true">🔊 소리 켬</button>' +
+        '</span>' +
+      '</div>' +
       '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
       '<p class="result-meta">' + (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || ''))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
@@ -2486,97 +2652,140 @@
 
   function peelColor(grade) {
     var g = String(grade || '');
-    if (g === 'LAST') return 'var(--gold)';
+    if (g.toUpperCase() === 'LAST') return 'var(--gold)';
     if (/^[A-L]$/i.test(g)) return 'var(--grade-' + g.toLowerCase() + ')';
     return 'var(--yellow)';
   }
 
-  /* 결과가 준비되면 속지(inner)에 흐린 실루엣과 등급 색 광채를 깔아 둔다 */
+  /* 결과가 준비돼도 속지에는 아무 힌트도 주지 않는다 (상품·등급 스포일러 방지) */
   function paintPeek(d) {
-    var fig = $('#peelFigure');
     var card = $('#peelCard');
     if (!card) return;
+    card.classList.add('is-ready');
     var aura = card.querySelector('.peel-aura');
-    var grade = d && d.result ? d.result.grade : '';
-    if (aura) aura.style.setProperty('--peel-glow', peelColor(grade));
-    if (!fig) return;
-    var board = d ? getBoard(d.boardId) : null;
-    var tier = board && d && d.result ? tierOf(board, d.result.grade) : null;
-    var src = d && d.result ? (d.result.tierImage || (tier && tier.image) || '') : '';
-    if (src) { fig.src = src; fig.hidden = false; }
-    else { fig.hidden = true; fig.removeAttribute('src'); }
+    var rays = card.querySelector('.peel-rays');
+    if (aura) aura.style.setProperty('--peel-glow', 'var(--gold)');
+    if (rays) rays.style.setProperty('--peel-glow', 'var(--gold)');
   }
 
   function updatePeelText(p) {
     var fill = $('#peelMeterFill'), text = $('#peelMeterText'), card = $('#peelCard');
+    var grip = $('.peel-grip-text');
     var pct = Math.round(Math.min(1, p / 0.75) * 100);
     if (fill) fill.style.width = pct + '%';
     if (text) {
-      text.textContent = p >= 0.75 ? '놓으면 뜯겨요!'
-        : (p >= 0.45 ? '거의 다 왔어요 · ' + Math.round(p * 100) + '%'
-        : (p > 0.02 ? '쪼는 중… ' + Math.round(p * 100) + '%' : '밀어서 뜯기 ↓'));
+      text.textContent = p >= 0.75 ? '놓으면 종이가 활짝 열려요!'
+        : (p >= PEEL_TEAR ? '종이가 펼쳐지는 중 · ' + Math.round(p * 100) + '%'
+        : (p > 0.02 ? '절취선을 찢는 중 · ' + Math.round(p * 100) + '%' : '아래로 찢어서 열기 ↓'));
       text.classList.toggle('is-armed', p >= 0.75);
     }
     if (card) card.classList.toggle('is-armed', p >= 0.75);
+    if (grip) grip.textContent = p >= 0.75 ? '놓으면 열림!' : (p > 0.02 ? '계속 찢기' : '찢어서 열기');
   }
 
   function bindPeel() {
     var card = $('#peelCard'), flap = $('#peelFlap');
     if (!card || !flap) return;
-    var st = { dragging: false, id: null, startX: 0, startY: 0, base: 0, p: 0, max: 1, height: 420, armed: false };
+
+    var teethEl = $('#peelTeeth'), stubTeethEl = $('#peelStubTeeth');
+    if (teethEl) teethEl.style.backgroundImage = teethURL('#fffdf7', 26);
+    if (stubTeethEl) stubTeethEl.style.backgroundImage = teethURL('#ffeec2', 26);
+    kujiSound.refreshToggle();
+
+    var st = { dragging: false, src: null, startX: 0, startY: 0, base: 0, p: 0, max: 1, height: 420, armed: false, tooth: 0 };
     st.height = card.getBoundingClientRect().height || 420;
-    st.max = Math.max(120, st.height * 0.78);
+    st.max = Math.max(130, st.height * 0.62);
     peelDrag = st;
+
+    function angleOf(p) {
+      if (p <= PEEL_TEAR) return 0;
+      var q = (p - PEEL_TEAR) / (1 - PEEL_TEAR);
+      return Math.pow(q, 0.88) * PEEL_MAX_ANGLE;
+    }
+    function tearOf(p) {
+      return PEEL_TEAR_PX * Math.min(1, p / PEEL_TEAR);
+    }
 
     function applyPeel(p, animate) {
       st.p = p;
-      var y = p * st.height * 0.9;
+      var t = tearOf(p), a = angleOf(p);
       flap.style.transition = animate ? '' : 'none';
-      flap.style.transform = 'translate3d(0,' + y.toFixed(1) + 'px,0) rotate(' + (p * 1.6).toFixed(2) + 'deg)';
+      flap.style.transform = 'translate3d(0,' + t.toFixed(1) + 'px,0) rotateX(' + a.toFixed(2) + 'deg)';
       card.style.setProperty('--peel', p.toFixed(3));
-      card.style.setProperty('--peel-blur', (22 - 17 * p).toFixed(1) + 'px');
-      card.style.setProperty('--peel-alpha', (0.2 + 0.75 * p).toFixed(2));
-      card.style.setProperty('--peel-zoom', (1 + 0.05 * p).toFixed(3));
+      card.style.setProperty('--tear', Math.min(1, p / PEEL_TEAR).toFixed(3));
+      card.style.setProperty('--fold', Math.min(1, a / PEEL_MAX_ANGLE).toFixed(3));
+      card.style.setProperty('--peel-blur', (22 - 19 * p).toFixed(1) + 'px');
+      card.style.setProperty('--peel-alpha', (0.16 + 0.84 * p).toFixed(2));
+      card.style.setProperty('--peel-zoom', (1 + 0.06 * p).toFixed(3));
     }
     st.apply = applyPeel;
     applyPeel(0, false);
     updatePeelText(0);
 
-    function onDown(e) {
-      if (st.dragging) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (ui.draw && ui.draw.revealing) return;
-      st.height = card.getBoundingClientRect().height || st.height;
-      st.max = Math.max(120, st.height * 0.78);
-      st.dragging = true; st.id = e.pointerId;
-      st.startX = e.clientX; st.startY = e.clientY; st.base = st.p;
-      flap.classList.add('is-dragging'); card.classList.add('is-dragging');
-      try { card.setPointerCapture(e.pointerId); } catch (err) {}
-      e.preventDefault();
+    /* 절취선 한 칸이 끊어질 때: 종이 부스러기 + 지직 소리 */
+    function dustAtTear(count, spread) {
+      var layer = document.getElementById('peelDust');
+      if (!layer) return;
+      for (var i = 0; i < count; i++) {
+        var bit = document.createElement('i');
+        bit.style.left = (4 + Math.random() * 92).toFixed(1) + '%';
+        bit.style.top = (46 + Math.random() * 18).toFixed(0) + 'px';
+        bit.style.setProperty('--dx', ((Math.random() - 0.5) * (spread || 70)).toFixed(0) + 'px');
+        bit.style.setProperty('--dy', (-4 - Math.random() * 24).toFixed(0) + 'px');
+        bit.style.setProperty('--rot', ((Math.random() - 0.5) * 280).toFixed(0) + 'deg');
+        bit.style.opacity = (0.5 + Math.random() * 0.5).toFixed(2);
+        layer.appendChild(bit);
+        (function (el) {
+          setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 760);
+        })(bit);
+      }
     }
+    st.dust = dustAtTear;
 
-    function onMove(e) {
-      if (!st.dragging || e.pointerId !== st.id) return;
-      var dy = e.clientY - st.startY;
-      var dx = e.clientX - st.startX;
-      var travel = Math.max(dy, dx * 0.55);   /* 대각선으로 당겨도 뜯긴다 */
+    /* --- 포인터·터치 공통 제스처 (iOS Safari 는 touch 이벤트로도 잡아 준다) --- */
+    function start(x, y) {
+      if (st.dragging) return false;
+      if (ui.draw && ui.draw.revealing) return false;
+      st.height = card.getBoundingClientRect().height || st.height;
+      st.max = Math.max(130, st.height * 0.62);
+      st.dragging = true;
+      st.startX = x; st.startY = y; st.base = st.p;
+      st.tooth = Math.floor(st.p / 0.02);
+      flap.classList.add('is-dragging');
+      card.classList.add('is-dragging');
+      kujiSound.tear(0.2);
+      return true;
+    }
+    function move(x, y) {
+      if (!st.dragging) return;
+      var dy = y - st.startY;
+      var dx = x - st.startX;
+      var travel = Math.max(dy, dx * 0.55);   /* 대각선으로 당겨도 찢긴다 */
       var p = Math.min(1, Math.max(0, (st.base * st.max + travel) / st.max));
       applyPeel(p, false);
       updatePeelText(p);
-      if (p >= 0.75 && !st.armed) { st.armed = true; try { navigator.vibrate && navigator.vibrate(12); } catch (err) {} }
+      var tooth = Math.floor(p / 0.02);
+      if (tooth !== st.tooth) {
+        st.tooth = tooth;
+        kujiSound.tear(p);
+        if (p < PEEL_TEAR + 0.12) dustAtTear(p < PEEL_TEAR ? 2 : 1, 60);
+      }
+      if (p >= 0.75 && !st.armed) {
+        st.armed = true;
+        try { navigator.vibrate && navigator.vibrate(14); } catch (err) {}
+      }
       if (p < 0.72) st.armed = false;
-      e.preventDefault();
     }
-
-    function onUp(e) {
+    function end(x, y) {
       if (!st.dragging) return;
-      if (e.type !== 'pointercancel' && e.type !== 'lostpointercapture' && e.pointerId !== st.id) return;
-      st.dragging = false; st.id = null; st.armed = false;
-      flap.classList.remove('is-dragging'); card.classList.remove('is-dragging');
-      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+      st.dragging = false;
+      st.src = null;
+      st.armed = false;
+      flap.classList.remove('is-dragging');
+      card.classList.remove('is-dragging');
       if (st.p >= 0.75) { peelSnap(); return; }
-      if (Math.abs(e.clientY - st.startY) < 8 && Math.abs(e.clientX - st.startX) < 8) {
-        /* 그냥 톡 눌렀을 때: 손잡이를 흔들어 "밀어서 뜯기"를 알려준다 */
+      if (Math.abs(y - st.startY) < 8 && Math.abs(x - st.startX) < 8) {
+        /* 그냥 톡 눌렀을 때: 손잡이를 흔들어 "찢어서 열기"를 알려준다 */
         card.classList.add('is-hinting');
         setTimeout(function () { card.classList.remove('is-hinting'); }, 720);
       }
@@ -2585,11 +2794,56 @@
       try { navigator.vibrate && navigator.vibrate(4); } catch (err) {}
     }
 
-    card.addEventListener('pointerdown', onDown);
-    card.addEventListener('pointermove', onMove);
-    card.addEventListener('pointerup', onUp);
-    card.addEventListener('pointercancel', onUp);
-    card.addEventListener('lostpointercapture', onUp);
+    card.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!start(e.clientX, e.clientY)) return;
+      st.src = 'pointer';
+      try { card.setPointerCapture(e.pointerId); } catch (err) {}
+      if (e.cancelable) e.preventDefault();
+    });
+    card.addEventListener('pointermove', function (e) {
+      if (st.src !== 'pointer') return;
+      move(e.clientX, e.clientY);
+      if (e.cancelable) e.preventDefault();
+    });
+    function pointerEnd(e) {
+      if (st.src !== 'pointer') return;
+      end(e.clientX, e.clientY);
+      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    card.addEventListener('pointerup', pointerEnd);
+    card.addEventListener('pointercancel', function (e) {
+      /* 스크롤 제스처로 뺏겨도 찢긴 만큼은 남긴다 */
+      if (st.src !== 'pointer') return;
+      if (st.p >= 0.75) { peelSnap(); return; }
+      pointerEnd(e);
+    });
+
+    /* iOS Safari 대비: 터치 이벤트에서 스크롤을 막고, 포인터가 없으면 이쪽이 직접 찢는다 */
+    card.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      if (st.src === 'pointer') return;
+      var t = e.touches[0];
+      if (start(t.clientX, t.clientY)) st.src = 'touch';
+    }, { passive: false });
+    card.addEventListener('touchmove', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch' || e.touches.length !== 1) return;
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    card.addEventListener('touchend', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch') return;
+      var t = e.changedTouches[0] || { clientX: st.startX, clientY: st.startY };
+      end(t.clientX, t.clientY);
+    }, { passive: false });
+    card.addEventListener('touchcancel', function (e) {
+      if (st.src !== 'touch') return;
+      if (st.p >= 0.75) { peelSnap(); return; }
+      end(st.startX, st.startY);
+    }, { passive: false });
+
     flap.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); peelSnap(); }
     });
@@ -2601,39 +2855,300 @@
     if (!d || d.step !== 'peel' || d.revealing) return;
     d.revealing = true;
     var card = $('#peelCard'), flap = $('#peelFlap');
-    if (card) card.classList.add('is-tearing');
+    if (card) {
+      card.classList.remove('is-dragging');
+      card.classList.add('is-tearing');
+      card.style.setProperty('--peel', '1');
+      card.style.setProperty('--peel-blur', '0px');
+      card.style.setProperty('--peel-alpha', '1');
+      card.style.setProperty('--peel-zoom', '1.1');
+      card.style.setProperty('--fold', '1');
+    }
     if (flap) {
       var hgt = card ? (card.getBoundingClientRect().height || 420) : 420;
-      flap.style.transition = 'transform .3s cubic-bezier(.45,0,.7,.25), opacity .26s ease';
-      flap.style.transform = 'translate3d(0,' + (hgt * 1.12).toFixed(0) + 'px,0) rotate(7deg)';
+      flap.classList.remove('is-dragging');
+      flap.style.transition = 'transform .34s cubic-bezier(.32,.9,.4,1), opacity .3s ease';
+      flap.style.transform = 'translate3d(0,' + (PEEL_TEAR_PX + hgt * 0.05).toFixed(0) + 'px,0) rotateX(122deg)';
       flap.style.opacity = '0';
     }
+    if (peelDrag && peelDrag.dust) peelDrag.dust(20, 160);
     var fill = $('#peelMeterFill');
     if (fill) fill.style.width = '100%';
+    updatePeelText(1);
+    kujiSound.snap();
     try { navigator.vibrate && navigator.vibrate([0, 22, 34, 30]); } catch (err) {}
 
     var waited = 0;
     while (ui.draw === d && !d.ready && waited < 9000) { await waitMs(120); waited += 120; }
-    await waitMs(300);
+    await waitMs(340);
     if (!ui.draw || ui.draw !== d || d.step !== 'peel') return;
     if (!d.result) {
       d.revealing = false;
       toast('결과를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.', 'err');
       return;
     }
-    d.step = 'result';
     d.busy = false;
+    /* B상 이상은 한 번 더 봉인을 까는 2단계 연출로 넘어간다 */
+    if (isSealGrade(d.result.grade)) {
+      d.step = 'seal';
+      d.revealing = false;
+      renderDrawModal();
+      renderAll();
+      kujiSound.sealCharge();
+      try { navigator.vibrate && navigator.vibrate([0, 14, 60, 14]); } catch (err) {}
+      return;
+    }
+    d.step = 'result';
+    kujiSound.fanfare(isEpicGrade(d.result.grade));
     renderDrawModal();
     renderAll();
     toast(d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + d.result.grade + '상', 'ok');
   }
 
-  function confettiHTML() {
-    var colors = ['#ffd51e', '#ff7a1a', '#ef3b2d', '#12a87a', '#3d7bfd', '#f5b800'];
+  /* =========================================================
+     2단계: 황금 봉인 (B상 · A상 · 라스트원상 전용)
+     ========================================================= */
+  var sealDrag = null;
+
+  /* C상 이상은 모두 2단계 황금 봉인을 한 번 더 깐다 (C/B/A/라스트원) */
+  function isSealGrade(grade) {
+    return gradeLevel(grade) >= 1;
+  }
+
+  function drawSealHTML(board, d) {
+    var no = ('00' + d.n).slice(-3);
+    return '<div class="seal-stage seal-lv2" id="sealStage">' +
+      '<p class="seal-kicker"><span class="seal-bolt">⚡</span> 상위상 기운 감지</p>' +
+      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">C상 이상 확정!</h2>' +
+      '<p class="modal-sub">종이 속에서 <b>황금 봉인</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.</p>' +
+      '<div class="seal-card" id="sealCard">' +
+        '<div class="seal-halo" aria-hidden="true"></div>' +
+        '<div class="seal-box" id="sealBox" role="button" tabindex="0" aria-label="황금 봉인을 아래로 찢어 열기">' +
+          '<span class="seal-half left" aria-hidden="true"><span class="seal-teeth" id="sealTeethL"></span></span>' +
+          '<span class="seal-half right" aria-hidden="true"><span class="seal-teeth" id="sealTeethR"></span></span>' +
+          '<span class="seal-seam" aria-hidden="true"></span>' +
+          '<span class="seal-flash" aria-hidden="true"></span>' +
+          '<span class="seal-mark" aria-hidden="true"><b>쿠지킹</b><em>SEALED</em><i>?</i></span>' +
+          '<span class="seal-ticket" aria-hidden="true">NO. ' + no + '</span>' +
+          '<span class="seal-dust" id="sealDust" aria-hidden="true"></span>' +
+        '</div>' +
+        '<span class="seal-grip"><span class="seal-grip-arrow">↓</span><span class="seal-grip-text" id="sealGripText">찢어서 열기</span></span>' +
+      '</div>' +
+      '<div class="seal-meter">' +
+        '<span class="seal-meter-bar" aria-hidden="true"><i id="sealMeterFill"></i></span>' +
+        '<span class="seal-meter-text" id="sealMeterText">아래로 찢어서 봉인을 깨세요</span>' +
+      '</div>' +
+      '<button class="seal-fallback" type="button" data-action="seal-snap">드래그가 안 되면 바로 열기</button>' +
+      '<p class="result-meta">' + (d.demo ? '체험 모드 · ' : '') + h(board.title) + ' · ' + d.n + '번 · 봉인 개봉 전에는 등급이 공개되지 않아요</p>' +
+    '</div>';
+  }
+
+  function bindSeal() {
+    var card = $('#sealCard'), box = $('#sealBox');
+    if (!card || !box) return;
+    var tl = $('#sealTeethL'), tr = $('#sealTeethR');
+    var stage = document.getElementById('sealStage');
+    var platinum = !!(stage && stage.className.indexOf('seal-lv3') >= 0);
+    var toothFill = platinum ? '#8b93a8' : '#b8871f';
+    if (tl) tl.style.backgroundImage = teethURL(toothFill, 30, true);
+    if (tr) tr.style.backgroundImage = teethURL(toothFill, 30, true);
+
+    var st = { p: 0, dragging: false, src: null, startX: 0, startY: 0, base: 0, max: 190, armed: false, holdTimer: null, raf: 0 };
+    st.max = Math.max(120, (card.getBoundingClientRect().height || 340) * 0.55);
+    sealDrag = st;
+
+    function apply(p) {
+      st.p = p;
+      box.style.setProperty('--seal', p.toFixed(3));
+      box.style.setProperty('--shk', (1 + p * 2.6).toFixed(2));
+      var fill = $('#sealMeterFill');
+      if (fill) fill.style.width = Math.round(Math.min(1, p / 0.7) * 100) + '%';
+      var txt = $('#sealMeterText');
+      if (txt) {
+        txt.textContent = p >= 0.7 ? '놓으면 봉인이 깨져요!'
+          : (p > 0.02 ? '봉인이 갈라지는 중… ' + Math.round(p * 100) + '%' : '아래로 찢어서 봉인을 깨세요');
+        txt.classList.toggle('is-armed', p >= 0.7);
+      }
+      var grip = $('#sealGripText');
+      if (grip) grip.textContent = p >= 0.7 ? '놓으면 열림!' : (p > 0.02 ? '계속 찢기' : '찢어서 열기');
+      if (p >= 0.7 && !st.armed) {
+        st.armed = true;
+        kujiSound.tear(1);
+        try { navigator.vibrate && navigator.vibrate(16); } catch (e) {}
+      }
+      if (p < 0.68) st.armed = false;
+    }
+    st.apply = apply;
+    apply(0);
+
+    function clearHold() { if (st.holdTimer) { clearTimeout(st.holdTimer); st.holdTimer = null; } }
+
+    /* 누르고 있으면 봉인이 스스로 갈라진다 */
+    function charge() {
+      st.holdTimer = null;
+      if (ui.draw && ui.draw.revealing) return;
+      var t0 = 0;
+      function step() {
+        st.raf = 0;
+        if (!ui.draw || ui.draw.step !== 'seal' || ui.draw.revealing) return;
+        t0 += 16;
+        var q = Math.min(1, t0 / 640);
+        apply(q);
+        kujiSound.tear(q);
+        if (q < 1) st.raf = requestAnimationFrame(step);
+        else sealSnap();
+      }
+      st.raf = requestAnimationFrame(step);
+    }
+
+    function start(x, y, arm) {
+      if (st.dragging) return false;
+      if (ui.draw && ui.draw.revealing) return false;
+      st.dragging = true;
+      st.startX = x; st.startY = y; st.base = st.p;
+      box.classList.add('is-straining');
+      kujiSound.tear(0.3);
+      clearHold();
+      if (arm !== false) st.holdTimer = setTimeout(charge, 620);
+      return true;
+    }
+    function move(x, y) {
+      if (!st.dragging) return;
+      var dy = y - st.startY, dx = x - st.startX;
+      if (Math.abs(dy) > 6 || Math.abs(dx) > 6) clearHold();
+      var travel = Math.max(dy, dx * 0.4);
+      var p = Math.min(1, Math.max(0, (st.base * st.max + travel) / st.max));
+      if (Math.abs(p - st.p) > 0.01) kujiSound.tear(p);
+      apply(p);
+    }
+    function end(x, y) {
+      if (!st.dragging) return;
+      st.dragging = false;
+      st.src = null;
+      box.classList.remove('is-straining');
+      clearHold();
+      if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; }
+      if (st.p >= 0.7) { sealSnap(); return; }
+      if (Math.abs(y - st.startY) < 8 && Math.abs(x - st.startX) < 8) {
+        box.classList.add('is-hinting');
+        setTimeout(function () { box.classList.remove('is-hinting'); }, 700);
+      }
+      apply(0);
+    }
+
+    box.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!start(e.clientX, e.clientY)) return;
+      st.src = 'pointer';
+      try { box.setPointerCapture(e.pointerId); } catch (err) {}
+      if (e.cancelable) e.preventDefault();
+    });
+    box.addEventListener('pointermove', function (e) {
+      if (st.src !== 'pointer') return;
+      move(e.clientX, e.clientY);
+      if (e.cancelable) e.preventDefault();
+    });
+    function pointerEnd(e) {
+      if (st.src !== 'pointer') return;
+      end(e.clientX, e.clientY);
+      try { box.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    box.addEventListener('pointerup', pointerEnd);
+    box.addEventListener('pointercancel', function (e) {
+      if (st.src !== 'pointer') return;
+      if (st.p >= 0.7) { sealSnap(); return; }
+      pointerEnd(e);
+    });
+
+    box.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      if (st.src === 'pointer') return;
+      var t = e.touches[0];
+      if (start(t.clientX, t.clientY)) st.src = 'touch';
+    }, { passive: false });
+    box.addEventListener('touchmove', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch' || e.touches.length !== 1) return;
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    box.addEventListener('touchend', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch') return;
+      var t = e.changedTouches[0] || { clientX: st.startX, clientY: st.startY };
+      end(t.clientX, t.clientY);
+    }, { passive: false });
+    box.addEventListener('touchcancel', function (e) {
+      if (st.src !== 'touch') return;
+      if (st.p >= 0.7) { sealSnap(); return; }
+      end(st.startX, st.startY);
+    }, { passive: false });
+
+    box.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sealSnap(); }
+    });
+  }
+
+  async function sealSnap() {
+    var d = ui.draw;
+    if (!d || d.step !== 'seal' || d.revealing) return;
+    d.revealing = true;
+    if (sealDrag && sealDrag.raf) { cancelAnimationFrame(sealDrag.raf); sealDrag.raf = 0; }
+    var box = $('#sealBox');
+    if (box) {
+      box.classList.add('is-burst');
+      box.classList.remove('is-straining');
+    }
+    var fill = $('#sealMeterFill');
+    if (fill) fill.style.width = '100%';
+    var txt = $('#sealMeterText');
+    if (txt) { txt.textContent = '봉인 해제!'; txt.classList.add('is-armed'); }
+    kujiSound.snap();
+    try { navigator.vibrate && navigator.vibrate([0, 26, 40, 70]); } catch (err) {}
+    await waitMs(620);
+    if (!ui.draw || ui.draw !== d || d.step !== 'seal') return;
+    if (!d.result) { d.revealing = false; return; }
+    d.step = 'result';
+    d.revealing = false;
+    kujiSound.fanfare(true);
+    renderDrawModal();
+  }
+
+  /* =========================================================
+     당첨 연출 — 상위 등급은 빛줄기·후광·폭죽, 하위 등급은 깔끔한 팝인
+     ========================================================= */
+  /* 0: D~L 깔끔 · 1: C 블루/바이올렛 · 2: B 골드 · 3: A·라스트원 플래티넘/무지개 */
+  function gradeLevel(grade) {
+    var g = String(grade || '').toUpperCase();
+    if (g === 'LAST' || g === 'A') return 3;
+    if (g === 'B') return 2;
+    if (g === 'C') return 1;
+    return 0;
+  }
+  function isEpicGrade(grade) { return gradeLevel(grade) >= 1; }
+
+  var REVEAL_CONF = [0, 18, 34, 56];
+  var REVEAL_SPARK = [4, 10, 16, 26];
+
+  function confettiHTML(count, opts) {
+    opts = opts || {};
+    var colors = opts.colors || ['#ffd51e', '#ff7a1a', '#ef3b2d', '#12a87a', '#3d7bfd', '#f5b800'];
+    var n = count || 26;
     var out = '';
-    for (var i = 0; i < 26; i++) {
+    for (var i = 0; i < n; i++) {
       out += '<span class="confetti" style="left:' + Math.round(Math.random() * 100) + '%;background:' + colors[i % colors.length] +
-        ';animation-delay:' + (Math.random() * .5).toFixed(2) + 's;--dx:' + Math.round((Math.random() - .5) * 160) + 'px"></span>';
+        ';width:' + (6 + Math.round(Math.random() * 6)) + 'px;height:' + (10 + Math.round(Math.random() * 8)) + 'px' +
+        ';animation-delay:' + (Math.random() * (opts.spread || .5)).toFixed(2) + 's;animation-duration:' + (1.3 + Math.random() * 0.9).toFixed(2) + 's' +
+        ';--dx:' + Math.round((Math.random() - .5) * (opts.drift || 160)) + 'px;--h:' + Math.round(opts.drop || 340) + 'px;--rot:' + Math.round(360 + Math.random() * 540) + 'deg"></span>';
+    }
+    return out;
+  }
+
+  function sparkleHTML(n, cls) {
+    var out = '';
+    for (var i = 0; i < n; i++) {
+      out += '<span class="' + (cls || 'rv-spark') + '" style="left:' + (4 + Math.random() * 92).toFixed(1) + '%;top:' + (3 + Math.random() * 66).toFixed(1) +
+        '%;font-size:' + (9 + Math.random() * 13).toFixed(0) + 'px;animation-delay:' + (Math.random() * 1.8).toFixed(2) + 's">✦</span>';
     }
     return out;
   }
@@ -2642,15 +3157,67 @@
     var r = d.result || {};
     var tier = tierOf(board, r.grade) || {};
     var img = r.tierImage || tier.image || '';
-    return '<div class="result-stage">' +
-      confettiHTML() +
-      (img ? '<div class="result-media"><img src="' + h(img) + '" alt="' + h(r.tierLabel || tier.label || '') + '">' +
-        '<span class="rank-badge grade-' + h(String(r.grade || '').toLowerCase()) + ' lg">' + h(r.grade) + '상</span></div>' : '') +
-      '<div class="result-badge" style="background:' + gradeColor(r.grade) + '">' + h(r.grade) + '</div>' +
-      '<p class="result-kicker">' + (r.demo ? '체험 결과' : 'DRAW RESULT') + '</p>' +
-      '<p class="result-grade">' + h(r.grade) + '상 당첨!</p>' +
-      '<p class="result-prize">' + h(r.tierLabel || '') + '</p>' +
-      (r.tierDesc || tier.desc ? '<p class="result-desc">' + h(r.tierDesc || tier.desc) + '</p>' : '') +
+    var g = String(r.grade || '').toUpperCase();
+    var lv = gradeLevel(g);
+    var epic = lv >= 1;
+    var gkey = g === 'LAST' ? 'last' : String(r.grade || '').toLowerCase();
+    var label = r.tierLabel || tier.label || '';
+    var desc = r.tierDesc || tier.desc || '';
+    var gradeName = g === 'LAST' ? '라스트원' : r.grade + '상';
+
+    var kicker = lv >= 3 ? (g === 'LAST' ? 'LAST ONE · FINAL' : 'GRAND PRIZE · FINAL')
+      : (lv === 2 ? 'BIG HIT · GOLD' : (lv === 1 ? 'HIGH RANK · BLUE' : 'DRAW RESULT'));
+    if (r.demo) kicker = '체험 결과 · ' + kicker;
+
+    var confColors = lv >= 3
+      ? ['#ffd51e', '#f5b800', '#ff3b30', '#12a87a', '#3d7bfd', '#a855f7', '#ffffff']
+      : (lv === 2 ? ['#ffd51e', '#f5b800', '#ff7a1a', '#fff3b0', '#ffffff']
+        : ['#6d5bff', '#3d7bfd', '#8ee3ff', '#c7b6ff', '#ffffff']);
+
+    var hero = img
+      ? '<img class="rv-figure" src="' + h(img) + '" alt="' + h(label) + '">'
+      : '<span class="rv-figure rv-figure-empty">' + h(g === 'LAST' ? 'L' : String(r.grade || '')) + '</span>';
+
+    var emblem = '<span class="rv-emblem' + (g === 'LAST' ? ' is-last' : '') + '">' +
+      (g === 'LAST' ? '<b>L</b><i>LAST</i>' : '<b>' + h(r.grade) + '</b><i>상</i>') + '</span>';
+
+    var stage = epic
+      ? '<div class="reveal-stage is-epic lv' + lv + ' grade-' + h(gkey) + '" id="revealStage">' +
+          '<div class="rv-sky" aria-hidden="true"></div>' +
+          '<div class="rv-beams" aria-hidden="true"></div>' +
+          (lv >= 3 ? '<div class="rv-beams rv-beams-alt" aria-hidden="true"></div><div class="rv-spot" aria-hidden="true"></div>' : '') +
+          '<div class="rv-rings" aria-hidden="true"><i></i><i></i>' + (lv >= 2 ? '<i></i>' : '') + '</div>' +
+          '<div class="rv-sparks" aria-hidden="true">' + sparkleHTML(REVEAL_SPARK[lv]) + '</div>' +
+          '<div class="rv-confetti" aria-hidden="true">' + confettiHTML(REVEAL_CONF[lv], { drop: 380 + lv * 40, drift: 150 + lv * 40, spread: .55 + lv * .1, colors: confColors }) + '</div>' +
+          '<div class="rv-flash" aria-hidden="true"></div>' +
+          '<div class="rv-hero">' +
+            '<span class="rv-halo" aria-hidden="true"></span>' +
+            '<span class="rv-burst" aria-hidden="true"></span>' +
+            hero +
+            emblem +
+          '</div>' +
+          '<p class="rv-kicker">' + h(kicker) + '</p>' +
+          '<h3 class="rv-grade">' + h(gradeName) + ' <em>당첨!</em></h3>' +
+          '<p class="rv-prize">' + h(label) + '</p>' +
+          (desc ? '<p class="rv-desc">' + h(desc) + '</p>' : '') +
+        '</div>'
+      : '<div class="reveal-stage is-standard grade-' + h(gkey) + '" id="revealStage">' +
+          '<div class="st-glow" aria-hidden="true"></div>' +
+          '<div class="st-sparks" aria-hidden="true">' + sparkleHTML(REVEAL_SPARK[0], 'st-spark') + '</div>' +
+          '<div class="st-confetti" aria-hidden="true">' + confettiHTML(8, { drop: 240, drift: 110, spread: .4 }) + '</div>' +
+          '<div class="st-hero">' +
+            '<div class="st-media">' +
+              (img ? '<img src="' + h(img) + '" alt="' + h(label) + '">' : '<span class="st-empty">' + h(String(r.grade || '')) + '</span>') +
+              '<span class="rank-badge grade-' + h(gkey) + ' lg">' + h(g === 'LAST' ? 'LAST ONE' : r.grade + '상') + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<p class="result-kicker">' + h(kicker) + '</p>' +
+          '<h3 class="st-grade">' + h(gradeName) + ' 당첨!</h3>' +
+          '<p class="st-prize">' + h(label) + '</p>' +
+          (desc ? '<p class="result-desc">' + h(desc) + '</p>' : '') +
+        '</div>';
+
+    var html = stage +
       (r.itemStatus === '포인트지급' || r.itemStatus === '포인트전환'
         ? '<span class="result-points">' + icon('gift') + ' 굿즈 포인트 ' + fmt(r.points) + 'P 지급</span>'
         : '') +
@@ -2666,8 +3233,9 @@
       '<div class="modal-actions">' +
         (me() && r.itemStatus === '보관중' ? '<button class="btn btn-outline" data-action="go-my">내 보관함 보기</button>' : '') +
         '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
-      '</div>' +
-    '</div>';
+      '</div>';
+
+    return '<div class="result-wrap' + (epic ? ' is-epic lv' + lv : '') + '">' + html + '</div>';
   }
 
   function showTicketInfo(n) {
@@ -3948,6 +4516,13 @@
         case 'ticket-info': showTicketInfo(n); break;
         case 'draw-pull': peelSnap(); break;
         case 'peel-snap': peelSnap(); break;
+        case 'seal-snap': sealSnap(); break;
+        case 'toggle-sound': {
+          kujiSound.toggle();
+          kujiSound.refreshToggle();
+          if (!kujiSound.isMuted()) kujiSound.tear(0.6);
+          break;
+        }
         case 'draw-coupon': {
           if (!ui.draw) break;
           enterPeel({ couponId: id });

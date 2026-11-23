@@ -2565,8 +2565,7 @@
           '<div class="peel-rays"></div>' +
           '<div class="peel-aura"></div>' +
           '<span class="peel-q">?</span>' +
-          '<img class="peel-figure" id="peelFigure" alt="" hidden>' +
-          '<div class="peel-inner-tag"><span>DRAW RESULT</span><b>당첨 등급</b></div>' +
+          '<div class="peel-inner-tag"><span>MYSTERY</span><b>개봉하면 등급이 나와요</b></div>' +
         '</div>' +
         '<div class="peel-stub" aria-hidden="true">' +
           '<span class="peel-stripe"></span>' +
@@ -2658,22 +2657,15 @@
     return 'var(--yellow)';
   }
 
-  /* 결과가 준비되면 속지(inner)에 흐린 실루엣과 등급 색 광채를 깔아 둔다 */
+  /* 결과가 준비돼도 속지에는 아무 힌트도 주지 않는다 (상품·등급 스포일러 방지) */
   function paintPeek(d) {
-    var fig = $('#peelFigure');
     var card = $('#peelCard');
     if (!card) return;
+    card.classList.add('is-ready');
     var aura = card.querySelector('.peel-aura');
     var rays = card.querySelector('.peel-rays');
-    var grade = d && d.result ? d.result.grade : '';
-    if (aura) aura.style.setProperty('--peel-glow', peelColor(grade));
-    if (rays) rays.style.setProperty('--peel-glow', peelColor(grade));
-    if (!fig) return;
-    var board = d ? getBoard(d.boardId) : null;
-    var tier = board && d && d.result ? tierOf(board, d.result.grade) : null;
-    var src = d && d.result ? (d.result.tierImage || (tier && tier.image) || '') : '';
-    if (src) { fig.src = src; fig.hidden = false; }
-    else { fig.hidden = true; fig.removeAttribute('src'); }
+    if (aura) aura.style.setProperty('--peel-glow', 'var(--gold)');
+    if (rays) rays.style.setProperty('--peel-glow', 'var(--gold)');
   }
 
   function updatePeelText(p) {
@@ -2918,19 +2910,17 @@
      ========================================================= */
   var sealDrag = null;
 
+  /* C상 이상은 모두 2단계 황금 봉인을 한 번 더 깐다 (C/B/A/라스트원) */
   function isSealGrade(grade) {
-    var g = String(grade || '').toUpperCase();
-    return g === 'LAST' || g === 'A' || g === 'B';
+    return gradeLevel(grade) >= 1;
   }
 
   function drawSealHTML(board, d) {
     var no = ('00' + d.n).slice(-3);
-    var lv = gradeLevel(d.result && d.result.grade);
-    var high = lv >= 3;
-    return '<div class="seal-stage ' + (high ? 'seal-lv3' : 'seal-lv2') + '" id="sealStage">' +
-      '<p class="seal-kicker"><span class="seal-bolt">' + (high ? '👑' : '⚡') + '</span> ' + (high ? '최상위상 기운 감지' : '상위상 기운 감지') + '</p>' +
-      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">' + (high ? 'A상 이상 확정!' : 'B상 이상 확정!') + '</h2>' +
-      '<p class="modal-sub">종이 속에서 <b>' + (high ? '플래티넘 봉인' : '황금 봉인') + '</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.</p>' +
+    return '<div class="seal-stage seal-lv2" id="sealStage">' +
+      '<p class="seal-kicker"><span class="seal-bolt">⚡</span> 상위상 기운 감지</p>' +
+      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">C상 이상 확정!</h2>' +
+      '<p class="modal-sub">종이 속에서 <b>황금 봉인</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.</p>' +
       '<div class="seal-card" id="sealCard">' +
         '<div class="seal-halo" aria-hidden="true"></div>' +
         '<div class="seal-box" id="sealBox" role="button" tabindex="0" aria-label="황금 봉인을 아래로 찢어 열기">' +
