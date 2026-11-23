@@ -702,6 +702,11 @@
     for (var i = 0; i < board.tiers.length; i++) if (board.tiers[i].grade === grade) return board.tiers[i];
     return null;
   }
+  function hasPointTier(board) {
+    return (board.tiers || []).some(function (t) {
+      return !!t.pointOnly || String(t.grade).toUpperCase() === 'P' || Number(t.points_awarded || 0) > 0;
+    });
+  }
   function remaining(board) {
     var sold = Array.isArray(board.opens) ? board.opens.length : 0;
     return Math.max(0, board.tickets - sold);
@@ -2288,7 +2293,7 @@
     el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
         '<span class="step-no">1</span>' +
         '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
-        '<p class="muted">' + (board.tiers.length * 20 === Number(board.tickets)
+        '<p class="muted">' + ((board.tiers.length * 20 === Number(board.tickets) && !hasPointTier(board))
             ? '등급 ' + board.tiers.length + '종 × 20장 = ' + fmt(board.tickets) + '장 구성입니다. '
             : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
           '실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
@@ -4710,9 +4715,26 @@
     '</div>';
   }
 
+  /* 서버 판이 아직 P상 없이 실물만으로 차 있으면, 관리자에게 업그레이드 SQL을 안내한다 */
+  function pointUpgradeNoticeHTML(cfg, live) {
+    if (!live) return '';
+    var needP = (state.boards || []).some(function (b) { return !hasPointTier(b) && (b.tiers || []).length >= 3; });
+    if (!needP) return '';
+    var ref = supabaseProjectRef(cfg && cfg.SUPABASE_URL);
+    var sqlUrl = ref ? 'https://supabase.com/dashboard/project/' + ref + '/sql/new' : 'https://supabase.com/dashboard';
+    return '<div class="fallback-box" style="margin-top:12px">' +
+      '<strong>P상(포인트 꽝) 업그레이드가 아직입니다</strong>' +
+      '<p>지금 서버의 판은 실물 상품만으로 채워져 있어, 실물에 당첨되지 않은 번호는 아무것도 지급되지 않습니다. ' +
+      'SQL Editor 에 <code>supabase/upgrade_point_kkwang.sql</code> 전체를 붙여넣고 Run 하면 4개 판이 <b>실물 각 1개 + P상(굿즈 포인트 1,200P)</b> 구성으로 바뀝니다.</p>' +
+      '<div class="btn-row tight">' +
+        '<a class="btn btn-primary btn-sm" href="' + sqlUrl + '" target="_blank" rel="noopener">SQL Editor 열기</a>' +
+        '<a class="btn btn-outline btn-sm" href="https://github.com/pkn8238-source/Kujiking/blob/main/supabase/upgrade_point_kkwang.sql" target="_blank" rel="noopener">upgrade_point_kkwang.sql 보기</a>' +
+      '</div>' +
+    '</div>';
+  }
+
   function renderSettingsTab() {
-    var card = $('#backendCard');
-    if (card) {
+    var card = $('#backendCard');    if (card) {
       var cfg = Backend.config || {};
       var live = Backend.mode === 'supabase';
       card.innerHTML = '<div class="admin-card-head"><h2>Supabase 연결</h2>' +
@@ -4729,7 +4751,8 @@
           '<li>회원가입 후 SQL Editor 에서 <code>update public.profiles set is_admin = true where email = \'내 이메일\';</code> 를 실행합니다.</li>' +
         '</ol>' +
         '<p class="storage-info">현재 설정 · URL <code>' + (cfg.SUPABASE_URL ? h(cfg.SUPABASE_URL) : '비어 있음') + '</code> · KEY <code>' + (cfg.SUPABASE_ANON_KEY ? '입력됨' : '비어 있음') + '</code></p>' +
-        fallbackBoxHTML(cfg);
+        fallbackBoxHTML(cfg) +
+        pointUpgradeNoticeHTML(cfg, live);
     }
 
     var info = $('#storageInfo');
