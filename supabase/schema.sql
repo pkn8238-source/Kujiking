@@ -117,7 +117,7 @@ create table if not exists public.draws (
   tier_label  text,
   points      integer not null default 0,
   item_status text,                                  -- 보관중 / 배송신청 / 출고완료 / 포인트지급 / 포인트전환
-  source      text not null default 'code',          -- coupon / code / demo
+  source      text not null default 'code',          -- points / coupon / code / demo
   is_last     boolean not null default false,
   seq         bigserial,
   created_at  timestamptz not null default now(),
@@ -406,14 +406,18 @@ grant usage, select on all sequences in schema public to authenticated;
 grant execute on all functions in schema public to anon, authenticated;
 
 -- ---------------------------------------------------------
--- 6. 뽑기 (쿠폰 또는 교환 코드) — 동시에 두 명이 같은 번호를 뽑을 수 없도록
---    한 트랜잭션 안에서 티켓 행을 FOR UPDATE 로 잠급니다.
+-- 6. 뽑기 (굿즈 포인트 · 쿠폰 또는 교환 코드) — 동시에 두 명이 같은 번호를 뽑을 수 없도록
+--    한 트랜잭션 안에서 티켓 행(과 포인트 결제 시 회원 행)을 FOR UPDATE 로 잠급니다.
+--    v3.6: p_use_points = true 면 판 가격만큼 회원 굿즈 포인트를 차감하고 뽑습니다.
 -- ---------------------------------------------------------
+drop function if exists public.draw_ticket(uuid, integer, uuid, text);
+
 create or replace function public.draw_ticket(
   p_board_id uuid,
   p_ticket_no integer,
   p_coupon_id uuid default null,
-  p_code text default null
+  p_code text default null,
+  p_use_points boolean default false
 ) returns jsonb
 language plpgsql security definer set search_path = public, extensions
 as $$
@@ -425,6 +429,7 @@ declare
   v_grade   text;
   v_tier    jsonb;
   v_points  integer := 0;
+  v_used    integer := 0;
   v_status  text;
   v_source  text;
   v_left    integer := 0;
@@ -464,8 +469,24 @@ begin
     raise exception '이미 판매된 번호입니다. 다른 번호를 골라 주세요.';
   end if;
 
-  -- 2) 결제 수단 검증 (쿠폰 → 교환 코드 → 데모 코드)
-  if p_coupon_id is not null then
+  -- 2) 결제 수단 검증 (굿즈 포인트 → 쿠폰 → 교환 코드 → 데모 코드)
+  if coalesce(p_use_points, false) then
+    -- 포인트 결제: 회원 행을 잠그고 판 가격만큼 차감 (같은 잔액으로 동시에 두 번 못 뽑게)
+    select * into v_profile from public.profiles where id = v_uid for update;
+    if not found then
+      raise exception '회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.';
+    end if;
+    if v_board.price is null or v_board.price <= 0 then
+      raise exception '이 판은 포인트로 뽑을 수 없습니다.';
+    end if;
+    if coalesce(v_profile.points, 0) < v_board.price then
+      raise exception '굿즈 포인트가 부족합니다. (필요 %P · 보유 %P)', v_board.price, coalesce(v_profile.points, 0);
+    end if;
+    v_used := v_board.price;
+    update public.profiles set points = points - v_used where id = v_uid;
+    v_profile.points := coalesce(v_profile.points, 0) - v_used;
+    v_source := 'points';
+  elsif p_coupon_id is not null then
     select * into v_coupon from public.coupons
      where id = p_coupon_id and user_id = v_uid and used_at is null
      for update;
@@ -492,7 +513,7 @@ begin
       v_source := 'code';
     end if;
   else
-    raise exception '쿠폰 또는 교환 코드가 필요합니다.';
+    raise exception '쿠폰 · 교환 코드 · 굿즈 포인트 중 하나가 필요합니다.';
   end if;
 
   -- 3) 결과 배정
@@ -517,6 +538,7 @@ begin
     v_points := coalesce((v_tier->>'points')::int, 0);
     v_status := '포인트지급';
     update public.profiles set points = points + v_points where id = v_uid;
+    v_profile.points := v_profile.points + v_points;
   else
     v_status := '보관중';
   end if;
@@ -535,6 +557,8 @@ begin
     'grade', v_grade,
     'tier_label', v_tier->>'label',
     'points', v_points,
+    'points_used', v_used,
+    'points_balance', v_profile.points,
     'item_status', v_status,
     'is_last', v_is_last,
     'remaining', v_left,

@@ -2062,3 +2062,135 @@ body.is-live .demo-only{display:none !important}
   touch-action:none;overscroll-behavior:contain;
   -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
 }
+
+/* =========================================================
+   v3.6 — 굿즈 포인트로 뽑기 · B/A 초화려 연출 · 봉인 배너 · 쫀득한 임팩트
+   ========================================================= */
+
+/* ---------- 굿즈 포인트로 뽑기 ---------- */
+.btn-gold{--btn-bg:linear-gradient(180deg,#ffdf7a,#f5b800);--btn-fg:#2a1a00;border-color:#5a3c00;
+  box-shadow:0 4px 0 #5a3c00,0 10px 22px rgba(245,184,0,.35)}
+.btn-gold:hover{box-shadow:0 6px 0 #5a3c00,0 14px 28px rgba(245,184,0,.45)}
+.btn-gold:active{box-shadow:0 1px 0 #5a3c00}
+
+.pay-option.is-points{border-color:#d29b16;background:linear-gradient(150deg,#fffbee 0%,#fff1c9 100%);
+  box-shadow:0 3px 0 rgba(184,135,31,.35)}
+.pay-option.is-points.is-off{background:#f8f5ee;border-color:var(--line-strong);border-style:dashed;box-shadow:none}
+.pay-badge.is-points{background:linear-gradient(135deg,#ffd863,#e08a00);color:#2a1a00}
+.pay-option.is-points .pay-head{justify-content:flex-start;gap:10px}
+.pay-need{display:block;font-size:13.5px;line-height:1.38}
+.pay-need em{display:block;font-style:normal;font-size:11.5px;font-weight:800;color:#8a5b00;letter-spacing:0}
+.pay-option.is-off .pay-need em{color:var(--muted)}
+.pay-desc .pay-gap{color:var(--red-deep);font-weight:900}
+
+/* ---------- 2단계 봉인: C상 이상 확정 배너 ---------- */
+.seal-banner{position:relative;display:inline-block;margin:2px auto 14px;padding:14px 24px 16px;
+  border-radius:20px;border:2px solid #ffd863;
+  background:linear-gradient(180deg,rgba(34,22,6,.97) 0%,rgba(9,6,2,.98) 100%);
+  box-shadow:0 0 0 1px rgba(255,232,160,.3) inset,0 0 28px rgba(255,200,60,.55),0 14px 30px rgba(0,0,0,.55);
+  animation:seal-banner-in .5s cubic-bezier(.2,1.4,.4,1) both}
+.seal-banner::before{content:"";position:absolute;inset:-2px;border-radius:20px;pointer-events:none;z-index:0;
+  background:radial-gradient(120% 90% at 50% 0%,rgba(255,226,120,.3),transparent 68%)}
+.seal-banner>*{position:relative;z-index:1}
+@keyframes seal-banner-in{0%{opacity:0;transform:translateY(-10px) scale(.88)}100%{opacity:1;transform:none}}
+.seal-stage .seal-kicker{margin-bottom:9px;font-size:12.5px;font-weight:900;letter-spacing:.14em;
+  color:#ffe27a;background:rgba(255,213,30,.14);border-color:rgba(255,213,30,.65);
+  text-shadow:0 0 10px rgba(255,200,60,.85)}
+.seal-stage .seal-title{margin:0;padding:0;font-size:clamp(27px,7.2vw,40px);line-height:1.1;
+  font-weight:900;letter-spacing:-.035em;color:#fffdf4;padding-right:0;
+  text-shadow:0 2px 0 #4a2c00,0 0 12px rgba(255,208,80,.95),0 0 32px rgba(255,170,30,.7),0 4px 18px rgba(0,0,0,.85)}
+.seal-stage.is-burst .seal-banner{animation:seal-banner-flash .8s ease-out both}
+@keyframes seal-banner-flash{
+  0%{filter:brightness(1)}
+  18%{filter:brightness(2.1) saturate(1.3);box-shadow:0 0 0 4px rgba(255,240,190,.85),0 0 70px rgba(255,210,70,.95)}
+  100%{filter:brightness(1)}}
+.seal-stage.is-burst{animation:seal-stage-kick .5s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes seal-stage-kick{
+  0%{transform:translate3d(0,0,0)}20%{transform:translate3d(-7px,4px,0) rotate(-.5deg)}
+  40%{transform:translate3d(6px,-4px,0) rotate(.45deg)}60%{transform:translate3d(-4px,2px,0)}
+  80%{transform:translate3d(2px,-1px,0)}100%{transform:none}}
+
+/* ---------- 모달 화면 흔들림 (B상 · A상 · 라스트원) ---------- */
+.modal-shell.is-quake{animation:modalShake .74s cubic-bezier(.36,.07,.19,.97) both}
+@keyframes modalShake{
+  0%{transform:translate3d(0,0,0) rotate(0)}
+  7%{transform:translate3d(calc(var(--quake,1) * -15px),calc(var(--quake,1) * 7px),0) rotate(calc(var(--quake,1) * -.9deg))}
+  17%{transform:translate3d(calc(var(--quake,1) * 13px),calc(var(--quake,1) * -8px),0) rotate(calc(var(--quake,1) * .8deg))}
+  29%{transform:translate3d(calc(var(--quake,1) * -11px),calc(var(--quake,1) * 6px),0) rotate(calc(var(--quake,1) * -.65deg))}
+  44%{transform:translate3d(calc(var(--quake,1) * 8px),calc(var(--quake,1) * -4px),0) rotate(calc(var(--quake,1) * .5deg))}
+  61%{transform:translate3d(calc(var(--quake,1) * -5px),calc(var(--quake,1) * 3px),0) rotate(calc(var(--quake,1) * -.32deg))}
+  79%{transform:translate3d(calc(var(--quake,1) * 3px),calc(var(--quake,1) * -2px),0) rotate(calc(var(--quake,1) * .16deg))}
+  100%{transform:translate3d(0,0,0) rotate(0)}}
+
+/* ---------- 찢는 순간 카드 전체가 번쩍 ---------- */
+.peel-card.is-boom::after{content:"";position:absolute;inset:0;z-index:20;pointer-events:none;
+  background:radial-gradient(closest-side,#fff 0%,rgba(255,246,214,.95) 30%,rgba(255,196,60,.6) 58%,transparent 82%);
+  animation:peel-boom .7s ease-out forwards;mix-blend-mode:screen}
+@keyframes peel-boom{0%{opacity:1;transform:scale(.5)}55%{opacity:.8}100%{opacity:0;transform:scale(1.35)}}
+
+/* ---------- 결과 무대: B · A · 라스트원 부스터 ---------- */
+.rv-boom{position:absolute;left:50%;top:38%;width:150%;aspect-ratio:1;margin:-75% 0 0 -75%;
+  border-radius:50%;pointer-events:none;z-index:3;
+  background:radial-gradient(closest-side,rgba(255,255,255,.98) 0%,rgba(255,232,140,.9) 26%,rgba(255,166,30,.42) 54%,transparent 76%);
+  opacity:0;transform:scale(.2);mix-blend-mode:screen;animation:rv-boom 1s cubic-bezier(.16,.9,.3,1) forwards}
+@keyframes rv-boom{0%{opacity:1;transform:scale(.18)}42%{opacity:.92}100%{opacity:0;transform:scale(1.55)}}
+
+.rv-frame{position:absolute;left:50%;top:52%;width:min(360px,86%);aspect-ratio:1/1.08;
+  transform:translate(-50%,-50%);border-radius:26px;pointer-events:none;z-index:0;
+  border:3px solid rgba(255,234,158,.92);
+  box-shadow:0 0 0 1px rgba(255,255,255,.35) inset,0 0 26px rgba(255,213,30,.85),0 0 74px rgba(255,176,40,.55),0 0 130px rgba(255,150,20,.35);
+  animation:rv-frame-in .78s .06s cubic-bezier(.2,1.35,.4,1) both,rv-frame-glow 2.8s 1s ease-in-out infinite}
+@keyframes rv-frame-in{0%{opacity:0;transform:translate(-50%,-50%) scale(.72) rotate(-5deg)}100%{opacity:1;transform:translate(-50%,-50%) scale(1)}}
+@keyframes rv-frame-glow{
+  0%,100%{box-shadow:0 0 0 1px rgba(255,255,255,.3) inset,0 0 20px rgba(255,213,30,.7),0 0 58px rgba(255,176,40,.45)}
+  50%{box-shadow:0 0 0 2px rgba(255,255,255,.5) inset,0 0 36px rgba(255,230,120,1),0 0 96px rgba(255,176,40,.7)}}
+.reveal-stage.lv3 .rv-frame{border-color:#fff6cf;
+  box-shadow:0 0 0 1px rgba(255,255,255,.5) inset,0 0 32px rgba(255,240,170,.95),0 0 90px rgba(255,176,40,.65),0 0 150px rgba(255,120,220,.35)}
+
+/* 피규어가 무대 밖으로 넘쳐서 등급 글씨를 덮지 않도록 (v3.6) */
+img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
+.reveal-stage.lv2 img.rv-figure{max-height:min(300px,70vw)}
+.reveal-stage.lv3 img.rv-figure{max-height:min(330px,78vw)}
+.reveal-stage.lv2 .rv-hero{height:min(300px,70vw)}
+.reveal-stage.lv3 .rv-hero{height:min(330px,78vw)}
+.reveal-stage.lv2 .rv-frame{width:min(300px,72%);aspect-ratio:1/1.02;top:50%}
+.reveal-stage.lv3 .rv-frame{width:min(330px,76%);aspect-ratio:1/1.02;top:50%;border-color:#fff6cf;
+  box-shadow:0 0 0 1px rgba(255,255,255,.5) inset,0 0 32px rgba(255,240,170,.95),0 0 90px rgba(255,176,40,.65),0 0 150px rgba(255,120,220,.35)}
+
+/* 금빛·무지개 빛줄기를 더 세게 */
+.reveal-stage.lv2 .rv-beams{
+  background:repeating-conic-gradient(from 0deg,rgba(255,236,150,.62) 0deg 2.5deg,rgba(255,186,40,.34) 2.5deg 5deg,transparent 5deg 11.5deg);
+  opacity:1;filter:saturate(1.25);animation-duration:11s}
+.reveal-stage.lv2 .rv-beams-alt{
+  position:absolute;left:50%;top:118px;width:540px;height:540px;margin:-270px 0 0 -270px;pointer-events:none;
+  background:repeating-conic-gradient(from 19deg,rgba(255,150,60,.3) 0deg 2deg,rgba(255,226,140,.18) 2deg 4deg,transparent 4deg 10deg);
+  -webkit-mask-image:radial-gradient(closest-side,#000 6%,rgba(0,0,0,.72) 38%,transparent 70%);
+  mask-image:radial-gradient(closest-side,#000 6%,rgba(0,0,0,.72) 38%,transparent 70%);
+  opacity:.9;animation:rv-spin 18s linear infinite reverse}
+.reveal-stage.lv3 .rv-beams{
+  background:repeating-conic-gradient(from 0deg,rgba(255,248,214,.78) 0deg 3.2deg,rgba(255,214,120,.34) 3.2deg 6.4deg,rgba(255,255,255,.24) 6.4deg 9deg,transparent 9deg 13deg);
+  opacity:1;filter:saturate(1.35) brightness(1.08);animation-duration:8s}
+.reveal-stage.lv2 .rv-spot{
+  position:absolute;left:50%;top:-10px;width:420px;height:360px;margin-left:-210px;pointer-events:none;
+  clip-path:polygon(50% 0,97% 100%,3% 100%);
+  background:linear-gradient(180deg,rgba(255,240,190,.4),rgba(255,220,120,.14) 55%,transparent 88%);
+  animation:rv-spot 5s ease-in-out infinite}
+.reveal-stage.lv3 .rv-spot{width:460px;height:380px;margin-left:-230px;
+  background:linear-gradient(180deg,rgba(255,248,220,.55),rgba(255,226,140,.18) 55%,transparent 88%)}
+/* 폭죽·반짝임이 피규어 위로 내려오도록 (v3.6) */
+.reveal-stage .rv-confetti{z-index:5}
+.reveal-stage .rv-sparks{z-index:4}
+.reveal-stage .rv-flash,.reveal-stage .rv-boom{z-index:6}
+.reveal-stage.lv2 .rv-kicker,.reveal-stage.lv3 .rv-kicker{margin-top:10px}
+
+.reveal-stage.lv2 .rv-burst,.reveal-stage.lv3 .rv-burst{width:420px;height:420px;margin:-210px 0 0 -210px}
+.reveal-stage.lv2 .rv-kicker,.reveal-stage.lv3 .rv-kicker{color:#ffe9a8;letter-spacing:.26em;
+  text-shadow:0 2px 10px rgba(0,0,0,.9),0 0 18px rgba(255,200,60,.7)}
+.reveal-stage.lv2 .rv-halo{opacity:.62;filter:blur(30px)}
+.reveal-stage.lv3 .rv-figure{box-shadow:0 0 0 3px rgba(255,255,255,.95),0 18px 30px rgba(0,0,0,.5),0 0 46px rgba(255,214,90,.85)}
+
+/* ---------- 움직임 최소화 설정 ---------- */
+@media (prefers-reduced-motion:reduce){
+  .modal-shell.is-quake,.seal-stage.is-burst,.rv-boom,.peel-card.is-boom::after{animation:none}
+  .rv-frame{animation:rv-frame-in .5s ease both}
+}
