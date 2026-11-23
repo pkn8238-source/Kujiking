@@ -2077,6 +2077,7 @@ body.is-live .demo-only{display:none !important}
   box-shadow:0 3px 0 rgba(184,135,31,.35)}
 .pay-option.is-points.is-off{background:#f8f5ee;border-color:var(--line-strong);border-style:dashed;box-shadow:none}
 .pay-badge.is-points{background:linear-gradient(135deg,#ffd863,#e08a00);color:#2a1a00}
+.pay-option.is-points .pay-head{justify-content:flex-start;gap:10px}
 .pay-need{display:block;font-size:13.5px;line-height:1.38}
 .pay-need em{display:block;font-style:normal;font-size:11.5px;font-weight:800;color:#8a5b00;letter-spacing:0}
 .pay-option.is-off .pay-need em{color:var(--muted)}
