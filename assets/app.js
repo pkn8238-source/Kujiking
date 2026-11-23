@@ -2476,20 +2476,25 @@
     return html;
   }
 
-  /* ---------- 개봉 효과음 (종이 찢기 · 두근두근 · 스냅 · 등급별 팡파레) ---------- */
+  /* ---------- 개봉 효과음: 실제 PCM WAV(<audio>) 재생 · 웹오디오는 폴백 ----------
+     iOS 사파리·인앱 웹뷰는 드래그(touchmove) 중 AudioContext 를 suspend 하거나
+     작은 gain(0.02~0.1)을 통째로 무음 처리한다. 그래서 시작할 때 16bit PCM WAV 를
+     직접 합성해 blob URL 로 만들고, <audio> 로 실제 재생한다(음량도 크게).
+     <audio>.play() 가 거부되는 브라우저에서만 웹오디오로 폴백한다. */
   var kujiSound = (function () {
-    var ctx = null, noiseBuf = null, muted = null, lastTick = 0;
-    var running = false, silentEl = null, silentURL = null, lastSilent = 0;
+    var RATE = 22050, WA_GAIN = 3.4;
+    var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA'];
+    var muted = null, lastTick = 0, lastSeal = 0, flashTimer = 0;
+    var ctx = null, master = null, noiseBuf = null, running = false;
+    var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0;
 
-    /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 웹오디오가 소리를 내도록
-       오디오 세션 종류를 'playback'(미디어 재생)으로 잡아 준다. */
+    /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 소리가 나도록 오디오 세션을 'playback' 으로 */
     function markPlayback() {
       try {
         var s = window.navigator && window.navigator.audioSession;
         if (s && s.type !== 'playback') s.type = 'playback';
       } catch (e) {}
     }
-
     function isMuted() {
       if (muted === null) {
         try { muted = window.localStorage.getItem('kujiking.sound') === 'off'; } catch (e) { muted = false; }
@@ -2500,90 +2505,376 @@
       muted = !!v;
       try { window.localStorage.setItem('kujiking.sound', muted ? 'off' : 'on'); } catch (e) {}
     }
-    function refreshToggle() {
+    function refreshToggle(flash) {
       var btn = document.getElementById('peelSound');
-      if (!btn) return;
+      var top = document.getElementById('soundTest');
       var off = isMuted();
-      btn.textContent = off ? '🔇 소리 끔' : '🔊 소리 켬';
-      btn.setAttribute('aria-pressed', off ? 'false' : 'true');
-      btn.title = off ? '개봉 효과음 켜기' : '개봉 효과음 끄기';
+      if (btn) {
+        btn.textContent = off ? '🔇 소리 꺼짐' : (flash ? '🔊 효과음 재생!' : '🔊 소리 켜짐');
+        btn.setAttribute('aria-pressed', off ? 'false' : 'true');
+        btn.title = off ? '개봉 효과음 켜기 (누르면 테스트음이 재생됩니다)' : '개봉 효과음 끄기';
+      }
+      if (top) {
+        top.textContent = off ? '🔇' : '🔊';
+        top.setAttribute('aria-pressed', off ? 'false' : 'true');
+        top.title = off ? '효과음 켜기' : '효과음 테스트 재생';
+        top.setAttribute('aria-label', off ? '효과음 켜기' : '효과음 테스트 재생');
+      }
+      if (flashTimer) { clearTimeout(flashTimer); flashTimer = 0; }
+      if (flash && !off && btn) {
+        flashTimer = setTimeout(function () { flashTimer = 0; refreshToggle(false); }, 1200);
+      }
     }
+
+    /* ================= 16bit PCM WAV 합성기 ================= */
+    function buf(dur) {
+      var n = Math.max(1, Math.round(RATE * dur));
+      return { rate: RATE, n: n, d: new Float32Array(n) };
+    }
+    /* 배음을 제한한 파형 하나(피치 글라이드 지원). 사각·톱니의 앨리어싱을 피한다 */
+    function tone(b, t0, dur, f0, vol, type, f1, atk) {
+      var d = b.d, n = b.n, rate = b.rate;
+      var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
+      if (len < 2 || f0 <= 0) return;
+      var harms = type === 'sine' ? [1]
+        : type === 'triangle' ? [1, 3, 5, 7]
+        : type === 'square' ? [1, 3, 5, 7, 9]
+        : [1, 2, 3, 4, 5, 6, 7, 8];
+      var attack = atk == null ? 0.006 : atk;
+      var dec = Math.max(0.02, dur * 0.34);
+      var phase = 0, k, h;
+      for (var i = 0; i < len; i++) {
+        var idx = i0 + i;
+        if (idx >= n) break;
+        if (idx < 0) continue;
+        var t = i / rate, p = i / len;
+        var f = f1 ? f0 * Math.pow(f1 / f0, p) : f0;
+        phase += 2 * Math.PI * f / rate;
+        var s = 0;
+        for (k = 0; k < harms.length; k++) {
+          h = harms[k];
+          if (f * h > rate * 0.45) break;
+          var amp = type === 'triangle' ? (h % 4 === 1 ? 1 : -1) / (h * h) : 1 / h;
+          s += Math.sin(phase * h) * amp;
+        }
+        var e = t < attack ? t / attack : Math.exp(-(t - attack) / dec);
+        d[idx] += s * vol * e;
+      }
+    }
+    /* 필터를 건 노이즈 한 방 (찢김·지직·펀치) */
+    function noise(b, t0, dur, vol, opt) {
+      opt = opt || {};
+      var d = b.d, n = b.n, rate = b.rate;
+      var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
+      if (len < 2) return;
+      var fc = Math.min(opt.f || 3000, rate * 0.42);
+      var fco = 2 * Math.sin(Math.PI * fc / rate);
+      var q = 1 / Math.max(0.5, opt.q || 1);
+      var attack = opt.atk == null ? 0.003 : opt.atk;
+      var dec = Math.max(0.006, opt.dec || dur * 0.3);
+      var lp = 0, bp = 0;
+      for (var i = 0; i < len; i++) {
+        var idx = i0 + i;
+        if (idx >= n) break;
+        if (idx < 0) continue;
+        var x = Math.random() * 2 - 1;
+        var hp = x - lp - q * bp;
+        bp += fco * hp;
+        lp += fco * bp;
+        var s = opt.type === 'lowpass' ? lp : opt.type === 'highpass' ? hp : bp;
+        var t = i / rate;
+        var e = t < attack ? t / attack : Math.exp(-(t - attack) / dec);
+        d[idx] += s * vol * e;
+      }
+    }
+    /* 배를 때리는 저음 (두근 / 쿵) */
+    function thump(b, t0, f0, f1, dur, vol) { tone(b, t0, dur, f0, vol, 'sine', f1, 0.003); }
+    /* 짧게 흩뿌리는 반짝임 */
+    function sparkle(b, t0, count, base, vol) {
+      for (var i = 0; i < count; i++) {
+        tone(b, t0 + i * 0.028 + Math.random() * 0.02, 0.1 + Math.random() * 0.08, base + Math.random() * 1900, vol, 'sine');
+      }
+    }
+    /* Float32 버퍼 → 16bit PCM WAV blob URL (피크를 크게 정규화해 또렷하게) */
+    function toURL(b, peak) {
+      var n = b.n, d = b.d, i, m = 0, a, v;
+      for (i = 0; i < n; i++) { a = d[i] < 0 ? -d[i] : d[i]; if (a > m) m = a; }
+      var g = m > 0.0002 ? (peak || 0.9) / m : 1;
+      var fade = Math.min(Math.floor(0.01 * b.rate), Math.floor(n / 3));
+      var size = 44 + n * 2, ab = new ArrayBuffer(size), dv = new DataView(ab);
+      function str(off, s) { for (var j = 0; j < s.length; j++) dv.setUint8(off + j, s.charCodeAt(j)); }
+      str(0, 'RIFF'); dv.setUint32(4, size - 8, true); str(8, 'WAVE');
+      str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
+      dv.setUint32(24, b.rate, true); dv.setUint32(28, b.rate * 2, true);
+      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
+      str(36, 'data'); dv.setUint32(40, n * 2, true);
+      for (i = 0; i < n; i++) {
+        v = d[i] * g;
+        if (i > n - fade) v *= (n - i) / fade;
+        if (v > 1) v = 1; else if (v < -1) v = -1;
+        dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+      }
+      try {
+        var blob = new Blob([ab], { type: 'audio/wav' });
+        if (window.URL && window.URL.createObjectURL) return window.URL.createObjectURL(blob);
+      } catch (e) {}
+      return '';
+    }
+
+    /* 종이 찢기: 촘촘한 하이패스 노이즈 + 섬유가 끊기는 짧은 클릭 (0.13초) */
+    function buildTear() {
+      var b = buf(0.13), i;
+      noise(b, 0, 0.12, 0.6, { type: 'bandpass', f: 2600, q: 1.3, dec: 0.05, atk: 0.003 });
+      for (i = 0; i < 6; i++) {
+        noise(b, i * 0.011 + Math.random() * 0.008, 0.05 + Math.random() * 0.035, 0.75,
+          { type: 'highpass', f: 3000 + Math.random() * 3200, q: 0.8, dec: 0.016, atk: 0.0015 });
+      }
+      for (i = 0; i < 3; i++) tone(b, 0.008 + i * 0.022, 0.014, 3400 + Math.random() * 2200, 0.22, 'square', null, 0.001);
+      tone(b, 0, 0.1, 240, 0.22, 'triangle', 120, 0.004);
+      return toURL(b, 0.85);
+    }
+    /* 황금 봉인: 두근-두근 심장박동 + 금빛 셔머 + 낮게 깔리는 서브베이스 (0.7초) */
+    function buildSeal() {
+      var b = buf(0.78), i;
+      thump(b, 0.0, 112, 42, 0.3, 0.95);
+      thump(b, 0.0, 56, 30, 0.34, 0.5);
+      thump(b, 0.21, 98, 38, 0.28, 0.75);
+      thump(b, 0.23, 50, 28, 0.3, 0.38);
+      tone(b, 0, 0.76, 60, 0.26, 'sine', 88, 0.05);
+      for (i = 0; i < 8; i++) tone(b, 0.08 + i * 0.072, 0.24, 1700 + Math.random() * 2500, 0.12, 'sine', 2600 + Math.random() * 1600);
+      [261.63, 329.63, 392.0, 523.25].forEach(function (f, k) {
+        tone(b, 0.34 + k * 0.07, 0.42, f, 0.26, 'triangle');
+      });
+      return toURL(b, 0.93);
+    }
+    /* 찢어지는 순간: 펀치 크랙 + 반짝이는 종소리 (0.38초) */
+    function buildSnap() {
+      var b = buf(0.42), i;
+      noise(b, 0, 0.06, 0.95, { type: 'highpass', f: 4800, q: 0.7, dec: 0.012, atk: 0.001 });
+      noise(b, 0.002, 0.26, 0.75, { type: 'bandpass', f: 2400, q: 0.9, dec: 0.07, atk: 0.002 });
+      thump(b, 0, 190, 50, 0.26, 0.9);
+      tone(b, 0.01, 0.15, 340, 0.38, 'sine', 150, 0.002);
+      [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
+        tone(b, 0.07 + k * 0.05, 0.34 - k * 0.03, f, 0.3, 'sine');
+      });
+      for (i = 0; i < 6; i++) tone(b, 0.12 + Math.random() * 0.18, 0.13, 2800 + Math.random() * 2200, 0.12, 'sine');
+      return toURL(b, 0.94);
+    }
+    /* 등급별 팡파레 — 0: D 이하 팝 · 1: C 밝은 신스 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
+    function buildFanfare(level) {
+      var b, i;
+      if (level <= 0) {
+        b = buf(0.85);
+        tone(b, 0, 0.32, 783.99, 0.6, 'triangle');
+        tone(b, 0.1, 0.45, 1046.5, 0.55, 'sine');
+        tone(b, 0.02, 0.26, 1567.98, 0.26, 'sine');
+        tone(b, 0.2, 0.52, 1318.51, 0.36, 'triangle');
+        thump(b, 0, 170, 60, 0.18, 0.55);
+        sparkle(b, 0.12, 7, 2500, 0.16);
+        return toURL(b, 0.9);
+      }
+      if (level === 1) {
+        b = buf(1.05);
+        [523.25, 659.25, 783.99].forEach(function (f, k) {
+          tone(b, k * 0.05, 0.78, f, 0.36, 'saw');
+          tone(b, k * 0.05, 0.55, f * 2, 0.18, 'sine');
+        });
+        tone(b, 0.3, 0.62, 1046.5, 0.32, 'triangle');
+        tone(b, 0.38, 0.6, 1318.51, 0.3, 'triangle');
+        thump(b, 0, 150, 55, 0.22, 0.6);
+        sparkle(b, 0.3, 10, 2400, 0.14);
+        return toURL(b, 0.92);
+      }
+      if (level === 2) {
+        b = buf(1.32);
+        [392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
+          var at = k * 0.14;
+          tone(b, at, 0.5, f, 0.42, 'saw');
+          tone(b, at, 0.3, f * 2, 0.2, 'sine');
+        });
+        thump(b, 0, 160, 50, 0.3, 0.75);
+        thump(b, 0.7, 140, 46, 0.34, 0.65);
+        tone(b, 0.7, 0.62, 1567.98, 0.32, 'sine');
+        sparkle(b, 0.62, 12, 2500, 0.14);
+        return toURL(b, 0.93);
+      }
+      b = buf(2.0);
+      [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
+        var at = k * 0.105;
+        tone(b, at, 0.5, f, 0.4, 'saw');
+        tone(b, at, 0.28, f * 2, 0.2, 'sine');
+      });
+      var tail = 9 * 0.105;
+      [261.63, 392, 523.25].forEach(function (f) { tone(b, tail, 1.0, f, 0.26, 'saw'); });
+      [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
+        tone(b, tail + k * 0.06, 0.95 - k * 0.1, f, 0.3, 'sine');
+      });
+      thump(b, 0, 170, 46, 0.42, 0.85);
+      thump(b, tail, 150, 42, 0.5, 0.8);
+      noise(b, tail, 0.95, 0.2, { type: 'highpass', f: 7000, q: 0.6, dec: 0.4, atk: 0.05 });
+      sparkle(b, tail, 18, 2600, 0.16);
+      return toURL(b, 0.95);
+    }
+
+    function buildAll() {
+      try { urls.tear = buildTear(); } catch (e) {}
+      try { urls.seal = buildSeal(); } catch (e) {}
+      try { urls.snap = buildSnap(); } catch (e) {}
+      try { urls.fanD = buildFanfare(0); } catch (e) {}
+      try { urls.fanC = buildFanfare(1); } catch (e) {}
+      try { urls.fanB = buildFanfare(2); } catch (e) {}
+      try { urls.fanA = buildFanfare(3); } catch (e) {}
+    }
+    /* WAV 마다 <audio> 요소를 만들고 사운드별로 1개(찢기는 3개) 풀을 둔다 */
+    function buildElements() {
+      if (els.tear && els.tear.length) return;
+      var host = null;
+      try {
+        host = document.getElementById('kujiSoundBank');
+        if (!host && document.body) {
+          host = document.createElement('div');
+          host.id = 'kujiSoundBank';
+          host.setAttribute('aria-hidden', 'true');
+          host.style.cssText = 'position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none;';
+          document.body.appendChild(host);
+        }
+      } catch (e) { host = null; }
+      KEYS.forEach(function (k) {
+        if (!urls[k]) return;
+        var n = k === 'tear' ? 3 : 1, i, el;
+        els[k] = [];
+        for (i = 0; i < n; i++) {
+          try {
+            el = document.createElement('audio');
+            el.preload = 'auto';
+            el.muted = false;
+            el.setAttribute('playsinline', '');
+            el.setAttribute('webkit-playsinline', '');
+            el.setAttribute('aria-hidden', 'true');
+            el.__key = k;
+            el.src = urls[k];
+            if (host) host.appendChild(el);
+            try { el.load(); } catch (e2) {}
+            els[k].push(el);
+          } catch (e2) {}
+        }
+        cursor[k] = 0;
+      });
+    }
+    /* 첫 제스처에서 모든 <audio> 요소를 무음(muted)으로 한 번 재생해 잠금을 푼다.
+       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다. */
+    function prime() {
+      if (primed) return;
+      var list = [], k, i;
+      for (k in els) {
+        if (!els.hasOwnProperty(k)) continue;
+        for (i = 0; i < els[k].length; i++) list.push(els[k][i]);
+      }
+      if (!list.length) return;
+      primeTries++;
+      var left = list.length, okCount = 0;
+      var settle = function () {
+        if (--left > 0) return;
+        primed = okCount >= 4 || primeTries >= 6;
+      };
+      list.forEach(function (el) {
+        try {
+          el.muted = true;
+          try { el.pause(); } catch (e) {}
+          try { el.currentTime = 0; } catch (e) {}
+          var p = el.play();
+          if (p && p.then) {
+            p.then(function () {
+              try { el.pause(); el.currentTime = 0; el.muted = false; } catch (e) {}
+              htmlOk[el.__key] = true; okCount++; settle();
+            }, function () {
+              try { el.muted = false; } catch (e) {}
+              htmlOk[el.__key] = false; settle();
+            });
+          } else {
+            try { el.pause(); el.muted = false; } catch (e) {}
+            htmlOk[el.__key] = true; okCount++; settle();
+          }
+        } catch (e) {
+          try { el.muted = false; } catch (e2) {}
+          htmlOk[el.__key] = false; settle();
+        }
+      });
+    }
+    /* <audio> 로 재생. 실패(거부)하면 웹오디오로 폴백한다 */
+    function elPlay(key, vol) {
+      if (isMuted()) return true;
+      var pool = els[key];
+      if (!pool || !pool.length) return false;
+      var el = pool[cursor[key] % pool.length];
+      cursor[key] = (cursor[key] + 1) % 1024;
+      try { el.muted = false; } catch (e) {}
+      try { el.volume = Math.max(0.05, Math.min(1, vol == null ? 1 : vol)); } catch (e) {}
+      try { el.pause(); } catch (e) {}
+      try { el.currentTime = 0; } catch (e) {}
+      var p = null;
+      try { p = el.play(); } catch (e) { p = null; }
+      if (!p) { fallback(key, vol); return false; }
+      if (p.then) {
+        p.then(function () { htmlOk[key] = true; }, function () {
+          htmlOk[key] = false;
+          fallback(key, vol);
+        });
+      }
+      return true;
+    }
+    function fallback(key, vol) {
+      if (isMuted()) return;
+      if (key === 'tear') waTear(vol);
+      else if (key === 'seal') waSeal();
+      else if (key === 'snap') waSnap(0);
+      else waFanfare(key === 'fanA' ? 3 : key === 'fanB' ? 2 : key === 'fanC' ? 1 : 0);
+    }
+    function buzz(pattern) {
+      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
+    }
+
+    /* ================= 웹오디오 폴백(3.4배 부스트) ================= */
     function makeCtx() {
       markPlayback();
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
       if (!ctx) {
         try { ctx = new C(); } catch (e) { return null; }
+        try { ctx.onstatechange = function () { running = (ctx.state === 'running'); }; } catch (e) {}
         try {
-          ctx.onstatechange = function () { running = (ctx.state === 'running'); };
-        } catch (e) {}
+          if (ctx.createDynamicsCompressor) {
+            master = ctx.createDynamicsCompressor();
+            master.threshold.value = -14;
+            master.knee.value = 18;
+            master.ratio.value = 6;
+            master.attack.value = 0.003;
+            master.release.value = 0.22;
+            master.connect(ctx.destination);
+          }
+        } catch (e) { master = null; }
       }
-      /* 'suspended' 뿐 아니라 iOS 의 'interrupted' 상태에서도 다시 깨운다 */
-      if (ctx.state !== 'running') { try { ctx.resume(); } catch (e) {} }
+      if (ctx.state !== 'running' && ctx.state !== 'closed') { try { ctx.resume(); } catch (e) {} }
       return ctx;
     }
-    function ac() {
-      if (isMuted()) return null;
-      return makeCtx();
-    }
-    /* 0.4초짜리 완전 무음 WAV 를 메모리에서 만들어 <audio> 로 쓴다 */
-    function buildSilentWav() {
+    function out(c) { return master || c.destination; }
+    function ac() { if (isMuted()) return null; return makeCtx(); }
+    function wakeCtx() {
+      var c = makeCtx();
+      if (!c) return;
       try {
-        var rate = 8000, n = Math.round(rate * 0.4), size = 44 + n * 2;
-        var ab = new ArrayBuffer(size), dv = new DataView(ab);
-        function str(off, s) { for (var i = 0; i < s.length; i++) dv.setUint8(off + i, s.charCodeAt(i)); }
-        str(0, 'RIFF'); dv.setUint32(4, size - 8, true); str(8, 'WAVE');
-        str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-        dv.setUint32(24, rate, true); dv.setUint32(28, rate * 2, true);
-        dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
-        str(36, 'data'); dv.setUint32(40, n * 2, true);
-        var blob = new Blob([ab], { type: 'audio/wav' });
-        if (window.URL && window.URL.createObjectURL) return window.URL.createObjectURL(blob);
+        var p = c.resume();
+        if (p && p.then) p.then(function () { running = (c.state === 'running'); }, function () {});
       } catch (e) {}
-      return '';
+      setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 160);
+      setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 480);
     }
-    /* iOS 사파리는 제스처 안에서 <audio> 재생을 한 번 걸어야
-       웹오디오도 '미디어 재생' 채널로 라우팅된다(무음 스위치 무시됨). */
-    function playSilentAudioElement(force) {
-      try {
-        var now = Date.now();
-        if (!force && now - lastSilent < 250) return;
-        lastSilent = now;
-        if (!silentEl) {
-          if (!silentURL) silentURL = buildSilentWav();
-          if (!silentURL) return;
-          silentEl = new Audio(silentURL);
-          silentEl.preload = 'auto';
-          silentEl.volume = 1;
-          silentEl.setAttribute('playsinline', '');
-          silentEl.setAttribute('webkit-playsinline', '');
-          silentEl.setAttribute('aria-hidden', 'true');
-        }
-        try { silentEl.pause(); } catch (e) {}
-        try { silentEl.currentTime = 0; } catch (e) {}
-        var p = silentEl.play();
-        if (p && p.catch) p.catch(function () {});
-      } catch (e) {}
-    }
-    /* 첫 터치·클릭에서 무음 오디오 + AudioContext 를 함께 깨운다.
-       ctx 가 'running' 이 되기 전에는 잠그지 않고 다음 제스처마다 다시 시도한다. */
     function unlock() {
       markPlayback();
-      var c = makeCtx();
-      if (!c) { playSilentAudioElement(); return; }
-      if (c.state === 'running') { running = true; return; }
-      playSilentAudioElement();
-      var p = null;
-      try { p = c.resume(); } catch (e) {}
-      var settle = function () {
-        running = (c.state === 'running');
-        if (running) { try { if (silentEl) silentEl.pause(); } catch (e) {} }
-      };
-      if (p && p.then) { try { p.then(settle, settle); } catch (e) {} }
-      setTimeout(settle, 140);
-      setTimeout(settle, 420);
+      wakeCtx();
+      prime();
     }
-    function noise(c) {
+    function noiseBuffer(c) {
       if (noiseBuf) return noiseBuf;
       var len = Math.floor(c.sampleRate * 0.6);
       noiseBuf = c.createBuffer(1, len, c.sampleRate);
@@ -2591,35 +2882,35 @@
       for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       return noiseBuf;
     }
-    /* 기본 사인·삼각·톱니 음 하나 (endFreq 로 피치 글라이드) */
+    /* 기본 음 하나 (endFreq 로 피치 글라이드) */
     function blip(c, at, freq, dur, vol, type, endFreq) {
+      var v = Math.min(1, vol * WA_GAIN);
       var o = c.createOscillator(), g = c.createGain();
       o.type = type || 'sine';
       o.frequency.setValueAtTime(Math.max(20, freq), at);
       if (endFreq && endFreq !== freq) o.frequency.exponentialRampToValueAtTime(Math.max(20, endFreq), at + dur);
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol), at + Math.min(0.014, dur * 0.35));
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v), at + Math.min(0.014, dur * 0.35));
       g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-      o.connect(g); g.connect(c.destination);
+      o.connect(g); g.connect(out(c));
       o.start(at); o.stop(at + dur + 0.05);
     }
-    /* 배를 때리는 저음 (두근 / 쿵) */
-    function thump(c, at, from, to, dur, vol) {
+    function thumpWA(c, at, from, to, dur, vol) {
+      var v = Math.min(1, vol * WA_GAIN);
       var o = c.createOscillator(), g = c.createGain();
       o.type = 'sine';
       o.frequency.setValueAtTime(Math.max(20, from), at);
       o.frequency.exponentialRampToValueAtTime(Math.max(18, to), at + dur * 0.82);
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, vol), at + 0.016);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v), at + 0.016);
       g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-      o.connect(g); g.connect(c.destination);
+      o.connect(g); g.connect(out(c));
       o.start(at); o.stop(at + dur + 0.06);
     }
-    /* 필터를 건 노이즈 한 방 (찢김·지직·펀치) */
     function noiseHit(c, at, o) {
       o = o || {};
       var dur = o.dur || 0.2;
-      var src = c.createBufferSource(); src.buffer = noise(c);
+      var src = c.createBufferSource(); src.buffer = noiseBuffer(c);
       var f = c.createBiquadFilter();
       f.type = o.type || 'bandpass';
       f.Q.value = o.q == null ? 1 : o.q;
@@ -2627,162 +2918,162 @@
       if (o.f1) f.frequency.exponentialRampToValueAtTime(Math.max(60, o.f1), at + (o.sweep || dur * 0.8));
       var g = c.createGain();
       g.gain.setValueAtTime(0.0001, at);
-      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, o.vol || 0.1), at + (o.attack == null ? 0.004 : o.attack));
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, Math.min(1, (o.vol || 0.1) * WA_GAIN)), at + (o.attack == null ? 0.004 : o.attack));
       g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-      src.connect(f); f.connect(g); g.connect(c.destination);
+      src.connect(f); f.connect(g); g.connect(out(c));
       src.start(at, Math.random() * 0.3, dur + 0.06);
     }
-    /* 짧게 흩뿌리는 반짝임 */
-    function sparkle(c, at, n, base, vol) {
-      for (var i = 0; i < n; i++) {
-        blip(c, at + i * 0.026 + Math.random() * 0.02, (base || 2400) + Math.random() * 1700, 0.08 + Math.random() * 0.07, vol || 0.02, 'sine');
-      }
+    function sparkleWA(c, at, n, base, vol) {
+      for (var i = 0; i < n; i++) blip(c, at + i * 0.026 + Math.random() * 0.02, (base || 2400) + Math.random() * 1700, 0.08 + Math.random() * 0.07, vol || 0.02, 'sine');
     }
     function heartbeat(c, at, gain) {
-      thump(c, at, 98, 45, 0.3, 0.2 * gain);
-      thump(c, at + 0.2, 84, 38, 0.26, 0.15 * gain);
+      thumpWA(c, at, 98, 45, 0.3, 0.2 * gain);
+      thumpWA(c, at + 0.2, 84, 38, 0.26, 0.15 * gain);
       blip(c, at, 156, 0.1, 0.05 * gain, 'sine', 62);
     }
-    function buzz(pattern) {
-      try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
-    }
-
-    /* 절취선이 한 칸씩 찢길 때: 종이 결이 끊기는 지직 + 진행률에 따라 올라가는 음 */
-    function tear(amount) {
+    function waTear(amount) {
       var c = ac();
       if (!c) return;
       var now = c.currentTime;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
-      if (now - lastTick < (a > 0.45 ? 0.035 : 0.045)) return;
-      lastTick = now;
       noiseHit(c, now, {
-        f0: 1000 + a * 2400 + Math.random() * 600,
-        f1: 1700 + a * 3600,
+        f0: 1200 + a * 2600 + Math.random() * 700,
+        f1: 2200 + a * 3800,
         sweep: 0.055,
         q: 0.7 + a * 0.9,
-        vol: 0.032 + a * 0.05,
-        dur: 0.05 + Math.random() * 0.05,
-        attack: 0.005
+        vol: 0.06 + a * 0.12,
+        dur: 0.06 + Math.random() * 0.05,
+        attack: 0.004
       });
-      /* 종이 섬유가 끊기는 아주 짧은 클릭 (진행할수록 촘촘하고 높게) */
-      if (Math.random() < 0.45 + a * 0.35) {
-        blip(c, now + 0.004, 2200 + a * 3000 + Math.random() * 1200, 0.026, 0.012 + a * 0.02, 'square');
-      }
-      /* 0 → 75% 로 갈수록 살짝 올라가는 낮은 음 */
-      if (a > 0.1) blip(c, now, 170 + a * 280, 0.07, 0.012 + a * 0.022, 'triangle');
-      if (a > 0.55) sparkle(c, now + 0.01, 2, 2700, 0.012);
+      blip(c, now + 0.004, 2600 + a * 3200 + Math.random() * 1400, 0.03, 0.03 + a * 0.05, 'square');
+      thumpWA(c, now, 240, 110, 0.07, 0.05 + a * 0.05);
     }
-
-    /* 결과가 나올 때: 등급별로 완전히 다른 팡파레 */
-    function snap(level) {
+    function waSnap(level) {
       var c = ac();
       if (!c) return;
       var lv = Number(level) || 0;
       var now = c.currentTime;
-      /* 찢어지는 트랜지언트 */
-      noiseHit(c, now, { type: 'highpass', f0: 1400, vol: 0.16 + lv * 0.03, dur: 0.11, attack: 0.001 });
-      noiseHit(c, now, { f0: 3000, f1: 680, sweep: 0.22, q: 0.7, vol: 0.14, dur: 0.3 });
-      /* 펀치 */
-      thump(c, now, 180, 52, 0.24, 0.16 + lv * 0.035);
-      blip(c, now + 0.01, 330, 0.14, 0.06, 'sine', 140);
-      /* 반짝이는 종소리 버스트 */
-      sparkle(c, now + 0.05, 4 + lv * 3, 2200 + lv * 250, 0.03);
+      noiseHit(c, now, { type: 'highpass', f0: 1400, vol: 0.3 + lv * 0.05, dur: 0.11, attack: 0.001 });
+      noiseHit(c, now, { f0: 3000, f1: 680, sweep: 0.22, q: 0.7, vol: 0.26, dur: 0.3 });
+      thumpWA(c, now, 180, 52, 0.24, 0.3 + lv * 0.05);
+      blip(c, now + 0.01, 330, 0.14, 0.12, 'sine', 140);
+      sparkleWA(c, now + 0.05, 4 + lv * 3, 2200 + lv * 250, 0.07);
       if (lv >= 2) {
         [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
-          blip(c, now + 0.16 + i * 0.05, f, 0.5, 0.045, 'sine');
+          blip(c, now + 0.16 + i * 0.05, f, 0.5, 0.09, 'sine');
         });
       }
-      buzz(lv >= 2 ? [0, 26, 30, 18, 44, 36] : [0, 18, 26, 16]);
     }
-
-    /* 황금 봉인이 나타날 때: 두근-두근 심장박동 + 전기가 지직이는 긴장 */
-    function sealCharge() {
+    function waSeal() {
       var c = ac();
       if (!c) return;
       var now = c.currentTime + 0.02;
       heartbeat(c, now, 1);
       heartbeat(c, now + 0.54, 0.82);
-      /* 낮게 깔리며 올라가는 서브 베이스 */
       var o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
       lp.type = 'lowpass'; lp.frequency.setValueAtTime(170, now);
       o.type = 'sine';
       o.frequency.setValueAtTime(56, now);
       o.frequency.linearRampToValueAtTime(96, now + 1.6);
       g.gain.setValueAtTime(0.0001, now);
-      g.gain.exponentialRampToValueAtTime(0.075, now + 0.28);
+      g.gain.exponentialRampToValueAtTime(0.075 * WA_GAIN, now + 0.28);
       g.gain.exponentialRampToValueAtTime(0.0001, now + 1.95);
-      o.connect(lp); lp.connect(g); g.connect(c.destination);
+      o.connect(lp); lp.connect(g); g.connect(out(c));
       o.start(now); o.stop(now + 2.05);
-      /* 전기 셔머 */
-      noiseHit(c, now + 0.08, { type: 'highpass', f0: 5200, vol: 0.022, dur: 1.15, attack: 0.16 });
+      noiseHit(c, now + 0.08, { type: 'highpass', f0: 5200, vol: 0.04, dur: 1.15, attack: 0.16 });
       for (var i = 0; i < 7; i++) {
-        blip(c, now + 0.24 + i * 0.105, 1800 + Math.random() * 2400, 0.14, 0.016, 'sine');
+        blip(c, now + 0.24 + i * 0.105, 1800 + Math.random() * 2400, 0.14, 0.03, 'sine');
       }
-      /* 금빛으로 올라가는 화음 */
       [261.63, 329.63, 392].forEach(function (f, i) {
-        blip(c, now + 0.42 + i * 0.18, f, 0.7, 0.038, 'triangle');
+        blip(c, now + 0.42 + i * 0.18, f, 0.7, 0.075, 'triangle');
       });
-      buzz([0, 40, 60, 32]);
     }
-
-    /* 등급별 팡파레 — 0: D~L 팝 · 1: C 신스 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
-    function fanfare(level) {
+    function waFanfare(level) {
       var c = ac();
       if (!c) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
       var t0 = c.currentTime + 0.05;
       if (lv <= 0) {
-        blip(c, t0, 783.99, 0.18, 0.05, 'triangle');
-        blip(c, t0 + 0.09, 1046.5, 0.3, 0.045, 'sine');
-        sparkle(c, t0 + 0.12, 3, 2600, 0.014);
-        buzz(12);
+        blip(c, t0, 783.99, 0.18, 0.1, 'triangle');
+        blip(c, t0 + 0.09, 1046.5, 0.3, 0.09, 'sine');
+        sparkleWA(c, t0 + 0.12, 3, 2600, 0.03);
         return;
       }
       if (lv === 1) {
-        /* C: 밝은 신스 화음 */
         [523.25, 659.25, 783.99].forEach(function (f, i) {
-          blip(c, t0 + i * 0.06, f, 0.52, 0.042, 'sawtooth');
-          blip(c, t0 + i * 0.06, f * 2, 0.3, 0.012, 'sine');
+          blip(c, t0 + i * 0.06, f, 0.52, 0.08, 'sawtooth');
+          blip(c, t0 + i * 0.06, f * 2, 0.3, 0.03, 'sine');
         });
         [1046.5, 1318.51].forEach(function (f, i) {
-          blip(c, t0 + 0.22 + i * 0.06, f, 0.55, 0.03, 'triangle');
+          blip(c, t0 + 0.22 + i * 0.06, f, 0.55, 0.06, 'triangle');
         });
-        thump(c, t0, 140, 60, 0.24, 0.09);
-        sparkle(c, t0 + 0.3, 6, 2500, 0.016);
-        buzz([0, 16, 22, 20]);
+        thumpWA(c, t0, 140, 60, 0.24, 0.18);
+        sparkleWA(c, t0 + 0.3, 6, 2500, 0.03);
         return;
       }
       if (lv === 2) {
-        /* B: 금빛 브라스 팡파레 */
-        var notes = [392, 523.25, 659.25, 783.99, 1046.5];
-        notes.forEach(function (f, i) {
+        [392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
           var at = t0 + i * 0.105;
-          blip(c, at, f, 0.44, 0.05, 'sawtooth');
-          blip(c, at + 0.005, f * 2, 0.28, 0.022, 'triangle');
+          blip(c, at, f, 0.44, 0.09, 'sawtooth');
+          blip(c, at + 0.005, f * 2, 0.28, 0.04, 'triangle');
         });
-        thump(c, t0, 150, 52, 0.3, 0.12);
-        thump(c, t0 + 0.55, 132, 48, 0.34, 0.1);
-        blip(c, t0 + 0.56, 1567.98, 0.8, 0.05, 'sine');
-        sparkle(c, t0 + 0.5, 10, 2400, 0.018);
-        buzz([0, 26, 34, 22, 40, 30]);
+        thumpWA(c, t0, 150, 52, 0.3, 0.22);
+        thumpWA(c, t0 + 0.55, 132, 48, 0.34, 0.2);
+        blip(c, t0 + 0.56, 1567.98, 0.8, 0.1, 'sine');
+        sparkleWA(c, t0 + 0.5, 10, 2400, 0.035);
         return;
       }
-      /* A · 라스트원: 두 옥타브를 올라가는 웅장한 아르페지오 + 반짝이는 피날레 */
       var rise = [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
       rise.forEach(function (f, i) {
         var at = t0 + i * 0.082;
-        blip(c, at, f, 0.42, 0.04 + i * 0.002, 'sawtooth');
-        blip(c, at + 0.004, f * 2, 0.22, 0.016, 'triangle');
+        blip(c, at, f, 0.42, 0.08 + i * 0.003, 'sawtooth');
+        blip(c, at + 0.004, f * 2, 0.22, 0.03, 'triangle');
       });
       var tail = t0 + rise.length * 0.082;
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
-        blip(c, tail + i * 0.07, f, 0.9, 0.045, 'sine');
+        blip(c, tail + i * 0.07, f, 0.9, 0.09, 'sine');
       });
-      thump(c, t0, 170, 46, 0.42, 0.16);
-      thump(c, tail, 148, 42, 0.5, 0.15);
-      noiseHit(c, tail, { type: 'highpass', f0: 7000, vol: 0.03, dur: 1.2, attack: 0.05 });
-      sparkle(c, tail + 0.04, 16, 2600, 0.02);
-      buzz([0, 30, 30, 24, 24, 20, 60, 40]);
+      thumpWA(c, t0, 170, 46, 0.42, 0.3);
+      thumpWA(c, tail, 148, 42, 0.5, 0.28);
+      noiseHit(c, tail, { type: 'highpass', f0: 7000, vol: 0.05, dur: 1.2, attack: 0.05 });
+      sparkleWA(c, tail + 0.04, 16, 2600, 0.035);
+    }
+
+    /* ================= 바깥으로 내보내는 재생 API ================= */
+    function tear(amount) {
+      if (isMuted()) return;
+      var a = Math.max(0, Math.min(1, Number(amount) || 0));
+      var now = Date.now();
+      if (now - lastTick < 50) return;
+      lastTick = now;
+      elPlay('tear', 0.7 + a * 0.3);
+    }
+    function snap(level) {
+      if (isMuted()) return;
+      var lv = Number(level) || 0;
+      elPlay('snap', 1);
+      buzz(lv >= 2 ? [0, 26, 30, 18, 44, 36] : [0, 18, 26, 16]);
+    }
+    function sealCharge() {
+      if (isMuted()) return;
+      var now = Date.now();
+      if (now - lastSeal < 700) return;
+      lastSeal = now;
+      elPlay('seal', 1);
+      buzz([0, 40, 60, 32]);
+    }
+    function fanfare(level) {
+      if (isMuted()) return;
+      var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
+      elPlay(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', 1);
+      buzz(lv >= 3 ? [0, 30, 30, 24, 24, 20, 60, 40] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : 12);
+    }
+    /* 소리 켜기 버튼: 바로 들리는 테스트음 */
+    function test(withFanfare) {
+      if (isMuted()) return;
+      unlock();
+      elPlay('snap', 1);
+      if (withFanfare) setTimeout(function () { if (!isMuted()) elPlay('fanC', 1); }, 430);
     }
 
     /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께) */
@@ -2790,20 +3081,24 @@
       ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(function (ev) {
         document.addEventListener(ev, unlock, { capture: true, passive: true });
       });
-      /* 탭을 다시 열었을 때 iOS 가 오디오 세션을 되돌려 놓는 경우 대비 */
       document.addEventListener('visibilitychange', function () {
         if (!document.hidden) { markPlayback(); if (ctx && ctx.state === 'running') running = true; }
       }, { passive: true });
       markPlayback();
     } catch (e) {}
 
+    /* 시작할 때 한 번 합성 → blob URL 생성 → <audio> 요소 준비 */
+    try { buildAll(); buildElements(); } catch (e) {}
+    try { document.addEventListener('DOMContentLoaded', function () { buildElements(); refreshToggle(false); }, { once: true }); } catch (e) {}
+
     return {
-      tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge,
+      tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge, test: test,
       unlock: unlock, buzz: buzz,
       isMuted: isMuted, setMuted: setMuted, refreshToggle: refreshToggle,
       toggle: function () { setMuted(!isMuted()); }
     };
   })();
+
 
   /* =========================================================
      종이 티켓 찢기 · 3D 펼치기(peel) 연출
@@ -4810,8 +5105,15 @@
         case 'seal-snap': sealSnap(); break;
         case 'toggle-sound': {
           kujiSound.toggle();
-          kujiSound.refreshToggle();
-          if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.tear(0.6); }
+          kujiSound.refreshToggle(true);
+          if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.test(false); }
+          break;
+        }
+        case 'test-sound': {
+          if (kujiSound.isMuted()) kujiSound.setMuted(false);
+          kujiSound.unlock();
+          kujiSound.test(true);
+          kujiSound.refreshToggle(true);
           break;
         }
         case 'draw-coupon': {
