@@ -1191,8 +1191,8 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 }
 @media (max-width:760px){
   .user-chip-label{display:none}
-  .user-chip{padding:6px 10px 6px 6px}
-  .user-chip .ico{display:none}
+  .user-chip{padding:6px 10px 6px 8px;gap:6px}
+  .user-chip .ico{width:17px;height:17px}
   .mode-inner{font-size:11px;padding:7px 16px}
   .mode-link{display:none}
   .cover-title{font-size:34px}
