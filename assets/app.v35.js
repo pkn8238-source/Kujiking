@@ -2570,7 +2570,7 @@
           '<span class="peel-stripe"></span>' +
           '<span class="peel-stub-row"><b>쿠지킹</b><em>KUJIKING</em><span class="peel-tearlabel">✂ 절취선</span></span>' +
           '<span class="peel-stub-teeth" id="peelStubTeeth"></span>' +
-        '</div>'
+        '</div>' +
         '<div class="peel-flap" id="peelFlap" role="button" tabindex="0" aria-label="종이를 아래로 찢어 개봉">' +
           '<span class="peel-teeth" id="peelTeeth" aria-hidden="true"></span>' +
           '<span class="peel-shade" aria-hidden="true"></span>' +
