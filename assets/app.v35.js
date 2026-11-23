@@ -3227,7 +3227,7 @@
           (desc ? '<p class="result-desc">' + h(desc) + '</p>' : '') +
         '</div>';
 
-    html +=
+    var html = stage +
       (r.itemStatus === '포인트지급' || r.itemStatus === '포인트전환'
         ? '<span class="result-points">' + icon('gift') + ' 굿즈 포인트 ' + fmt(r.points) + 'P 지급</span>'
         : '') +
