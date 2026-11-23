@@ -3551,6 +3551,7 @@
           .then(function () {
             closeModal();
             renderAdmin();
+            renderHeader();
             toast(qtyG + '장의 뽑기권을 지급했어요', 'ok');
           })
           .catch(function (e4) {
@@ -3570,6 +3571,7 @@
           .then(function () {
             closeModal();
             renderAdmin();
+            renderHeader();
             toast('승인하고 ' + qtyA + '장을 지급했어요', 'ok');
           })
           .catch(function (e5) {
@@ -3588,6 +3590,7 @@
         Backend.shipDelivery(form.getAttribute('data-id'), carrier, tracking)
           .then(function () {
             renderAdmin();
+            renderHeader();
             toast('출고 완료로 처리했어요', 'ok');
           })
           .catch(function (e6) {
@@ -3734,6 +3737,7 @@
     try {
       await Backend.decideClaim(claimId, false, 0);
       renderAdmin();
+      renderHeader();
       toast('요청을 반려했어요');
     } catch (e) { toast(errMsg(e), 'err'); }
   }
