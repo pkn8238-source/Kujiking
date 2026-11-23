@@ -1655,3 +1655,5 @@ body.is-live .demo-only{display:none !important}
   .manual-summary-text{grid-column:1/-2;white-space:normal}
   .manual-body{padding:14px}
 }
+.manual-details[open] .manual-summary-text{display:none}
+.manual-details[open] .manual-summary-bar{grid-template-columns:auto minmax(0,1fr) auto}
