@@ -27,32 +27,40 @@ GRADE_RGB = {
     'c': (242, 180, 0),
     'd': (18, 168, 122),
     'e': (139, 122, 102),
+    'f': (61, 123, 253),
+    'g': (168, 85, 247),
+    'h': (15, 118, 110),
+    'i': (219, 39, 119),
+    'j': (2, 132, 199),
+    'k': (124, 58, 237),
+    'l': (180, 83, 9),
     'last': (31, 26, 20),
 }
 
+# 등급 하나 = 상품 하나. 10/9/12/8종 → 200/180/240/160장 (종류 × 20장)
 PRODUCTS = {
     'dragonball-saiyan': {
         'series': '드래곤볼',
         'tint': (255, 178, 90),
-        'tiers': {'a': ['a'], 'b': ['b'], 'c': ['c'], 'd': ['d', 'e'], 'e': ['f', 'g', 'h', 'i', 'j']},
+        'tiers': {c: [c] for c in 'abcdefghij'},
         'last': 'last',
     },
     'hunter-chimera-ant': {
         'series': '헌터×헌터',
         'tint': (96, 190, 140),
-        'tiers': {'a': ['a'], 'b': ['b'], 'c': ['c'], 'd': ['d', 'e', 'f'], 'e': ['g', 'h', 'i']},
+        'tiers': {c: [c] for c in 'abcdefghi'},
         'last': 'last',
     },
     'jojo-rivals': {
         'series': '죠죠의 기묘한 모험',
         'tint': (168, 118, 216),
-        'tiers': {'a': ['a'], 'b': ['b'], 'c': ['c'], 'd': ['d', 'e', 'f'], 'e': ['g', 'h', 'i', 'j', 'k', 'l']},
+        'tiers': {c: [c] for c in 'abcdefghijkl'},
         'last': 'last',
     },
     'apothecary-secret': {
         'series': '약사의 혼잣말',
         'tint': (224, 128, 142),
-        'tiers': {'a': ['a'], 'b': ['b'], 'c': ['c'], 'd': ['d', 'e'], 'e': ['f', 'g', 'h']},
+        'tiers': {c: [c] for c in 'abcdefgh'},
         'last': 'last',
     },
 }

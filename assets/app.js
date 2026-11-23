@@ -15,8 +15,8 @@
   var SESSION_KEY = 'kujiking.session.v2';
   var ADMIN_KEY = 'kujiking.admin.session.v2';
   var APP_TAG = 'kujiking';
-  var STATE_VERSION = 3;
-  var MAX_TICKETS = 300;
+  var STATE_VERSION = 4;   // v4: 상품 종류×20장 판(160~240장) 구성으로 재시드
+  var MAX_TICKETS = 500;
 
   var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
   var PRICE_BANDS = [
@@ -25,14 +25,14 @@
     { id: 'mid', label: '1만 원대' },
     { id: 'premium', label: '프리미엄' }
   ];
-  var GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+  var GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
 
   var state = null;
   var mapCache = new Map();
   var ui = {
     view: 'home',
     boardId: null,
-    boardTab: 'grid',
+    boardTab: 'main',
     myTab: 'coupons',
     adminTab: 'members',
     adminUnlocked: false,
@@ -359,8 +359,8 @@
       category: '드래곤볼',
       cover: 'assets/products/dragonball-saiyan/cover.jpg',
       price: 12000,
-      tickets: 20,
-      sold: 7,
+      tickets: 200,
+      sold: 26,
       kicker: 'SAIYAN',
       sub: '손오공 · 초사이어인 손오반 · 라디츠',
       tiers: [
@@ -370,15 +370,30 @@
         { grade: 'B', label: '초사이어인 손오반 MASTERLISE', count: 2, points: 20000,
           image: 'assets/products/dragonball-saiyan/tier_b.jpg',
           desc: '약 19cm · 아버지와 같은 카메하메하 포즈' },
-        { grade: 'C', label: '손오천 MASTERLISE', count: 2, points: 14000,
+        { grade: 'C', label: '손오천 MASTERLISE', count: 3, points: 14000,
           image: 'assets/products/dragonball-saiyan/tier_c.jpg',
           desc: '약 13cm · 어린 손오천의 경쾌한 포즈' },
-        { grade: 'D', label: '바닥 & 라디츠 MASTERLISE', count: 5, points: 12000,
+        { grade: 'D', label: '바닥 MASTERLISE', count: 4, points: 12000,
           image: 'assets/products/dragonball-saiyan/tier_d.jpg',
-          desc: '2종 중 1종 · 약 25cm · 바닥 또는 라디츠 랜덤' },
-        { grade: 'E', label: 'F~J상 소품 어소트', count: 10, points: 5000,
+          desc: '약 25cm · 사이어인 정예전사 바닥' },
+        { grade: 'E', label: '라디츠 MASTERLISE', count: 5, points: 12000,
           image: 'assets/products/dragonball-saiyan/tier_e.jpg',
-          desc: '마그넷·파우치·아크릴 스탠드·고무 스트랩·타월 중 1종' }
+          desc: '약 25cm · 스카우터를 쓴 손오공의 형' },
+        { grade: 'F', label: '피규어 마그넷', count: 10, points: 6000,
+          image: 'assets/products/dragonball-saiyan/tier_f.jpg',
+          desc: '약 5cm · 전 3종 중 1종 랜덤' },
+        { grade: 'G', label: '파우치', count: 15, points: 5000,
+          image: 'assets/products/dragonball-saiyan/tier_g.jpg',
+          desc: '약 13cm · 전 7종 중 1종 랜덤' },
+        { grade: 'H', label: '아크릴 스탠드', count: 25, points: 4000,
+          image: 'assets/products/dragonball-saiyan/tier_h.jpg',
+          desc: '약 7~10cm · 전 9종 중 1종 랜덤' },
+        { grade: 'I', label: '고무 어소트', count: 45, points: 3000,
+          image: 'assets/products/dragonball-saiyan/tier_i.jpg',
+          desc: '약 5.5~6.5cm · 전 7종 중 1종 랜덤' },
+        { grade: 'J', label: '다이컷 타월', count: 90, points: 2000,
+          image: 'assets/products/dragonball-saiyan/tier_j.jpg',
+          desc: '약 24cm · 전 9종 중 1종 랜덤' }
       ],
       lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
       lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
@@ -390,7 +405,8 @@
           { k: '제조사', v: '반다이 스피리츠' },
           { k: '일본 발매', v: '2026.10.17' },
           { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
-          { k: '세트 구성', v: 'A~J상 + 라스트원상 · 총 11종' },
+          { k: '세트 구성', v: 'A~J상 10종 + 라스트원상 · 총 11종' },
+          { k: '이 판 구성', v: '10종 × 20장 = 200장' },
           { k: '주요 크기', v: 'MASTERLISE 약 13~25cm' }
         ],
         lineup: [
@@ -407,7 +423,7 @@
           '라스트원상 손오공&손오반 MASTERLISE PLUS (약 21cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~J상 11종을 20장으로 재구성했습니다. D상은 바닥·라디츠 2종, E상은 F~J상 소품 5종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~J상 10종을 등급별로 나눠 종류마다 20장씩, 총 200장으로 구성했습니다. F~J상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
           '피규어는 공장 조립·도색 상태에 따라 개체 차이가 있을 수 있습니다.'
         ]
       }
@@ -418,8 +434,8 @@
       category: '헌터×헌터',
       cover: 'assets/products/hunter-chimera-ant/cover.jpg',
       price: 12000,
-      tickets: 20,
-      sold: 11,
+      tickets: 180,
+      sold: 31,
       kicker: 'CHIMERA ANT',
       sub: '메르엠 · 네테로 · 곤',
       tiers: [
@@ -429,15 +445,27 @@
         { grade: 'B', label: '네테로 MASTERLISE', count: 2, points: 22000,
           image: 'assets/products/hunter-chimera-ant/tier_b.jpg',
           desc: '약 22cm · 감사의 정권찌르기 장면' },
-        { grade: 'C', label: '곤 MASTERLISE', count: 2, points: 14000,
+        { grade: 'C', label: '곤 MASTERLISE', count: 3, points: 14000,
           image: 'assets/products/hunter-chimera-ant/tier_c.jpg',
           desc: '약 10cm · 네페르피토와 대치한 순간' },
-        { grade: 'D', label: '키르아 · 네페르피토 · 샤우아푸프/유피', count: 5, points: 14000,
+        { grade: 'D', label: '키르아 MASTERLISE', count: 4, points: 16000,
           image: 'assets/products/hunter-chimera-ant/tier_d.jpg',
-          desc: '3종 중 1종 · 약 6~24cm 랜덤' },
-        { grade: 'E', label: 'G~I상 굿즈 어소트', count: 10, points: 5000,
+          desc: '약 21cm · 전격의 순간' },
+        { grade: 'E', label: '네페르피토 MASTERLISE', count: 4, points: 16000,
           image: 'assets/products/hunter-chimera-ant/tier_e.jpg',
-          desc: '고무 컬렉션·문구·폰탭/스트랩/스티커 중 1종' }
+          desc: '약 24cm · 왕의 근위대' },
+        { grade: 'F', label: '샤우아푸프 · 몬투투유피 MASTERLISE', count: 6, points: 12000,
+          image: 'assets/products/hunter-chimera-ant/tier_f.jpg',
+          desc: '약 6~7cm · 전 2종 중 1종 랜덤' },
+        { grade: 'G', label: '고무 컬렉션', count: 30, points: 5000,
+          image: 'assets/products/hunter-chimera-ant/tier_g.jpg',
+          desc: '약 8~19cm · 전 10종 중 1종 랜덤' },
+        { grade: 'H', label: '문구 어소트', count: 55, points: 4000,
+          image: 'assets/products/hunter-chimera-ant/tier_h.jpg',
+          desc: 'A4 클리어파일·A6 노트 / 전 10종 중 1종' },
+        { grade: 'I', label: '폰탭 · 넥스트랩 · 스티커', count: 75, points: 3000,
+          image: 'assets/products/hunter-chimera-ant/tier_i.jpg',
+          desc: '약 5~47cm · 전 10종 중 1종 랜덤' }
       ],
       lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
       lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
@@ -449,7 +477,8 @@
           { k: '제조사', v: '반다이 스피리츠' },
           { k: '일본 발매', v: '2026.11.14 (재판)' },
           { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
-          { k: '세트 구성', v: 'A~I상 + 라스트원상 · 총 10종' },
+          { k: '세트 구성', v: 'A~I상 9종 + 라스트원상 · 총 10종' },
+          { k: '이 판 구성', v: '9종 × 20장 = 180장' },
           { k: '주요 크기', v: 'MASTERLISE 약 6~24cm · 라스트원 약 100cm' }
         ],
         lineup: [
@@ -465,7 +494,7 @@
           '라스트원상 곤 ~성장ver.~ MASTERLISE EXTRA (약 100cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~I상 10종을 20장으로 재구성했습니다. D상은 키르아·네페르피토·샤우아푸프/유피 3종, E상은 G~I상 굿즈 3종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~I상 9종을 등급별로 나눠 종류마다 20장씩, 총 180장으로 구성했습니다. F~I상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
           '라스트원상은 약 100cm 대형 피규어로, 일반 상품과 별도 박스로 발송됩니다.'
         ]
       }
@@ -476,8 +505,8 @@
       category: '죠죠의 기묘한 모험',
       cover: 'assets/products/jojo-rivals/cover.jpg',
       price: 13000,
-      tickets: 20,
-      sold: 4,
+      tickets: 240,
+      sold: 18,
       kicker: 'RIVALS',
       sub: '디오 브란도 · 카즈 · DIO',
       tiers: [
@@ -490,12 +519,33 @@
         { grade: 'C', label: 'DIO MASTERLISE', count: 2, points: 24000,
           image: 'assets/products/jojo-rivals/tier_c.jpg',
           desc: '약 26cm · 3부 스타더스트 크루세이더스의 DIO' },
-        { grade: 'D', label: '카와지리 · 디아볼로 · 엔리코 P', count: 5, points: 18000,
+        { grade: 'D', label: '카와지리 하지메 MASTERLISE', count: 3, points: 18000,
           image: 'assets/products/jojo-rivals/tier_d.jpg',
-          desc: '3종 중 1종 · 약 22~25cm 랜덤' },
-        { grade: 'E', label: 'G~L상 굿즈 어소트', count: 10, points: 5000,
+          desc: '약 24cm · 4부 다이아몬드는 부서지지 않는다' },
+        { grade: 'E', label: '디아볼로 MASTERLISE', count: 3, points: 18000,
           image: 'assets/products/jojo-rivals/tier_e.jpg',
-          desc: '스탠드의 화살·로고 피규어·참·고무·포스터·스티커 중 1종' }
+          desc: '약 25cm · 5부 황금의 바람' },
+        { grade: 'F', label: '엔리코 P MASTERLISE', count: 4, points: 18000,
+          image: 'assets/products/jojo-rivals/tier_f.jpg',
+          desc: '약 22cm · 6부 스톤 오션' },
+        { grade: 'G', label: '스탠드의 화살 MASTERELIVE COLLECTION', count: 6, points: 16000,
+          image: 'assets/products/jojo-rivals/tier_g.jpg',
+          desc: '약 21cm · 스탠드를 각성시키는 화살' },
+        { grade: 'H', label: 'LOGO de Collection', count: 15, points: 9000,
+          image: 'assets/products/jojo-rivals/tier_h.jpg',
+          desc: '약 9~10cm · 전 7종 중 1종 랜덤' },
+        { grade: 'I', label: '미니어처 참', count: 20, points: 7000,
+          image: 'assets/products/jojo-rivals/tier_i.jpg',
+          desc: '약 2.5~4.5cm · 전 7종 중 1종 랜덤' },
+        { grade: 'J', label: '고무 어소트', count: 30, points: 5000,
+          image: 'assets/products/jojo-rivals/tier_j.jpg',
+          desc: '약 4~12cm · 전 7종 중 1종 랜덤' },
+        { grade: 'K', label: '클리어 포스터', count: 60, points: 4000,
+          image: 'assets/products/jojo-rivals/tier_k.jpg',
+          desc: 'A3 · 전 8종 중 1종 랜덤' },
+        { grade: 'L', label: '스티커 컬렉션', count: 94, points: 3000,
+          image: 'assets/products/jojo-rivals/tier_l.jpg',
+          desc: '약 6~14cm · 전 13종 중 1종 랜덤' }
       ],
       lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
       lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
@@ -507,7 +557,8 @@
           { k: '제조사', v: '반다이 스피리츠' },
           { k: '일본 발매', v: '2026.11.21' },
           { k: '일본 판매가', v: '1회 850엔 (세금 포함)' },
-          { k: '세트 구성', v: 'A~L상 + 라스트원상 · 총 13종' },
+          { k: '세트 구성', v: 'A~L상 12종 + 라스트원상 · 총 13종' },
+          { k: '이 판 구성', v: '12종 × 20장 = 240장' },
           { k: '주요 크기', v: 'MASTERLISE 약 18~26cm' }
         ],
         lineup: [
@@ -526,7 +577,7 @@
           '라스트원상 디에고 브란도 MASTERLISE (약 15cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~L상 13종을 20장으로 재구성했습니다. D상은 카와지리·디아볼로·엔리코 P 3종, E상은 G~L상 굿즈 6종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~L상 12종을 등급별로 나눠 종류마다 20장씩, 총 240장으로 구성했습니다. H~L상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
           '클리어 포스터는 A3 크기로, 배송 시 접히지 않도록 원통 포장됩니다.'
         ]
       }
@@ -537,8 +588,8 @@
       category: '약사의 혼잣말',
       cover: 'assets/products/apothecary-secret/cover.jpg',
       price: 12000,
-      tickets: 20,
-      sold: 2,
+      tickets: 160,
+      sold: 12,
       kicker: 'THE MOVIE',
       sub: '마오마오 · 진시',
       tiers: [
@@ -548,15 +599,24 @@
         { grade: 'B', label: '진시 Dioramiquemaster', count: 2, points: 20000,
           image: 'assets/products/apothecary-secret/tier_b.jpg',
           desc: '약 16cm · 극장판 의상의 디오라마 피규어' },
-        { grade: 'C', label: '빅 아크릴 스탠드', count: 2, points: 9000,
+        { grade: 'C', label: '빅 아크릴 스탠드', count: 4, points: 9000,
           image: 'assets/products/apothecary-secret/tier_c.jpg',
           desc: '약 16cm · 마오마오 & 진시 일러스트' },
-        { grade: 'D', label: '키라라이즈 마스코트 · 메탈 참', count: 5, points: 7000,
+        { grade: 'D', label: '키라라이즈 마스코트', count: 8, points: 7000,
           image: 'assets/products/apothecary-secret/tier_d.jpg',
-          desc: '2종 중 1종 · 약 5~10cm 랜덤' },
-        { grade: 'E', label: 'F~H상 소품 어소트', count: 10, points: 4000,
+          desc: '약 10cm · 전 2종 중 1종 랜덤' },
+        { grade: 'E', label: '메탈 참', count: 15, points: 6000,
           image: 'assets/products/apothecary-secret/tier_e.jpg',
-          desc: '고무 컬렉션·아크릴 스탠드·미니 색지 중 1종' }
+          desc: '약 5cm · 전 5종 중 1종 랜덤' },
+        { grade: 'F', label: '고무 컬렉션', count: 30, points: 4000,
+          image: 'assets/products/apothecary-secret/tier_f.jpg',
+          desc: '약 6~10cm · 전 5종 중 1종 랜덤' },
+        { grade: 'G', label: '아크릴 스탠드', count: 45, points: 3500,
+          image: 'assets/products/apothecary-secret/tier_g.jpg',
+          desc: '약 6.5~8cm · 전 5종 중 1종 랜덤' },
+        { grade: 'H', label: '미니 색지', count: 55, points: 3000,
+          image: 'assets/products/apothecary-secret/tier_h.jpg',
+          desc: '약 13cm · 전 5종 중 1종 랜덤' }
       ],
       lastOneLabel: '라스트원상 · 마오마오 피규어',
       lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
@@ -568,7 +628,8 @@
           { k: '제조사', v: '반다이 스피리츠' },
           { k: '일본 발매', v: '2026.12.05' },
           { k: '일본 판매가', v: '1회 800엔 (세금 포함)' },
-          { k: '세트 구성', v: 'A~H상 + 라스트원상 · 총 9종' },
+          { k: '세트 구성', v: 'A~H상 8종 + 라스트원상 · 총 9종' },
+          { k: '이 판 구성', v: '8종 × 20장 = 160장' },
           { k: '주요 크기', v: 'Dioramiquemaster 약 15~16cm' }
         ],
         lineup: [
@@ -583,7 +644,7 @@
           '라스트원상 마오마오 피규어 (약 18cm)'
         ],
         notes: [
-          '이 판은 실제 세트의 A~H상 9종을 20장으로 재구성했습니다. D상은 키라라이즈 마스코트·메탈 참 2종, E상은 F~H상 소품 3종 중 1종이 랜덤으로 지급됩니다.',
+          '이 판은 실제 세트의 A~H상 8종을 등급별로 나눠 종류마다 20장씩, 총 160장으로 구성했습니다. D~H상은 각 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
           '일본 발매가 2026년 12월 5일인 신작으로, 이 판은 입고분에 한해 순차 발송됩니다.'
         ]
       }
@@ -2073,6 +2134,7 @@
           '</button>';
       }
     }
+    grid.classList.toggle('is-dense', board.tickets > 100);
     grid.innerHTML = html;
     var summary = $('#gridSummary');
     if (summary) summary.textContent = fmt(board.tickets) + '장 중 ' + fmt(remaining(board)) + '장 남음 · 판매 ' + fmt(openedCount(board)) + '장';
@@ -2142,10 +2204,12 @@
         '</span>' +
       '</button>';
 
-    el.innerHTML = '<div class="prizes-head"><div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
-        '<p class="muted">등급별 실물 상품입니다. 이미지를 누르면 크게 볼 수 있어요.</p></div>' +
+    el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
+        '<span class="step-no">1</span>' +
+        '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
+        '<p class="muted">등급 ' + board.tiers.length + '종 × 20장 = ' + fmt(board.tiers.length * 20) + '장 구성입니다. 실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
         '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
-      '<div class="prize-gallery">' + cards + lo + '</div>' +
+      '<div class="prize-gallery' + (board.tiers.length > 6 ? ' is-dense' : '') + '">' + cards + lo + '</div>' +
       '<div class="prize-table-wrap">' +
         '<div class="table-scroll"><table class="data-table prob-table"><thead><tr><th>등급</th><th>상품</th><th>수량</th><th>확률</th><th>잔여</th></tr></thead><tbody>' +
         board.tiers.map(function (t) {
@@ -2179,22 +2243,32 @@
       '상품 사진은 제조사 제공 이미지이며, 실제 상품과 색상·조립 상태가 다를 수 있습니다.'
     ];
     var allNotes = notes.concat(baseNotes);
-    el.innerHTML = '<div class="manual-head">' +
-        '<div><span class="manual-kicker">PRODUCT MANUAL</span><h2>상품 설명서 · 안내</h2>' +
-        '<p class="manual-summary">' + h(m.summary || (board.title + '의 실제 상품 구성과 이용 안내입니다.')) + '</p></div>' +
-        '<div class="manual-stamp"><span>OFFICIAL LINEUP</span><b>' + h((specs.filter(function (s) { return s.k === '세트 구성'; })[0] || {}).v || '실물 상품') + '</b></div>' +
-      '</div>' +
-      '<div class="manual-grid">' +
-        '<dl class="manual-specs">' + (specs.length ? specs.map(function (s) {
-          return '<div><dt>' + h(s.k) + '</dt><dd>' + h(s.v) + '</dd></div>';
-        }).join('') : '<div><dt>시리즈</dt><dd>' + h(board.category) + '</dd></div><div><dt>판매</dt><dd>1장 ' + won(board.price) + ' · 총 ' + fmt(board.tickets) + '장</dd></div>') + '</dl>' +
-        (lineup.length ? '<div class="manual-lineup"><h3>실제 라인업</h3><ul>' + lineup.map(function (line) {
-          return '<li>' + h(line) + '</li>';
-        }).join('') + '</ul></div>' : '') +
-      '</div>' +
-      '<div class="manual-notes"><h3>이용 안내 · 유의사항</h3><ul>' + allNotes.map(function (n) {
-        return '<li>' + h(n) + '</li>';
-      }).join('') + '</ul></div>';
+    el.innerHTML = '<details class="manual-details">' +
+        '<summary class="manual-summary-bar">' +
+          '<span class="manual-kicker">PRODUCT MANUAL</span>' +
+          '<b>상품 설명서 · 안내</b>' +
+          '<span class="manual-summary-text">' + h(m.summary || (board.title + '의 실제 상품 구성과 이용 안내입니다.')) + '</span>' +
+          '<span class="manual-toggle">펼치기</span>' +
+        '</summary>' +
+        '<div class="manual-body">' +
+          '<div class="manual-head">' +
+            '<div><h2>상품 설명서 · 안내</h2>' +
+            '<p class="manual-summary">' + h(m.summary || (board.title + '의 실제 상품 구성과 이용 안내입니다.')) + '</p></div>' +
+            '<div class="manual-stamp"><span>OFFICIAL LINEUP</span><b>' + h((specs.filter(function (s) { return s.k === '세트 구성'; })[0] || {}).v || '실물 상품') + '</b></div>' +
+          '</div>' +
+          '<div class="manual-grid">' +
+            '<dl class="manual-specs">' + (specs.length ? specs.map(function (s) {
+              return '<div><dt>' + h(s.k) + '</dt><dd>' + h(s.v) + '</dd></div>';
+            }).join('') : '<div><dt>시리즈</dt><dd>' + h(board.category) + '</dd></div><div><dt>판매</dt><dd>1장 ' + won(board.price) + ' · 총 ' + fmt(board.tickets) + '장</dd></div>') + '</dl>' +
+            (lineup.length ? '<div class="manual-lineup"><h3>실제 라인업</h3><ul>' + lineup.map(function (line) {
+              return '<li>' + h(line) + '</li>';
+            }).join('') + '</ul></div>' : '') +
+          '</div>' +
+          '<div class="manual-notes"><h3>이용 안내 · 유의사항</h3><ul>' + allNotes.map(function (n) {
+            return '<li>' + h(n) + '</li>';
+          }).join('') + '</ul></div>' +
+        '</div>' +
+      '</details>';
   }
 
   function showTierZoom(grade) {
@@ -3667,7 +3741,7 @@
           break;
         }
         case 'scroll-grid': {
-          if (ui.boardTab !== 'grid') { ui.boardTab = 'grid'; renderBoard(); }
+          if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
           var grid = $('#ticketGrid');
           if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
           break;

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>쿠지킹 KUJIKING — 한 장에 설레는 순간</title>
-<meta name="description" content="쿠지킹 공식 쿠지 스토어. 드래곤볼·헌터×헌터·죠죠·약사의 혼잣말 등 실제 이치방쿠지 상품을 20장 판으로. 남은 번호와 상품 이미지·설명서를 확인하고 쿠폰이나 교환 코드로 뽑아보세요.">
+<meta name="description" content="쿠지킹 공식 쿠지 스토어. 드래곤볼·헌터×헌터·죠죠·약사의 혼잣말 등 실제 이치방쿠지 상품을 상품 종류×20장 판으로. 남은 번호와 상품 이미지·설명서를 확인하고 쿠폰이나 교환 코드로 뽑아보세요.">
 <meta name="theme-color" content="#FFD51E">
 <meta property="og:type" content="website">
 <meta property="og:title" content="쿠지킹 KUJIKING — 한 장에 설레는 순간">
@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="assets/styles.css?v=2.2.3">
+<link rel="stylesheet" href="assets/styles.css?v=3.0.0">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -222,26 +222,30 @@
       <a class="back-link" href="#/">← 모든 판 보기</a>
       <div class="board-hero card" id="boardHero"></div>
       <div class="board-tabs" role="tablist" id="boardTabs">
-        <button class="board-tab active" data-board-tab="grid" role="tab">뽑기판</button>
+        <button class="board-tab active" data-board-tab="main" role="tab">상품 구성 &amp; 뽑기판</button>
         <button class="board-tab" data-board-tab="sales" role="tab">실제 판매 내역 <span class="tab-count" id="salesCount">0</span></button>
-        <button class="board-tab" data-board-tab="prizes" role="tab">상품 구성</button>
       </div>
       <div class="board-layout">
         <div class="board-main">
-          <div class="board-toolbar card" data-board-panel="grid">
-            <div class="toolbar-info">
-              <span class="live-dot" aria-hidden="true"></span>
-              <strong>실시간 뽑기판</strong>
-              <span class="muted" id="gridSummary">80장 중 80장 남음</span>
+          <div class="board-merged" data-board-panel="main">
+            <div class="card prizes-card" id="prizesPanel"></div>
+            <div class="card manual-card manual-fold" id="boardManual"></div>
+            <div class="board-toolbar card">
+              <div class="toolbar-info">
+                <span class="step-no">2</span>
+                <span class="live-dot" aria-hidden="true"></span>
+                <strong>뽑기판</strong>
+                <span class="muted" id="gridSummary">200장 중 200장 남음</span>
+              </div>
+              <div class="legend">
+                <span class="legend-item"><i class="swatch swatch-open"></i>선택 가능</span>
+                <span class="legend-item"><i class="swatch swatch-done"></i>판매 완료</span>
+              </div>
             </div>
-            <div class="legend">
-              <span class="legend-item"><i class="swatch swatch-open"></i>선택 가능</span>
-              <span class="legend-item"><i class="swatch swatch-done"></i>판매 완료</span>
-            </div>
+            <div class="ticket-grid" id="ticketGrid" role="group" aria-label="번호 선택"></div>
+            <div class="card notice-card" id="boardNotice"></div>
           </div>
-          <div class="ticket-grid" id="ticketGrid" data-board-panel="grid" role="group" aria-label="번호 선택"></div>
           <div class="card sales-card" id="salesPanel" data-board-panel="sales" hidden></div>
-          <div class="card prizes-card" id="prizesPanel" data-board-panel="prizes" hidden></div>
         </div>
         <aside class="board-aside">
           <div class="card aside-card" id="couponCard"></div>
@@ -257,8 +261,6 @@
           </div>
         </aside>
       </div>
-      <div class="card manual-card" id="boardManual"></div>
-      <div class="card notice-card" id="boardNotice"></div>
     </div>
   </section>
 
@@ -745,7 +747,7 @@
   </div>
 </div>
 
-<script src="assets/config.js?v=2.2.3"></script>
-<script src="assets/app.js?v=2.2.3" defer></script>
+<script src="assets/config.js?v=3.0.0"></script>
+<script src="assets/app.js?v=3.0.0" defer></script>
 </body>
 </html>

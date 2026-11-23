@@ -51,7 +51,7 @@ create table if not exists public.boards (
   category       text not null default '자체 스페셜',
   cover          text,                              -- 커버 이미지 경로/URL (비우면 카테고리 색상 커버)
   price          integer not null check (price > 0),
-  ticket_count   integer not null check (ticket_count between 1 and 300),
+  ticket_count   integer not null check (ticket_count between 1 and 500),   -- 최대 500장 (등급 25종 × 20장)
   tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly,image,desc}]
   last_one_label text,
   last_one_image text,                              -- 라스트원 이미지 경로
@@ -79,6 +79,9 @@ alter table public.boards add column if not exists cover text;
 alter table public.boards add column if not exists last_one_image text;
 alter table public.boards add column if not exists last_one_desc text;
 alter table public.boards add column if not exists manual jsonb;
+-- 기존 DB의 300장 제약을 500장으로 갱신 (등급 12종 × 20장 = 240장까지 운용)
+alter table public.boards drop constraint if exists boards_ticket_count_check;
+alter table public.boards add constraint boards_ticket_count_check check (ticket_count between 1 and 500);
 create index if not exists tickets_board_idx on public.tickets (board_id, status);
 
 create table if not exists public.exchange_codes (
@@ -755,8 +758,8 @@ declare
 begin
   if not public.is_admin() then raise exception '관리자만 사용할 수 있습니다.'; end if;
   if coalesce(p_title, '') = '' then raise exception '판 제목을 입력해 주세요.'; end if;
-  if p_ticket_count is null or p_ticket_count < 1 or p_ticket_count > 300 then
-    raise exception '전체 장수는 1~300장 사이입니다.';
+  if p_ticket_count is null or p_ticket_count < 1 or p_ticket_count > 500 then
+    raise exception '전체 장수는 1~500장 사이입니다.';
   end if;
 
   select coalesce(sum((t.tier->>'count')::int), 0) into v_sum
