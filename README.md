@@ -94,7 +94,9 @@ v1(`kujiking.state.v1`) 데이터가 있으면 판과 코드만 자동으로 옮
 2. **SQL Editor** 에 `supabase/schema.sql` 전체를 붙여넣고 **Run** 합니다.
    - 테이블: `profiles` `boards` `tickets` `exchange_codes` `coupons` `draws` `purchase_claims` `deliveries` `app_settings`
    - RLS 정책, `draw_ticket()` (동시 뽑기 방지), `admin_grant_coupons()`, `admin_decide_claim()`, `request_delivery()`, `convert_to_points()`, `admin_ship_delivery()`, `admin_create_board()`, `admin_members()`
-3. **Authentication → Providers → Email** 을 켭니다. (테스트 중에는 Confirm email 을 꺼 두면 가입 즉시 로그인)
+3. **Authentication → Sign In / Providers → Email** 을 켭니다.
+   - **Confirm email 을 끄면** 가입 즉시 로그인되어 바로 뽑기까지 이어집니다(권장: 오픈 초기).
+   - 켜 두면 가입 후 인증 메일을 눌러야 로그인되므로, 구매 전환률이 떨어집니다.
 4. **Project Settings → API** 의 `Project URL` 과 `anon public` 키를 `assets/config.js` 에 넣습니다.
 
    ```js
@@ -104,7 +106,13 @@ v1(`kujiking.state.v1`) 데이터가 있으면 판과 코드만 자동으로 옮
      FORCE_DEMO: false
    };
    ```
-5. 회원가입 후 **SQL Editor** 에서 첫 관리자를 지정합니다.
+5. 실서비스에서는 체험용 무료 코드를 지웁니다. (남아 있으면 로그인한 누구나 무료로 뽑을 수 있습니다)
+
+   ```sql
+   delete from public.app_settings where key = 'demo_code';
+   ```
+
+6. 회원가입 후 **SQL Editor** 에서 첫 관리자를 지정합니다.
 
    ```sql
    update public.profiles set is_admin = true where email = '내 이메일';
@@ -145,4 +153,6 @@ git add -A && git commit -m "쿠지킹 v2" && git push origin main
 - 사업자 정보·통신판매업 신고번호를 푸터에 채워 주세요.
 - 청약철회 제한·확률 공시 문구는 판매 전 최종 검토가 필요합니다 (공정성 검증 페이지 하단).
 - 실제 판매에서는 관리자 PIN을 바꾸고, Supabase `profiles.is_admin` 을 본인 계정에만 부여하세요.
+- `delete from public.app_settings where key = 'demo_code';` 로 체험 코드를 지우세요.
+- Authentication 의 **Confirm email** 을 끄거나, 켜 둘 경우 메일 인증 안내를 구매 흐름에 넣으세요.
 - 개인정보(연락처·주소)는 구매확인·배송 목적으로만 사용하고, 판매 내역에는 마스킹된 닉네임만 노출됩니다.
