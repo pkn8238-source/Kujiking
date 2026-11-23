@@ -2793,11 +2793,15 @@
           var p = el.play();
           if (p && p.then) {
             p.then(function () {
-              /* 프라임 도중에 실제 효과음이 시작됐다면 그 소리를 끊지 않는다 */
-              try { if (playSeq === seqAtStart) { el.pause(); el.currentTime = 0; } el.muted = false; } catch (e) {}
+              /* 프라임 도중에 실제 효과음이 시작됐다면 그 소리를 끊지 않는다.
+                 그 경우 이 요소는 무음인 채로 끝까지 흐르게 두고(들리지 않음),
+                 다음 재생 직전에 elPlay 가 muted 를 풀어 준다. */
+              try {
+                if (playSeq === seqAtStart) { el.pause(); el.currentTime = 0; el.muted = false; }
+              } catch (e) {}
               htmlOk[el.__key] = true; okCount++; settle();
             }, function () {
-              try { el.muted = false; } catch (e) {}
+              try { if (playSeq === seqAtStart) el.muted = false; } catch (e) {}
               htmlOk[el.__key] = false; settle();
             });
           } else {
