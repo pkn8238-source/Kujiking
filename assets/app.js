@@ -2029,8 +2029,7 @@
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
         (board.cover
           ? '<img class="cover-img" src="' + h(coverSrc(board.cover)) + '" alt="' + h(board.category + ' 상품 이미지') + '">' +
-            '<span class="cover-scrim" aria-hidden="true"></span>' +
-            '<span class="cover-mini">KUJIKING KUJI · ' + h(board.category) + '</span>'
+            '<span class="cover-scrim" aria-hidden="true"></span>'
           : '<span class="cover-kicker">KUJIKING KUJI</span>' +
             '<strong class="cover-title">' + h(board.category) + '</strong>' +
             '<span class="cover-sub">' + h(board.sub || '') + '</span>') +
