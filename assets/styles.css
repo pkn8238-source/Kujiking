@@ -1423,3 +1423,156 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 
 /* 서버(실시간) 모드에서는 체험용 UI를 숨깁니다 */
 body.is-live .demo-only{display:none !important}
+/* =========================================================
+   v2.2 — 실물 상품(시바마루야) 등급 카드 · 상품 설명서
+   ========================================================= */
+
+/* ---------- 카테고리 커버 컬러 ---------- */
+.cat-dragonball{background:radial-gradient(circle at 78% 16%,rgba(255,255,255,.55),transparent 44%),linear-gradient(150deg,#ff9a3c,#f2691c 58%,#c9300f)}
+.cat-dragonball .cover-title,.cat-dragonball .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.35)}
+.cat-hunter{background:radial-gradient(circle at 20% 18%,rgba(255,255,255,.7),transparent 42%),linear-gradient(150deg,#7fd8a8,#2fa36f 58%,#12653f)}
+.cat-hunter .cover-title,.cat-hunter .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.3)}
+.cat-jojo{background:radial-gradient(circle at 82% 15%,rgba(255,255,255,.55),transparent 44%),linear-gradient(150deg,#b57ce0,#7d43b8 58%,#3f1f68)}
+.cat-jojo .cover-title,.cat-jojo .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.35)}
+.cat-apothecary{background:radial-gradient(circle at 22% 20%,rgba(255,255,255,.75),transparent 42%),linear-gradient(150deg,#f5b6c1,#dd7d92 58%,#9d3f57)}
+.cat-apothecary .cover-title,.cat-apothecary .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.3)}
+
+/* ---------- 등급 썸네일 ---------- */
+.tier-thumb{
+  display:grid;place-items:center;width:54px;height:54px;border-radius:13px;overflow:hidden;
+  border:2px solid var(--line-strong);background:#fff;flex:none;
+}
+.tier-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.tier-thumb.sm{width:48px;height:48px;border-radius:11px}
+.tier-thumb.is-empty b{font-size:15px;font-weight:900}
+.grade-dot{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:6px;vertical-align:1px}
+
+/* ---------- 라스트원 (버튼형) ---------- */
+.lastone-card{
+  margin-top:12px;padding:12px 13px;border-radius:14px;border:2px solid var(--ink);
+  background:linear-gradient(120deg,var(--ink),#2b2118);color:#fff;
+  display:flex;align-items:center;gap:12px;width:100%;text-align:left;cursor:pointer;
+  transition:transform .16s ease;
+}
+.lastone-card:hover{transform:translateY(-2px)}
+.lastone-card img{width:58px;height:58px;border-radius:10px;object-fit:cover;background:#fff;flex:none}
+.lastone-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lastone-kicker{font-size:10px;letter-spacing:.16em;font-weight:900;color:var(--yellow)}
+.lastone-card b{font-size:13px;font-weight:800;line-height:1.4}
+.lastone-card small{font-size:11px;color:rgba(255,255,255,.7);font-weight:600}
+
+/* ---------- 상품 구성 갤러리 ---------- */
+.prizes-card{padding:22px 22px 24px}
+.prizes-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;margin-bottom:16px}
+.prizes-head h2{font-size:20px;font-weight:900;display:flex;gap:8px;align-items:baseline;margin:0}
+.prizes-head p{font-size:12.5px;margin-top:4px}
+.prizes-count{flex:none;font-size:11.5px;font-weight:900;background:var(--ink);color:var(--yellow);padding:6px 11px;border-radius:999px;letter-spacing:.02em}
+.prize-gallery{display:grid;grid-template-columns:repeat(auto-fill,minmax(196px,1fr));gap:16px}
+.prize-card{
+  display:flex;flex-direction:column;padding:0;border:2px solid var(--line-strong);border-radius:18px;
+  background:var(--paper);overflow:hidden;text-align:left;cursor:pointer;color:inherit;
+  box-shadow:0 4px 14px rgba(23,18,14,.06);transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.prize-card:hover{transform:translateY(-3px);box-shadow:0 10px 22px rgba(23,18,14,.12);border-color:var(--ink)}
+.prize-media{position:relative;display:block;aspect-ratio:1/1;background:#fff;overflow:hidden}
+.prize-media img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s ease}
+.prize-card:hover .prize-media img{transform:scale(1.03)}
+.prize-media-empty{position:absolute;inset:0;display:grid;place-items:center;font-size:44px;font-weight:900;opacity:.35}
+.rank-badge{
+  position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:10px;
+  border:2px solid var(--ink);background:var(--grade-e);color:#fff;
+  font-size:12.5px;font-weight:900;letter-spacing:.02em;line-height:1.2;
+  box-shadow:0 2px 0 rgba(23,18,14,.3);
+}
+.rank-badge.lg{top:12px;left:12px;padding:7px 13px;font-size:14px;border-radius:12px}
+.rank-badge.grade-a{background:var(--grade-a)}
+.rank-badge.grade-b{background:var(--grade-b)}
+.rank-badge.grade-c{background:var(--grade-c);color:#4a3600}
+.rank-badge.grade-d{background:var(--grade-d)}
+.rank-badge.grade-e{background:var(--grade-e)}
+.rank-badge.grade-last{background:var(--ink);color:var(--yellow);font-size:10.5px;letter-spacing:.1em;border-color:var(--yellow)}
+.rank-badge.grade-last.lg{font-size:12px}
+.prize-out{position:absolute;inset:0;display:grid;place-items:center;background:rgba(23,18,14,.55);color:#fff;font-weight:900;font-size:15px;letter-spacing:.06em}
+.prize-body{display:flex;flex-direction:column;gap:5px;padding:12px 14px 14px}
+.prize-name{font-size:14px;font-weight:900;line-height:1.35;letter-spacing:-.01em}
+.prize-desc{font-size:11.5px;font-weight:600;color:var(--muted);line-height:1.5}
+.prize-meta{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+.prize-meta span{font-size:10.5px;font-weight:800;color:var(--ink-soft);background:var(--cream);border-radius:6px;padding:2px 7px}
+.prize-last .prize-media{background:linear-gradient(120deg,#241d15,#3b2f21)}
+.prize-last{border-color:var(--ink)}
+.prize-table-wrap{margin-top:18px;padding-top:16px;border-top:1px dashed var(--line-strong)}
+
+/* ---------- 상품 설명서 ---------- */
+.manual-card{margin-top:20px;padding:24px 26px 22px;background:var(--paper);border:2px solid var(--line-strong)}
+.manual-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;padding-bottom:16px;border-bottom:2px solid var(--ink)}
+.manual-kicker{display:inline-block;font-size:10.5px;font-weight:900;letter-spacing:.18em;color:var(--red);margin-bottom:4px}
+.manual-head h2{font-size:22px;font-weight:900;letter-spacing:-.03em;margin:0}
+.manual-summary{margin-top:7px;font-size:13.5px;color:var(--ink-soft);line-height:1.65;max-width:72ch}
+.manual-stamp{flex:none;border:2px solid var(--ink);border-radius:12px;background:var(--cream);padding:8px 12px;text-align:center;box-shadow:0 3px 0 rgba(23,18,14,.15)}
+.manual-stamp span{display:block;font-size:9px;font-weight:900;letter-spacing:.14em;color:var(--muted)}
+.manual-stamp b{display:block;font-size:12px;font-weight:900;margin-top:2px}
+.manual-grid{display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,1fr);gap:26px;padding:18px 0 6px}
+.manual-specs{margin:0;display:flex;flex-direction:column}
+.manual-specs>div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;padding:7px 0;border-bottom:1px dashed var(--line)}
+.manual-specs dt{font-size:12px;font-weight:800;color:var(--muted)}
+.manual-specs dd{margin:0;font-size:13px;font-weight:700;color:var(--ink)}
+.manual-lineup h3,.manual-notes h3{font-size:13px;font-weight:900;margin-bottom:8px}
+.manual-lineup ul{display:flex;flex-direction:column;gap:5px;max-height:280px;overflow:auto;padding-right:6px}
+.manual-lineup li{position:relative;padding-left:12px;font-size:12px;font-weight:600;color:var(--ink-soft);line-height:1.5}
+.manual-lineup li::before{content:"";position:absolute;left:0;top:.6em;width:5px;height:5px;border-radius:2px;background:var(--yellow-deep)}
+.manual-notes{margin-top:14px;background:var(--cream);border:2px solid var(--line-strong);border-radius:14px;padding:14px 18px}
+.manual-notes li{position:relative;padding-left:14px;font-size:12.5px;color:var(--ink-soft);line-height:1.6}
+.manual-notes li+li{margin-top:5px}
+.manual-notes li::before{content:"";position:absolute;left:0;top:.65em;width:5px;height:5px;border-radius:50%;background:var(--red)}
+
+/* ---------- 당첨 결과 · 확대 보기 이미지 ---------- */
+.result-media{position:relative;width:min(240px,64vw);margin:0 auto 14px;border-radius:20px;overflow:hidden;border:var(--stroke) solid var(--ink);background:#fff;box-shadow:0 6px 0 rgba(23,18,14,.18)}
+.result-media img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
+.result-media .rank-badge{border-radius:12px}
+.result-desc{margin-top:2px;font-size:12.5px;color:var(--muted);font-weight:600}
+.result-lastone{display:flex;gap:12px;align-items:center}
+.result-lastone img{width:62px;height:62px;border-radius:10px;object-fit:cover;background:#fff;flex:none}
+.result-lastone-body{display:flex;flex-direction:column;gap:2px;min-width:0;text-align:left}
+.result-lastone small{font-size:11px;color:rgba(255,255,255,.72);font-weight:600}
+.zoom-view{padding:4px 2px 0}
+.zoom-media{position:relative;width:min(420px,100%);margin:0 auto 14px;border-radius:22px;overflow:hidden;border:var(--stroke) solid var(--ink);background:#fff;box-shadow:0 6px 0 rgba(23,18,14,.16)}
+.zoom-media img{display:block;width:100%;aspect-ratio:1/1;object-fit:cover}
+.zoom-empty{display:grid;place-items:center;aspect-ratio:1/1;font-size:13px;color:var(--muted);font-weight:700}
+.zoom-title{font-size:20px;font-weight:900;text-align:center;letter-spacing:-.02em}
+.zoom-desc{margin-top:6px;text-align:center;font-size:13px;color:var(--muted);font-weight:600}
+.zoom-meta{margin-top:8px;text-align:center;font-size:12px;font-weight:800;color:var(--ink-soft)}
+
+/* ---------- 관리자 등급 편집 ---------- */
+.tier-row{display:block;padding:9px 8px 11px}
+.tier-main{display:grid;grid-template-columns:46px minmax(0,1fr) 48px 58px 46px 22px;gap:6px;align-items:center}
+.tier-extra{display:grid;grid-template-columns:46px minmax(0,1.1fr) minmax(0,1.3fr);gap:8px;align-items:center;margin-top:6px;padding-left:2px}
+.tier-extra input{min-height:34px}
+.tier-thumb-prev{width:42px;height:42px;border-radius:10px;border:2px solid var(--line);background:#fff;overflow:hidden;display:grid;place-items:center}
+.tier-thumb-prev img{width:100%;height:100%;object-fit:cover}
+.manual-editor{margin-top:16px;border:2px solid var(--line-strong);border-radius:14px;background:#fffdf6;padding:14px;display:flex;flex-direction:column;gap:10px}
+.manual-editor-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.manual-editor-head span{font-size:13px;font-weight:900}
+.manual-editor-head small{font-size:11px;color:var(--muted);font-weight:600}
+.field textarea{width:100%;padding:9px 12px;border:2px solid var(--line-strong);border-radius:10px;background:#fff;font-family:inherit;font-size:13px;line-height:1.55;resize:vertical;min-height:64px;color:var(--ink)}
+.field textarea:focus{outline:3px solid var(--yellow);outline-offset:1px}
+
+@media (max-width:760px){
+  .prize-gallery{grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+  .prizes-card{padding:16px 14px 18px}
+  .prizes-head{flex-direction:column;gap:8px}
+  .prize-name{font-size:12.5px}
+  .prize-desc{font-size:11px}
+  .prize-body{padding:10px 11px 12px}
+  .rank-badge{font-size:11px;padding:4px 8px;top:8px;left:8px}
+  .manual-card{padding:18px 16px}
+  .manual-head{flex-direction:column;gap:10px}
+  .manual-head h2{font-size:19px}
+  .manual-grid{grid-template-columns:1fr;gap:16px}
+  .manual-stamp{align-self:flex-start}
+  .tier-main{grid-template-columns:44px minmax(0,1fr) 44px 52px 40px 20px;gap:4px}
+  .tier-extra{grid-template-columns:40px minmax(0,1fr)}
+  .tier-extra input[name="desc"]{grid-column:1/-1}
+  .manual-editor{padding:11px}
+  .result-media{width:min(210px,62vw)}
+  .lastone-card img{width:50px;height:50px}
+}

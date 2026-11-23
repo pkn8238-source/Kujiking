@@ -15,10 +15,10 @@
   var SESSION_KEY = 'kujiking.session.v2';
   var ADMIN_KEY = 'kujiking.admin.session.v2';
   var APP_TAG = 'kujiking';
-  var STATE_VERSION = 2;
+  var STATE_VERSION = 3;
   var MAX_TICKETS = 300;
 
-  var CATEGORIES = ['원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
+  var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
   var PRICE_BANDS = [
     { id: 'all', label: '전체 금액' },
     { id: 'under', label: '1만 원 이하' },
@@ -279,7 +279,8 @@
     return { under: '1만 원 이하', mid: '1만 원대', premium: '프리미엄' }[priceBand(p)];
   }
   function categoryClass(cat) {
-    return { '원피스': 'cat-onepiece', '귀멸의 칼날': 'cat-kimetsu', '산리오': 'cat-sanrio', '치이카와': 'cat-chiikawa' }[cat] || 'cat-special';
+    return { '원피스': 'cat-onepiece', '귀멸의 칼날': 'cat-kimetsu', '산리오': 'cat-sanrio', '치이카와': 'cat-chiikawa',
+      '드래곤볼': 'cat-dragonball', '헌터×헌터': 'cat-hunter', '죠죠의 기묘한 모험': 'cat-jojo', '약사의 혼잣말': 'cat-apothecary' }[cat] || 'cat-special';
   }
   function errMsg(e) {
     if (!e) return '문제가 생겼어요. 잠시 후 다시 시도해 주세요.';
@@ -353,68 +354,247 @@
 
   var SEED_SPECS = [
     {
-      id: 'b-onepiece',
-      title: '[원피스] 루피 기어5 피규어 쿠지',
-      category: '원피스',
-      cover: 'assets/board_onepiece.jpg',
+      id: 'b-dragonball-saiyan',
+      title: '[드래곤볼] SPIRIT OF THE SAIYAN 쿠지',
+      category: '드래곤볼',
+      cover: 'assets/products/dragonball-saiyan/cover.jpg',
       price: 12000,
-      tickets: 80,
-      sold: 26,
-      kicker: 'GEAR 5',
-      sub: '몽키 D. 루피 · 기어5',
+      tickets: 20,
+      sold: 7,
+      kicker: 'SAIYAN',
+      sub: '손오공 · 초사이어인 손오반 · 라디츠',
       tiers: [
-        { grade: 'A', label: '루피 기어5 대형 피규어', count: 2, points: 20000 },
-        { grade: 'B', label: '루피 · 조로 피규어', count: 4, points: 8000 },
-        { grade: 'C', label: '아크릴 스탠드', count: 10, points: 3000 },
-        { grade: 'D', label: '캔배지 3종 세트', count: 24, points: 1200 },
-        { grade: 'E', label: '굿즈 포인트 3,000P', count: 40, points: 3000, pointOnly: true }
+        { grade: 'A', label: '손오공 MASTERLISE', count: 1, points: 35000,
+          image: 'assets/products/dragonball-saiyan/tier_a.jpg',
+          desc: '약 20cm · 카메하메하 포즈의 MASTERLISE 피규어' },
+        { grade: 'B', label: '초사이어인 손오반 MASTERLISE', count: 2, points: 20000,
+          image: 'assets/products/dragonball-saiyan/tier_b.jpg',
+          desc: '약 19cm · 아버지와 같은 카메하메하 포즈' },
+        { grade: 'C', label: '손오천 MASTERLISE', count: 2, points: 14000,
+          image: 'assets/products/dragonball-saiyan/tier_c.jpg',
+          desc: '약 13cm · 어린 손오천의 경쾌한 포즈' },
+        { grade: 'D', label: '바닥 & 라디츠 MASTERLISE', count: 5, points: 12000,
+          image: 'assets/products/dragonball-saiyan/tier_d.jpg',
+          desc: '2종 중 1종 · 약 25cm · 바닥 또는 라디츠 랜덤' },
+        { grade: 'E', label: 'F~J상 소품 어소트', count: 10, points: 5000,
+          image: 'assets/products/dragonball-saiyan/tier_e.jpg',
+          desc: '마그넷·파우치·아크릴 스탠드·고무 스트랩·타월 중 1종' }
       ],
-      lastOneLabel: '라스트원상 · 메탈릭 루피 피규어'
+      lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
+      lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
+      lastOneDesc: '약 21cm · 근두운에 오른 부자(父子) 피규어',
+      manual: {
+        summary: '손오공 일가의 카메하메하 장면을 MASTERLISE로 입체화한 이치방쿠지입니다. A~E상은 대형 피규어, F~J상은 마그넷·파우치·아크릴·고무·타월 소품으로 구성됩니다.',
+        specs: [
+          { k: '시리즈', v: '드래곤볼 Z' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.10.17' },
+          { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~J상 + 라스트원상 · 총 11종' },
+          { k: '주요 크기', v: 'MASTERLISE 약 13~25cm' }
+        ],
+        lineup: [
+          'A상 손오공 MASTERLISE (약 20cm)',
+          'B상 초사이어인 손오반 MASTERLISE (약 19cm)',
+          'C상 손오천 MASTERLISE (약 13cm)',
+          'D상 바닥 MASTERLISE (약 25cm)',
+          'E상 라디츠 MASTERLISE (약 25cm)',
+          'F상 피규어 마그넷 (약 5cm / 전 3종)',
+          'G상 파우치 (약 13cm / 전 7종)',
+          'H상 아크릴 스탠드 (약 7~10cm / 전 9종)',
+          'I상 고무 어소트 (약 5.5~6.5cm / 전 7종)',
+          'J상 다이컷 타월 (약 24cm / 전 9종)',
+          '라스트원상 손오공&손오반 MASTERLISE PLUS (약 21cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~J상 11종을 20장으로 재구성했습니다. D상은 바닥·라디츠 2종, E상은 F~J상 소품 5종 중 1종이 랜덤으로 지급됩니다.',
+          '피규어는 공장 조립·도색 상태에 따라 개체 차이가 있을 수 있습니다.'
+        ]
+      }
     },
     {
-      id: 'b-sanrio',
-      title: '[산리오] 마이멜로디 & 쿠로미 스위트 쿠지',
-      category: '산리오',
-      cover: 'assets/board_sanrio.jpg',
-      price: 9900,
-      tickets: 70,
-      sold: 33,
-      kicker: 'SWEET',
-      sub: '마이멜로디 · 쿠로미',
+      id: 'b-hunter-chimera',
+      title: '[헌터×헌터] 키메라 앤트 ② 쿠지',
+      category: '헌터×헌터',
+      cover: 'assets/products/hunter-chimera-ant/cover.jpg',
+      price: 12000,
+      tickets: 20,
+      sold: 11,
+      kicker: 'CHIMERA ANT',
+      sub: '메르엠 · 네테로 · 곤',
       tiers: [
-        { grade: 'A', label: '마이멜로디 봉제인형', count: 2, points: 15000 },
-        { grade: 'B', label: '쿠로미 쿠션', count: 4, points: 6000 },
-        { grade: 'C', label: '아크릴 키링', count: 8, points: 2500 },
-        { grade: 'D', label: '스티커 세트', count: 16, points: 1000 },
-        { grade: 'E', label: '굿즈 포인트 2,000P', count: 40, points: 2000, pointOnly: true }
+        { grade: 'A', label: '메르엠 MASTERLISE', count: 1, points: 40000,
+          image: 'assets/products/hunter-chimera-ant/tier_a.jpg',
+          desc: '약 23cm · 개미의 왕, 압도적인 조형' },
+        { grade: 'B', label: '네테로 MASTERLISE', count: 2, points: 22000,
+          image: 'assets/products/hunter-chimera-ant/tier_b.jpg',
+          desc: '약 22cm · 감사의 정권찌르기 장면' },
+        { grade: 'C', label: '곤 MASTERLISE', count: 2, points: 14000,
+          image: 'assets/products/hunter-chimera-ant/tier_c.jpg',
+          desc: '약 10cm · 네페르피토와 대치한 순간' },
+        { grade: 'D', label: '키르아 · 네페르피토 · 샤우아푸프/유피', count: 5, points: 14000,
+          image: 'assets/products/hunter-chimera-ant/tier_d.jpg',
+          desc: '3종 중 1종 · 약 6~24cm 랜덤' },
+        { grade: 'E', label: 'G~I상 굿즈 어소트', count: 10, points: 5000,
+          image: 'assets/products/hunter-chimera-ant/tier_e.jpg',
+          desc: '고무 컬렉션·문구·폰탭/스트랩/스티커 중 1종' }
       ],
-      lastOneLabel: '라스트원상 · 마이멜로디 대형 인형'
+      lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
+      lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
+      lastOneDesc: '약 100cm · 성장한 곤의 초대형 피규어',
+      manual: {
+        summary: '키메라 앤트 편을 테마로 한 재판매 세트입니다. A~F상이 전부 MASTERLISE 피규어이고, 라스트원상은 약 1m 크기의 성장한 곤입니다.',
+        specs: [
+          { k: '시리즈', v: '헌터×헌터 키메라 앤트 편' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.11.14 (재판)' },
+          { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~I상 + 라스트원상 · 총 10종' },
+          { k: '주요 크기', v: 'MASTERLISE 약 6~24cm · 라스트원 약 100cm' }
+        ],
+        lineup: [
+          'A상 메르엠 MASTERLISE (약 23cm)',
+          'B상 네테로 MASTERLISE (약 22cm)',
+          'C상 곤 MASTERLISE (약 10cm)',
+          'D상 키르아 MASTERLISE (약 21cm)',
+          'E상 네페르피토 MASTERLISE (약 24cm)',
+          'F상 샤우아푸프/몬투투유피 MASTERLISE (약 6~7cm / 전 2종)',
+          'G상 고무 컬렉션 (약 8~19cm / 전 10종)',
+          'H상 문구 어소트 (A4 클리어파일·A6 노트 / 전 10종)',
+          'I상 폰탭·넥스트랩·스티커 어소트 (약 5~47cm / 전 10종)',
+          '라스트원상 곤 ~성장ver.~ MASTERLISE EXTRA (약 100cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~I상 10종을 20장으로 재구성했습니다. D상은 키르아·네페르피토·샤우아푸프/유피 3종, E상은 G~I상 굿즈 3종 중 1종이 랜덤으로 지급됩니다.',
+          '라스트원상은 약 100cm 대형 피규어로, 일반 상품과 별도 박스로 발송됩니다.'
+        ]
+      }
     },
     {
-      id: 'b-kimetsu',
-      title: '[귀멸의 칼날] 탄지로 히노카미 피규어 쿠지',
-      category: '귀멸의 칼날',
-      cover: 'assets/board_kimetsu.jpg',
-      price: 15000,
-      tickets: 60,
-      sold: 12,
-      kicker: 'HINOKAMI',
-      sub: '카마도 탄지로 · 히노카미 카구라',
+      id: 'b-jojo-rivals',
+      title: '[죠죠] The Gathering of RIVALS 쿠지',
+      category: '죠죠의 기묘한 모험',
+      cover: 'assets/products/jojo-rivals/cover.jpg',
+      price: 13000,
+      tickets: 20,
+      sold: 4,
+      kicker: 'RIVALS',
+      sub: '디오 브란도 · 카즈 · DIO',
       tiers: [
-        { grade: 'A', label: '탄지로 히노카미 피규어', count: 1, points: 30000 },
-        { grade: 'B', label: '네즈코 피규어', count: 3, points: 12000 },
-        { grade: 'C', label: '아크릴 스탠드', count: 6, points: 4000 },
-        { grade: 'D', label: '금속 키링', count: 10, points: 2000 },
-        { grade: 'E', label: '굿즈 포인트 5,000P', count: 40, points: 5000, pointOnly: true }
+        { grade: 'A', label: '디오 브란도 MASTERLISE PLUS', count: 1, points: 32000,
+          image: 'assets/products/jojo-rivals/tier_a.jpg',
+          desc: '약 18cm · 1부 팬텀 블러드의 디오' },
+        { grade: 'B', label: '카즈 MASTERLISE', count: 2, points: 24000,
+          image: 'assets/products/jojo-rivals/tier_b.jpg',
+          desc: '약 25cm · 2부 전투조류의 카즈' },
+        { grade: 'C', label: 'DIO MASTERLISE', count: 2, points: 24000,
+          image: 'assets/products/jojo-rivals/tier_c.jpg',
+          desc: '약 26cm · 3부 스타더스트 크루세이더스의 DIO' },
+        { grade: 'D', label: '카와지리 · 디아볼로 · 엔리코 P', count: 5, points: 18000,
+          image: 'assets/products/jojo-rivals/tier_d.jpg',
+          desc: '3종 중 1종 · 약 22~25cm 랜덤' },
+        { grade: 'E', label: 'G~L상 굿즈 어소트', count: 10, points: 5000,
+          image: 'assets/products/jojo-rivals/tier_e.jpg',
+          desc: '스탠드의 화살·로고 피규어·참·고무·포스터·스티커 중 1종' }
       ],
-      lastOneLabel: '라스트원상 · 탄지로 메가 피규어'
+      lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
+      lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
+      lastOneDesc: '약 15cm · 7부 스틸 볼 런의 디에고',
+      manual: {
+        summary: '시리즈 역대 숙적들이 MASTERLISE로 모인 세트입니다. A~F상은 18~26cm 피규어, G상은 스탠드의 화살, H~L상은 로고 피규어·참·고무·포스터·스티커입니다.',
+        specs: [
+          { k: '시리즈', v: '죠죠의 기묘한 모험' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.11.21' },
+          { k: '일본 판매가', v: '1회 850엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~L상 + 라스트원상 · 총 13종' },
+          { k: '주요 크기', v: 'MASTERLISE 약 18~26cm' }
+        ],
+        lineup: [
+          'A상 디오 브란도 MASTERLISE PLUS (약 18cm)',
+          'B상 카즈 MASTERLISE (약 25cm)',
+          'C상 DIO MASTERLISE (약 26cm)',
+          'D상 카와지리 하지메 MASTERLISE (약 24cm)',
+          'E상 디아볼로 MASTERLISE (약 25cm)',
+          'F상 엔리코 P MASTERLISE (약 22cm)',
+          'G상 스탠드의 화살 MASTERELIVE COLLECTION (약 21cm)',
+          'H상 죠죠의 기묘한 모험 LOGO de Collection (약 9~10cm / 전 7종)',
+          'I상 미니어처 참 (약 2.5~4.5cm / 전 7종)',
+          'J상 고무 어소트 (약 4~12cm / 전 7종)',
+          'K상 클리어 포스터 (A3 / 전 8종)',
+          'L상 스티커 컬렉션 (약 6~14cm / 전 13종)',
+          '라스트원상 디에고 브란도 MASTERLISE (약 15cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~L상 13종을 20장으로 재구성했습니다. D상은 카와지리·디아볼로·엔리코 P 3종, E상은 G~L상 굿즈 6종 중 1종이 랜덤으로 지급됩니다.',
+          '클리어 포스터는 A3 크기로, 배송 시 접히지 않도록 원통 포장됩니다.'
+        ]
+      }
+    },
+    {
+      id: 'b-apothecary-secret',
+      title: '[약사의 혼잣말] 극장판 망비의 비보 쿠지',
+      category: '약사의 혼잣말',
+      cover: 'assets/products/apothecary-secret/cover.jpg',
+      price: 12000,
+      tickets: 20,
+      sold: 2,
+      kicker: 'THE MOVIE',
+      sub: '마오마오 · 진시',
+      tiers: [
+        { grade: 'A', label: '마오마오 Dioramiquemaster', count: 1, points: 30000,
+          image: 'assets/products/apothecary-secret/tier_a.jpg',
+          desc: '약 15cm · 극장판 의상의 디오라마 피규어' },
+        { grade: 'B', label: '진시 Dioramiquemaster', count: 2, points: 20000,
+          image: 'assets/products/apothecary-secret/tier_b.jpg',
+          desc: '약 16cm · 극장판 의상의 디오라마 피규어' },
+        { grade: 'C', label: '빅 아크릴 스탠드', count: 2, points: 9000,
+          image: 'assets/products/apothecary-secret/tier_c.jpg',
+          desc: '약 16cm · 마오마오 & 진시 일러스트' },
+        { grade: 'D', label: '키라라이즈 마스코트 · 메탈 참', count: 5, points: 7000,
+          image: 'assets/products/apothecary-secret/tier_d.jpg',
+          desc: '2종 중 1종 · 약 5~10cm 랜덤' },
+        { grade: 'E', label: 'F~H상 소품 어소트', count: 10, points: 4000,
+          image: 'assets/products/apothecary-secret/tier_e.jpg',
+          desc: '고무 컬렉션·아크릴 스탠드·미니 색지 중 1종' }
+      ],
+      lastOneLabel: '라스트원상 · 마오마오 피규어',
+      lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
+      lastOneDesc: '약 18cm · 꽃이 핀 받침대 위의 마오마오',
+      manual: {
+        summary: '극장판 약사의 혼잣말 첫 이치방쿠지입니다. 신브랜드 Dioramiquemaster의 마오마오·진시 피규어와 극장판 의상 일러스트 굿즈로 구성됩니다.',
+        specs: [
+          { k: '시리즈', v: '극장판 약사의 혼잣말' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.12.05' },
+          { k: '일본 판매가', v: '1회 800엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~H상 + 라스트원상 · 총 9종' },
+          { k: '주요 크기', v: 'Dioramiquemaster 약 15~16cm' }
+        ],
+        lineup: [
+          'A상 마오마오 Dioramiquemaster (약 15cm)',
+          'B상 진시 Dioramiquemaster (약 16cm)',
+          'C상 빅 아크릴 스탠드 (약 16cm)',
+          'D상 키라라이즈 마스코트 (약 10cm / 전 2종)',
+          'E상 메탈 참 (약 5cm / 전 5종)',
+          'F상 고무 컬렉션 (약 6~10cm / 전 5종)',
+          'G상 아크릴 스탠드 (약 6.5~8cm / 전 5종)',
+          'H상 미니 색지 (약 13cm / 전 5종)',
+          '라스트원상 마오마오 피규어 (약 18cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~H상 9종을 20장으로 재구성했습니다. D상은 키라라이즈 마스코트·메탈 참 2종, E상은 F~H상 소품 3종 중 1종이 랜덤으로 지급됩니다.',
+          '일본 발매가 2026년 12월 5일인 신작으로, 이 판은 입고분에 한해 순차 발송됩니다.'
+        ]
+      }
     }
   ];
 
   var COVER_PRESETS = [
-    { label: '원피스 피규어', url: 'assets/board_onepiece.jpg' },
-    { label: '귀멸의 칼날 피규어', url: 'assets/board_kimetsu.jpg' },
-    { label: '산리오 굿즈', url: 'assets/board_sanrio.jpg' }
+    { label: '드래곤볼 SPIRIT OF THE SAIYAN', url: 'assets/products/dragonball-saiyan/cover.jpg' },
+    { label: '헌터×헌터 키메라 앤트 ②', url: 'assets/products/hunter-chimera-ant/cover.jpg' },
+    { label: '죠죠 The Gathering of RIVALS', url: 'assets/products/jojo-rivals/cover.jpg' },
+    { label: '약사의 혼잣말 망비의 비보', url: 'assets/products/apothecary-secret/cover.jpg' }
   ];
 
   var SEED_BUYERS = ['박*남', '김**영', '이*우', '최*아', '정*호', '한*지', '윤*빈', '강*민', '오*서', '임**준', '서*진', '문*혁'];
@@ -423,8 +603,17 @@
     return (tiers || []).map(function (t) {
       var row = { grade: t.grade, label: t.label, count: Number(t.count) || 0, points: Number(t.points) || 0 };
       if (t.pointOnly) row.pointOnly = true;
+      if (t.image) row.image = String(t.image);
+      if (t.desc) row.desc = String(t.desc);
       return row;
     });
+  }
+  function manualOf(board) {
+    var m = board && board.manual;
+    return (m && typeof m === 'object') ? m : {};
+  }
+  function tierStructureKey(tiers) {
+    return (tiers || []).map(function (t) { return t.grade + ':' + Number(t.count || 0); }).join(',');
   }
   function tierOf(board, grade) {
     for (var i = 0; i < board.tiers.length; i++) if (board.tiers[i].grade === grade) return board.tiers[i];
@@ -509,6 +698,9 @@
         tickets: spec.tickets,
         tiers: spec.tiers,
         lastOneLabel: spec.lastOneLabel,
+        lastOneImage: spec.lastOneImage || '',
+        lastOneDesc: spec.lastOneDesc || '',
+        manual: spec.manual || null,
         kicker: spec.kicker,
         sub: spec.sub,
         cover: spec.cover || '',
@@ -794,6 +986,7 @@
           id: b.id, title: b.title, category: b.category || '자체 스페셜',
           price: b.price, tickets: b.ticket_count, tiers: tiers,
           lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
+          lastOneImage: b.last_one_image || '', lastOneDesc: b.last_one_desc || '', manual: b.manual || null,
           seed: b.seed, seedHash: b.seed_hash,
           createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
         };
@@ -1110,13 +1303,15 @@
         var hash = await sha256Hex(seed);
         var opens = existing ? existing.opens : [];
         var structureChanged = !existing || existing.tickets !== payload.tickets ||
-          JSON.stringify(normalizeTiers(existing.tiers)) !== JSON.stringify(tiersNorm) ||
+          tierStructureKey(existing.tiers) !== tierStructureKey(tiersNorm) ||
           (!!payload.seed && payload.seed !== existing.seed);
         if (existing && structureChanged) opens = [];
         var board = {
           id: existing ? existing.id : uid('board'),
           title: payload.title, category: payload.category, price: payload.price,
           tickets: payload.tickets, tiers: tiersNorm, lastOneLabel: payload.lastOneLabel,
+          lastOneImage: payload.lastOneImage || '', lastOneDesc: payload.lastOneDesc || '',
+          manual: payload.manual || null,
           cover: payload.cover || '',
           kicker: payload.kicker || (existing ? existing.kicker : ''),
           sub: payload.sub || (existing ? existing.sub : ''),
@@ -1141,7 +1336,9 @@
       if (payload.id) {
         var up = await this.sb.from('boards').update({
           title: payload.title, category: payload.category, price: payload.price,
-          last_one_label: payload.lastOneLabel, status: payload.status, cover: payload.cover || null
+          last_one_label: payload.lastOneLabel, status: payload.status, cover: payload.cover || null,
+          last_one_image: payload.lastOneImage || null, last_one_desc: payload.lastOneDesc || null,
+          manual: payload.manual || null
         }).eq('id', payload.id);
         if (up.error) throw up.error;
         await this.refreshData();
@@ -1151,7 +1348,9 @@
         p_title: payload.title, p_category: payload.category, p_price: payload.price,
         p_ticket_count: payload.tickets, p_tiers: payload.tiers,
         p_last_one_label: payload.lastOneLabel, p_seed: payload.seed || null, p_status: payload.status,
-        p_cover: payload.cover || null
+        p_cover: payload.cover || null,
+        p_last_one_image: payload.lastOneImage || null, p_last_one_desc: payload.lastOneDesc || null,
+        p_manual: payload.manual || null
       });
       if (res.error) throw res.error;
       await this.refreshData();
@@ -1743,6 +1942,7 @@
     renderTicketGrid(board);
     renderSalesPanel(board);
     renderPrizesPanel(board);
+    renderBoardManual(board);
     renderBoardNotice(board);
     $$('.board-tab').forEach(function (t) {
       t.classList.toggle('active', t.getAttribute('data-board-tab') === ui.boardTab);
@@ -1817,6 +2017,14 @@
           '<div class="aside-note">다른 판 전용 쿠폰은 해당 판에서만 쓸 수 있어요.</div>');
   }
 
+  function tierThumb(t, cls) {
+    if (!t || !t.image) {
+      return '<span class="' + (cls || 'tier-thumb') + ' is-empty" style="background:' + gradeColor(t ? t.grade : 'e') + '22">' +
+        '<b style="color:' + gradeColor(t ? t.grade : 'e') + '">' + h(t ? t.grade : '-') + '</b></span>';
+    }
+    return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(t.image) + '" alt="' + h(t.label || '') + '" loading="lazy" decoding="async"></span>';
+  }
+
   function renderBoardStatus(board) {
     var el = $('#boardStatus');
     if (!el) return;
@@ -1824,14 +2032,19 @@
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
       var left = Number(t.count) - sold;
       return '<div class="grade-row' + (left <= 0 ? ' is-out' : '') + '">' +
-        '<span class="grade-badge" style="background:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>' +
-        '<span class="grade-name"><b>' + h(t.label) + '</b><span>' + (t.pointOnly ? '굿즈 포인트 ' + fmt(t.points) + 'P' : '실물 상품 · 전환 ' + fmt(t.points) + 'P') + '</span></span>' +
+        tierThumb(t, 'tier-thumb sm') +
+        '<span class="grade-name"><b><i class="grade-dot" style="background:' + gradeColor(t.grade) + '"></i>' + h(t.grade) + '상 · ' + h(t.label) + '</b>' +
+        '<span>' + (t.pointOnly ? '굿즈 포인트 ' + fmt(t.points) + 'P' : h(t.desc || ('전환 ' + fmt(t.points) + 'P'))) + '</span></span>' +
         '<span class="grade-count">' + (left <= 0 ? '소진' : '<em>' + fmt(left) + '</em> / ' + fmt(t.count)) + '</span>' +
       '</div>';
     }).join('');
     el.innerHTML = '<h2>등급 현황 <span class="badge badge-live">실시간</span></h2>' +
       '<div class="grade-rows">' + rows + '</div>' +
-      '<div class="lastone-card"><span>LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b></div>';
+      '<button type="button" class="lastone-card" data-action="zoom-last">' +
+        (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="" loading="lazy">' : '') +
+        '<span class="lastone-body"><span class="lastone-kicker">LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
+        (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span>' +
+      '</button>';
   }
 
   function renderTicketGrid(board) {
@@ -1894,20 +2107,116 @@
   function renderPrizesPanel(board) {
     var el = $('#prizesPanel');
     if (!el) return;
-    el.innerHTML = '<h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
-      '<div class="table-scroll"><table class="data-table prob-table"><thead><tr><th>등급</th><th>상품</th><th>수량</th><th>확률</th><th>잔여</th></tr></thead><tbody>' +
-      board.tiers.map(function (t) {
-        var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
-        var pct = board.tickets ? (t.count / board.tickets * 100) : 0;
-        return '<tr>' +
-          '<td><span class="grade-badge" style="background:' + gradeColor(t.grade) + ';width:28px;height:28px;font-size:12px">' + h(t.grade) + '</span></td>' +
-          '<td>' + h(t.label) + (t.pointOnly ? ' <span class="muted">(포인트)</span>' : '') + '</td>' +
-          '<td class="num">' + fmt(t.count) + '개</td>' +
-          '<td class="num">' + pct.toFixed(1).replace(/\.0$/, '') + '%</td>' +
-          '<td class="num">' + fmt(Math.max(0, t.count - sold)) + '개</td>' +
-        '</tr>';
-      }).join('') + '</tbody></table></div>' +
-      '<div class="lastone-card"><span>LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b></div>';
+    var total = board.tickets || 1;
+    var cards = board.tiers.map(function (t) {
+      var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
+      var left = Math.max(0, Number(t.count) - sold);
+      var pct = (t.count / total * 100).toFixed(1).replace(/\.0$/, '');
+      return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
+          '<span class="prize-media">' +
+            (t.image ? '<img src="' + h(t.image) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
+                     : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>') +
+            '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>' +
+            (left === 0 ? '<span class="prize-out">소진</span>' : '') +
+          '</span>' +
+          '<span class="prize-body">' +
+            '<b class="prize-name">' + h(t.label) + '</b>' +
+            (t.desc ? '<span class="prize-desc">' + h(t.desc) + '</span>' : '') +
+            '<span class="prize-meta"><span>수령 ' + fmt(t.count) + '개</span><span>' + pct + '%</span><span>잔여 ' + fmt(left) + '</span></span>' +
+          '</span>' +
+        '</button>';
+    }).join('');
+
+    var lo = '<button type="button" class="prize-card prize-last" data-action="zoom-last">' +
+        '<span class="prize-media">' +
+          (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="' + h(board.lastOneLabel || '라스트원상') + '" loading="lazy" decoding="async">'
+                              : '<span class="prize-media-empty">★</span>') +
+          '<span class="rank-badge grade-last">LAST ONE</span>' +
+        '</span>' +
+        '<span class="prize-body">' +
+          '<b class="prize-name">' + h(board.lastOneLabel || '라스트원상') + '</b>' +
+          (board.lastOneDesc ? '<span class="prize-desc">' + h(board.lastOneDesc) + '</span>' : '') +
+          '<span class="prize-meta"><span>마지막 1장</span><span>별도 지급</span></span>' +
+        '</span>' +
+      '</button>';
+
+    el.innerHTML = '<div class="prizes-head"><div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
+        '<p class="muted">등급별 실물 상품입니다. 이미지를 누르면 크게 볼 수 있어요.</p></div>' +
+        '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
+      '<div class="prize-gallery">' + cards + lo + '</div>' +
+      '<div class="prize-table-wrap">' +
+        '<div class="table-scroll"><table class="data-table prob-table"><thead><tr><th>등급</th><th>상품</th><th>수량</th><th>확률</th><th>잔여</th></tr></thead><tbody>' +
+        board.tiers.map(function (t) {
+          var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
+          var pct = board.tickets ? (t.count / board.tickets * 100) : 0;
+          return '<tr>' +
+            '<td><span class="grade-badge" style="background:' + gradeColor(t.grade) + ';width:28px;height:28px;font-size:12px">' + h(t.grade) + '</span></td>' +
+            '<td>' + h(t.label) + (t.pointOnly ? ' <span class="muted">(포인트)</span>' : '') + '</td>' +
+            '<td class="num">' + fmt(t.count) + '개</td>' +
+            '<td class="num">' + pct.toFixed(1).replace(/\.0$/, '') + '%</td>' +
+            '<td class="num">' + fmt(Math.max(0, t.count - sold)) + '개</td>' +
+          '</tr>';
+        }).join('') + '</tbody></table></div>' +
+      '</div>';
+  }
+
+  function renderBoardManual(board) {
+    var el = $('#boardManual');
+    if (!el) return;
+    var m = manualOf(board);
+    var specs = Array.isArray(m.specs) ? m.specs : [];
+    var lineup = Array.isArray(m.lineup) ? m.lineup : [];
+    var notes = Array.isArray(m.notes) ? m.notes : [];
+    var probs = (board.tiers || []).map(function (t) {
+      return t.grade + '상 ' + (t.count / (board.tickets || 1) * 100).toFixed(1).replace(/\.0$/, '') + '%';
+    }).join(' · ');
+    var baseNotes = [
+      probs ? '등급별 확률: ' + probs : '등급별 확률은 상품 구성 표를 참고해 주세요.',
+      '한 번 연 번호는 되돌릴 수 없고, 개봉(사용) 후에는 청약철회가 제한됩니다.',
+      '당첨 상품은 내 보관함에 보관되고, 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.',
+      '상품 사진은 제조사 제공 이미지이며, 실제 상품과 색상·조립 상태가 다를 수 있습니다.'
+    ];
+    var allNotes = notes.concat(baseNotes);
+    el.innerHTML = '<div class="manual-head">' +
+        '<div><span class="manual-kicker">PRODUCT MANUAL</span><h2>상품 설명서 · 안내</h2>' +
+        '<p class="manual-summary">' + h(m.summary || (board.title + '의 실제 상품 구성과 이용 안내입니다.')) + '</p></div>' +
+        '<div class="manual-stamp"><span>OFFICIAL LINEUP</span><b>' + h((specs.filter(function (s) { return s.k === '세트 구성'; })[0] || {}).v || '실물 상품') + '</b></div>' +
+      '</div>' +
+      '<div class="manual-grid">' +
+        '<dl class="manual-specs">' + (specs.length ? specs.map(function (s) {
+          return '<div><dt>' + h(s.k) + '</dt><dd>' + h(s.v) + '</dd></div>';
+        }).join('') : '<div><dt>시리즈</dt><dd>' + h(board.category) + '</dd></div><div><dt>판매</dt><dd>1장 ' + won(board.price) + ' · 총 ' + fmt(board.tickets) + '장</dd></div>') + '</dl>' +
+        (lineup.length ? '<div class="manual-lineup"><h3>실제 라인업</h3><ul>' + lineup.map(function (line) {
+          return '<li>' + h(line) + '</li>';
+        }).join('') + '</ul></div>' : '') +
+      '</div>' +
+      '<div class="manual-notes"><h3>이용 안내 · 유의사항</h3><ul>' + allNotes.map(function (n) {
+        return '<li>' + h(n) + '</li>';
+      }).join('') + '</ul></div>';
+  }
+
+  function showTierZoom(grade) {
+    var board = getBoard(ui.boardId);
+    if (!board) return;
+    var isLast = grade === 'LAST';
+    var t = isLast ? null : tierOf(board, grade);
+    if (!isLast && !t) return;
+    var image = isLast ? board.lastOneImage : t.image;
+    var label = isLast ? (board.lastOneLabel || '라스트원상') : t.label;
+    var desc = isLast ? board.lastOneDesc : t.desc;
+    var badgeCls = isLast ? 'grade-last' : ('grade-' + String(grade).toLowerCase());
+    var badgeTxt = isLast ? 'LAST ONE' : grade + '상';
+    openModal('' +
+      '<div class="zoom-view">' +
+        '<div class="zoom-media">' +
+          (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">' : '<div class="zoom-empty">이미지 준비 중</div>') +
+          '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>' +
+        '</div>' +
+        '<h2 class="zoom-title">' + h(label) + '</h2>' +
+        (desc ? '<p class="zoom-desc">' + h(desc) + '</p>' : '') +
+        '<p class="zoom-meta">' + (isLast ? '마지막 1장을 뽑은 분께 추가 지급' : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P')) + '</p>' +
+        '<div class="modal-actions"><button class="btn btn-dark" data-action="close-modal">닫기</button></div>' +
+      '</div>');
   }
 
   function renderBoardNotice(board) {
@@ -2027,16 +2336,25 @@
 
   function drawResultHTML(board, d) {
     var r = d.result || {};
+    var tier = tierOf(board, r.grade) || {};
+    var img = r.tierImage || tier.image || '';
     return '<div class="result-stage">' +
       confettiHTML() +
+      (img ? '<div class="result-media"><img src="' + h(img) + '" alt="' + h(r.tierLabel || tier.label || '') + '">' +
+        '<span class="rank-badge grade-' + h(String(r.grade || '').toLowerCase()) + ' lg">' + h(r.grade) + '상</span></div>' : '') +
       '<div class="result-badge" style="background:' + gradeColor(r.grade) + '">' + h(r.grade) + '</div>' +
       '<p class="result-kicker">' + (r.demo ? '체험 결과' : 'DRAW RESULT') + '</p>' +
       '<p class="result-grade">' + h(r.grade) + '상 당첨!</p>' +
       '<p class="result-prize">' + h(r.tierLabel || '') + '</p>' +
+      (r.tierDesc || tier.desc ? '<p class="result-desc">' + h(r.tierDesc || tier.desc) + '</p>' : '') +
       (r.itemStatus === '포인트지급' || r.itemStatus === '포인트전환'
         ? '<span class="result-points">' + icon('gift') + ' 굿즈 포인트 ' + fmt(r.points) + 'P 지급</span>'
         : '') +
-      (r.isLast ? '<div class="result-lastone"><span>LAST ONE BONUS</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b></div>' : '') +
+      (r.isLast
+        ? '<div class="result-lastone">' + (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="">' : '') +
+          '<span class="result-lastone-body"><span>LAST ONE BONUS</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
+          (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span></div>'
+        : '') +
       (r.itemStatus === '보관중' ? '<p class="result-hold">' + icon('box') + ' <b>내 보관함</b>에 담겼어요. 배송 신청은 내 보관함에서.</p>' : '') +
       (!me() && r.itemStatus !== '포인트지급' ? '<p class="result-meta">로그인하지 않아 보관함에 담기지 않았어요. 로그인 후 뽑으면 배송 신청까지 한 번에 됩니다.</p>' : '') +
       '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
@@ -2063,6 +2381,8 @@
         code: opts.code || null
       });
       ui.draw = { boardId: board.id, n: d.n, step: 'result', result: res, busy: false };
+      var tuned = tierOf(board, res.grade);
+      if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
       ui.pendingCode = '';
       renderDrawModal();
       renderAll();
@@ -2088,9 +2408,12 @@
       '<h2 class="modal-title" id="modalTitle">' + n + '번 · 판매 완료</h2>' +
       '<p class="modal-sub">이미 뽑힌 번호입니다. 결과는 변경되지 않아요.</p>' +
       '<div class="result-stage">' +
+        (tier.image ? '<div class="result-media"><img src="' + h(tier.image) + '" alt="">' +
+          '<span class="rank-badge grade-' + h(String(o.grade).toLowerCase()) + ' lg">' + h(o.grade) + '상</span></div>' : '') +
         '<div class="result-badge" style="background:' + gradeColor(o.grade) + '">' + h(o.grade) + '</div>' +
         '<p class="result-grade">' + h(o.grade) + '상</p>' +
         '<p class="result-prize">' + h(tier.label || '') + '</p>' +
+        (tier.desc ? '<p class="result-desc">' + h(tier.desc) + '</p>' : '') +
         (o.last ? '<div class="result-lastone"><span>LAST ONE BONUS</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b></div>' : '') +
         '<p class="result-meta">' + formatDateTime(o.at) + ' · ' + h(o.name) + (o.demo ? ' · 체험' : '') + '</p>' +
         '<div class="modal-actions"><button class="btn btn-dark" data-action="close-modal">확인</button></div>' +
@@ -2932,14 +3255,23 @@
   function tierRowsHTML(tiers) {
     return tiers.map(function (t) {
       return '<div class="tier-row">' +
-        '<select name="grade">' + GRADES.map(function (g) {
-          return '<option value="' + g + '"' + (g === t.grade ? ' selected' : '') + '>' + g + '상</option>';
-        }).join('') + '</select>' +
-        '<input name="label" type="text" maxlength="40" value="' + h(t.label || '') + '" placeholder="상품명">' +
-        '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '">' +
-        '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '">' +
-        '<label class="tier-point-only" title="이 등급을 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + '><span>P지급</span></label>' +
-        '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>' +
+        '<div class="tier-main">' +
+          '<select name="grade">' + GRADES.map(function (g) {
+            return '<option value="' + g + '"' + (g === t.grade ? ' selected' : '') + '>' + g + '상</option>';
+          }).join('') + '</select>' +
+          '<input name="label" type="text" maxlength="40" value="' + h(t.label || '') + '" placeholder="상품명">' +
+          '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '">' +
+          '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '">' +
+          '<label class="tier-point-only" title="이 등급을 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + '><span>P지급</span></label>' +
+          '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>' +
+        '</div>' +
+        '<div class="tier-extra">' +
+          '<span class="tier-thumb-prev" data-role="tier-thumb">' +
+            (t.image ? '<img src="' + h(t.image) + '" alt="">' : '') +
+          '</span>' +
+          '<input name="image" type="text" value="' + h(t.image || '') + '" placeholder="이미지 경로 (assets/products/…/tier_a.jpg)" data-role="tier-image">' +
+          '<input name="desc" type="text" maxlength="60" value="' + h(t.desc || '') + '" placeholder="상품 설명 (약 20cm · MASTERLISE 피규어)">' +
+        '</div>' +
       '</div>';
     }).join('');
   }
@@ -2959,12 +3291,13 @@
     var board = boardId ? getBoard(boardId) : null;
     ui.editingBoardId = board ? board.id : null;
     var tiers = board ? board.tiers : [
-      { grade: 'A', label: '', count: 1, points: 15000 },
-      { grade: 'B', label: '', count: 3, points: 6000 },
-      { grade: 'C', label: '', count: 6, points: 2500 },
-      { grade: 'D', label: '', count: 20, points: 1000 },
-      { grade: 'E', label: '굿즈 포인트 3,000P', count: 30, points: 3000, pointOnly: true }
+      { grade: 'A', label: '', count: 1, points: 30000 },
+      { grade: 'B', label: '', count: 2, points: 18000 },
+      { grade: 'C', label: '', count: 2, points: 12000 },
+      { grade: 'D', label: '', count: 5, points: 8000 },
+      { grade: 'E', label: '', count: 10, points: 4000 }
     ];
+    var m = board ? manualOf(board) : {};
     var html = '' +
       '<h2 class="modal-title" id="modalTitle">' + (board ? '판 수정' : '새 판 만들기') + '</h2>' +
       '<p class="modal-sub">카테고리와 금액을 정하고, 등급 수량의 합계를 전체 장수와 맞춰 주세요.</p>' +
@@ -2975,12 +3308,14 @@
             CATEGORIES.map(function (c) { return '<option' + ((board ? board.category : '원피스') === c ? ' selected' : '') + '>' + h(c) + '</option>'; }).join('') +
           '</select></label>' +
           '<label class="field"><span>1장 가격 (원)</span><input name="price" type="number" min="100" step="100" value="' + Number(board ? board.price : 12000) + '"></label>' +
-          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 60) + '"></label>' +
+          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 20) + '"></label>' +
           '<label class="field"><span>판매 상태</span><select name="status">' +
             '<option value="open"' + (!board || board.status === 'open' ? ' selected' : '') + '>판매 중</option>' +
             '<option value="closed"' + (board && board.status === 'closed' ? ' selected' : '') + '>종료</option>' +
           '</select></label>' +
           '<label class="field span-2"><span>라스트원상</span><input name="lastOneLabel" type="text" maxlength="60" value="' + h(board ? board.lastOneLabel : '라스트원상 · 메탈릭 컬러 피규어') + '"></label>' +
+          '<label class="field"><span>라스트원 이미지 경로</span><input name="lastOneImage" type="text" value="' + h(board ? (board.lastOneImage || '') : '') + '" placeholder="assets/products/…/last_one.jpg"></label>' +
+          '<label class="field"><span>라스트원 설명</span><input name="lastOneDesc" type="text" maxlength="60" value="' + h(board ? (board.lastOneDesc || '') : '') + '" placeholder="약 21cm · 근두운에 오른 부자 피규어"></label>' +
           '<div class="field span-2">' +
             '<span>커버 이미지</span>' +
             '<div class="cover-row">' +
@@ -3003,6 +3338,13 @@
           '<div class="tier-summary"><span>등급 수량 합계 <b id="tierSumLabel">0</b> / <b id="ticketTotalLabel">0</b>장</span><span id="tierSumState"></span></div>' +
         '</div>' +
         '<div class="btn-row tight"><button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button></div>' +
+        '<div class="manual-editor">' +
+          '<div class="manual-editor-head"><span>상품 설명서</span><small>판 상세 하단에 그대로 표시됩니다.</small></div>' +
+          '<label class="field"><span>요약</span><textarea name="manualSummary" rows="2" placeholder="상품 소개 2~3문장">' + h(m.summary || '') + '</textarea></label>' +
+          '<label class="field"><span>사양 (한 줄에 “항목: 값”)</span><textarea name="manualSpecs" rows="4" placeholder="제조사: 반다이 스피리츠&#10;일본 발매: 2026.10.17">' + h((m.specs || []).map(function (x) { return x.k + ': ' + x.v; }).join('\n')) + '</textarea></label>' +
+          '<label class="field"><span>실제 라인업 (한 줄에 1개)</span><textarea name="manualLineup" rows="4" placeholder="A상 손오공 MASTERLISE (약 20cm)">' + h((m.lineup || []).join('\n')) + '</textarea></label>' +
+          '<label class="field"><span>유의사항 (한 줄에 1개)</span><textarea name="manualNotes" rows="3" placeholder="랜덤 지급 안내 등">' + h((m.notes || []).join('\n')) + '</textarea></label>' +
+        '</div>' +
         '<label class="field" style="margin-top:14px"><span>시드 (비우면 자동 생성)</span>' +
           '<div class="seed-row"><input name="seed" type="text" value="' + h(board ? board.seed : '') + '" placeholder="자동 생성">' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="seed-regen">새로 생성</button></div>' +
@@ -3021,15 +3363,38 @@
   function readTierRows() {
     return $$('#tierRows .tier-row').map(function (row) {
       var chk = $('input[name="pointOnly"]', row);
+      var imgEl = $('input[name="image"]', row);
+      var descEl = $('input[name="desc"]', row);
       return {
         grade: $('select[name="grade"]', row).value,
         label: $('input[name="label"]', row).value.trim(),
         count: Number($('input[name="count"]', row).value),
         points: Number($('input[name="points"]', row).value || 0),
-        pointOnly: !!(chk && chk.checked)
+        pointOnly: !!(chk && chk.checked),
+        image: imgEl ? imgEl.value.trim() : '',
+        desc: descEl ? descEl.value.trim() : ''
       };
     });
   }
+  function readManualForm(form) {
+    var lines = function (name) {
+      return fieldValue(form, name).split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+    };
+    var specs = lines('manualSpecs').map(function (l) {
+      var i = l.search(/[:：]/);
+      if (i <= 0) return null;
+      return { k: l.slice(0, i).trim(), v: l.slice(i + 1).trim() };
+    }).filter(function (x) { return x && x.k && x.v; });
+    var manual = {
+      summary: fieldValue(form, 'manualSummary').trim(),
+      specs: specs,
+      lineup: lines('manualLineup'),
+      notes: lines('manualNotes')
+    };
+    if (!manual.summary && !specs.length && !manual.lineup.length && !manual.notes.length) return null;
+    return manual;
+  }
+
   function updateTierSummary() {
     if (!$('#tierRows')) return;
     var rows = readTierRows();
@@ -3061,7 +3426,10 @@
       tickets: Number(fieldValue(form, 'tickets')),
       status: fieldValue(form, 'status'),
       lastOneLabel: fieldValue(form, 'lastOneLabel').trim() || '라스트원상',
+      lastOneImage: fieldValue(form, 'lastOneImage').trim(),
+      lastOneDesc: fieldValue(form, 'lastOneDesc').trim(),
       cover: fieldValue(form, 'cover').trim(),
+      manual: readManualForm(form),
       tiers: readTierRows(),
       seed: fieldValue(form, 'seed').trim()
     };
@@ -3082,7 +3450,7 @@
 
     var existing = ui.editingBoardId ? getBoard(ui.editingBoardId) : null;
     var structureChanged = !existing || existing.tickets !== data.tickets ||
-      JSON.stringify(normalizeTiers(existing.tiers)) !== JSON.stringify(normalizeTiers(data.tiers)) ||
+      tierStructureKey(existing.tiers) !== tierStructureKey(data.tiers) ||
       (!!data.seed && data.seed !== existing.seed);
 
     if (Backend.mode === 'supabase' && existing && structureChanged) {
@@ -3304,6 +3672,8 @@
           break;
         }
         case 'pick-ticket': pickTicket(n); break;
+        case 'zoom-tier': showTierZoom(el.getAttribute('data-grade')); break;
+        case 'zoom-last': showTierZoom('LAST'); break;
         case 'ticket-info': showTicketInfo(n); break;
         case 'draw-pull': performPull(); break;
         case 'draw-coupon': {
@@ -3610,6 +3980,10 @@
 
     document.addEventListener('input', function (e) {
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
+      if (e.target.getAttribute('data-role') === 'tier-image') {
+        var prev = e.target.closest('.tier-extra') && e.target.closest('.tier-extra').querySelector('[data-role="tier-thumb"]');
+        if (prev) { var v = e.target.value.trim(); prev.innerHTML = v ? '<img src="' + escapeHtml(v) + '" alt="">' : ''; }
+      }
       if (e.target.name === 'cover' && e.target.closest('form[data-form="board-form"]')) updateCoverPreview(e.target.closest('form'));
       if (e.target.id === 'codeSearch') renderCodesTable();
       if (e.target.id === 'memberSearch') {

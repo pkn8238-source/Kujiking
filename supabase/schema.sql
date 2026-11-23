@@ -52,8 +52,11 @@ create table if not exists public.boards (
   cover          text,                              -- 커버 이미지 경로/URL (비우면 카테고리 색상 커버)
   price          integer not null check (price > 0),
   ticket_count   integer not null check (ticket_count between 1 and 300),
-  tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly}]
+  tiers          jsonb not null,                    -- [{grade,label,count,points,pointOnly,image,desc}]
   last_one_label text,
+  last_one_image text,                              -- 라스트원 이미지 경로
+  last_one_desc  text,                              -- 라스트원 설명 (크기·특징)
+  manual         jsonb,                             -- {summary, specs:[{k,v}], lineup:[..], notes:[..]} 상품 설명서
   status         text not null default 'open' check (status in ('open','closed')),
   seed           text not null,
   seed_hash      text not null,
@@ -73,6 +76,9 @@ create table if not exists public.tickets (
   unique (board_id, n)
 );
 alter table public.boards add column if not exists cover text;
+alter table public.boards add column if not exists last_one_image text;
+alter table public.boards add column if not exists last_one_desc text;
+alter table public.boards add column if not exists manual jsonb;
 create index if not exists tickets_board_idx on public.tickets (board_id, status);
 
 create table if not exists public.exchange_codes (
@@ -167,7 +173,7 @@ create table if not exists public.app_settings (
 -- ---------------------------------------------------------
 create or replace function public.handle_new_user()
 returns trigger
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 begin
   insert into public.profiles (id, email, nickname, phone)
@@ -192,7 +198,7 @@ for each row execute function public.handle_new_user();
 -- ---------------------------------------------------------
 create or replace function public.is_admin(p_uid uuid default auth.uid())
 returns boolean
-language sql stable security definer set search_path = public
+language sql stable security definer set search_path = public, extensions
 as $$
   select coalesce((select is_admin from public.profiles where id = p_uid), false);
 $$;
@@ -284,7 +290,7 @@ create or replace function public.ticket_grade(
   p_tiers jsonb,
   p_n integer
 ) returns text
-language plpgsql immutable
+language plpgsql immutable security definer set search_path = public, extensions
 as $$
 declare
   v_rn integer;
@@ -324,7 +330,7 @@ $$;
 -- ---------------------------------------------------------
 create or replace function public.admin_members(p_search text default '')
 returns setof jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 begin
   if not public.is_admin() then
@@ -406,7 +412,7 @@ create or replace function public.draw_ticket(
   p_coupon_id uuid default null,
   p_code text default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid     uuid := auth.uid();
@@ -544,7 +550,7 @@ create or replace function public.admin_grant_coupons(
   p_qty integer,
   p_note text default null
 ) returns integer
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_i integer;
@@ -580,7 +586,7 @@ create or replace function public.admin_decide_claim(
   p_approve boolean,
   p_qty integer default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_claim public.purchase_claims%rowtype;
@@ -629,7 +635,7 @@ create or replace function public.request_delivery(
   p_address text,
   p_memo text default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -661,7 +667,7 @@ $$;
 
 create or replace function public.convert_to_points(p_draw_id uuid)
 returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_uid uuid := auth.uid();
@@ -697,7 +703,7 @@ create or replace function public.admin_ship_delivery(
   p_carrier text,
   p_tracking text
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_del public.deliveries%rowtype;
@@ -724,6 +730,8 @@ $$;
 -- 8. 새 판 만들기 (관리자) — 번호표 1..N 자동 생성 + 봉인 해시
 --    p_seed 를 비우면 서버에서 무작위 시드를 만듭니다.
 -- ---------------------------------------------------------
+drop function if exists public.admin_create_board(text, text, integer, integer, jsonb, text, text, text, text);
+
 create or replace function public.admin_create_board(
   p_title text,
   p_category text,
@@ -733,9 +741,12 @@ create or replace function public.admin_create_board(
   p_last_one_label text default null,
   p_seed text default null,
   p_status text default 'open',
-  p_cover text default null
+  p_cover text default null,
+  p_last_one_image text default null,
+  p_last_one_desc text default null,
+  p_manual jsonb default null
 ) returns jsonb
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = public, extensions
 as $$
 declare
   v_id uuid := gen_random_uuid();
@@ -756,10 +767,12 @@ begin
 
   v_seed := coalesce(nullif(btrim(coalesce(p_seed, '')), ''), encode(gen_random_bytes(32), 'hex'));
 
-  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover)
+  insert into public.boards (id, title, category, price, ticket_count, tiers, last_one_label, status, seed, seed_hash, cover,
+                             last_one_image, last_one_desc, manual)
   values (v_id, p_title, coalesce(nullif(p_category, ''), '자체 스페셜'), p_price, p_ticket_count,
           p_tiers, p_last_one_label, coalesce(p_status, 'open'), v_seed,
-          encode(digest(v_seed, 'sha256'), 'hex'), p_cover);
+          encode(digest(v_seed, 'sha256'), 'hex'), p_cover,
+          p_last_one_image, p_last_one_desc, p_manual);
 
   insert into public.tickets (board_id, n, status)
   select v_id, g.n, 'available' from generate_series(1, p_ticket_count) as g(n);
