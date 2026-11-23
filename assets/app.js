@@ -3349,7 +3349,7 @@
     for (var i = 0; i < n; i++) {
       out += '<span class="confetti" style="left:' + Math.round(Math.random() * 100) + '%;background:' + colors[i % colors.length] +
         ';width:' + (6 + Math.round(Math.random() * 6)) + 'px;height:' + (10 + Math.round(Math.random() * 8)) + 'px' +
-        ';animation-delay:' + (Math.random() * (opts.spread || .5)).toFixed(2) + 's;animation-duration:' + (1.9 + Math.random() * 1.1).toFixed(2) + 's' +
+        ';animation-delay:' + (Math.random() * (opts.spread || .5)).toFixed(2) + 's;animation-duration:' + (2.4 + Math.random() * 1.3).toFixed(2) + 's' +
         ';--dx:' + Math.round((Math.random() - .5) * (opts.drift || 160)) + 'px;--h:' + Math.round(opts.drop || 340) + 'px;--rot:' + Math.round(360 + Math.random() * 540) + 'deg"></span>';
     }
     return out;
