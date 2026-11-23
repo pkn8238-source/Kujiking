@@ -90,6 +90,7 @@
   function fmt(n) { return Number(n || 0).toLocaleString('ko-KR'); }
   function won(n) { return fmt(n) + '원'; }
   function pad2(n) { return String(n).padStart(2, '0'); }
+  function waitMs(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
   function nowISO() { return new Date().toISOString(); }
   function uid(prefix) {
     return (prefix || 'id') + '-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
@@ -1692,6 +1693,8 @@
   }
   function closeModal() {
     if (!modalRoot || modalRoot.hidden) return;
+    /* 이미 뽑힌 결과를 종이 뒤에 숨긴 채로 닫지 않는다 — 먼저 개봉 연출로 보여준다 */
+    if (ui.draw && ui.draw.step === 'peel' && ui.draw.result && !ui.draw.revealed) { peelSnap(); return; }
     modalRoot.hidden = true;
     modalPanel.innerHTML = '';
     document.body.style.overflow = '';
@@ -2342,12 +2345,15 @@
     if (!board) return;
     var html;
     if (d.step === 'source') html = drawSourceHTML(board, d);
-    else if (d.step === 'pull') html = drawPullHTML(board, d);
+    else if (d.step === 'peel') html = drawPeelHTML(board, d);
     else html = drawResultHTML(board, d);
-    openModal(html, { keepFocus: d.step === 'result' });
+    openModal(html, { keepFocus: d.step === 'result', noAutofocus: d.step === 'peel' });
     if (d.step === 'source') {
       var input = $('#drawCodeInput');
       if (input && ui.pendingCode) input.value = ui.pendingCode;
+    } else if (d.step === 'peel') {
+      bindPeel();
+      paintPeek(d);
     }
   }
 
@@ -2393,19 +2399,233 @@
     return html;
   }
 
-  function drawPullHTML(board, d) {
-    return '<div class="draw-stage">' +
-      '<p class="result-kicker">TICKET ' + pad2(d.n) + '</p>' +
-      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">종이를 당겨주세요</h2>' +
-      '<p class="modal-sub">번호 ' + d.n + '번의 결과가 준비됐어요. 아래 종이를 눌러 개봉하세요.</p>' +
-      '<div class="draw-ticket shake-me" role="button" tabindex="0" aria-label="종이 당겨서 개봉" data-action="draw-pull">' +
-        '<span class="draw-ticket-label">KUJIKING KUJI</span>' +
-        '<span class="draw-ticket-num">' + pad2(d.n) + '</span>' +
-        '<span class="draw-ticket-label">TAP TO OPEN</span>' +
+  /* ---------- 종이 티켓 뜯기(peel) 연출 ---------- */
+  function drawPeelHTML(board, d) {
+    var no = ('00' + d.n).slice(-3);
+    return '<div class="peel-stage" id="peelStage">' +
+      '<p class="result-kicker">TICKET #' + no + ' · ' + h(board.title) + '</p>' +
+      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">종이를 밀어서 뜯어주세요</h2>' +
+      '<p class="modal-sub">끝까지 밀면 안에 든 등급이 나와요. 중간에 놓으면 다시 덮여서 살짝 엿볼 수 있어요.</p>' +
+      '<div class="peel-card" id="peelCard" role="group" aria-label="쿠지 종이 티켓">' +
+        '<div class="peel-inner" aria-hidden="true">' +
+          '<div class="peel-aura"></div>' +
+          '<span class="peel-q">?</span>' +
+          '<img class="peel-figure" id="peelFigure" alt="" hidden>' +
+          '<div class="peel-inner-tag"><span>DRAW RESULT</span><b>당첨 등급</b></div>' +
+        '</div>' +
+        '<div class="peel-flap" id="peelFlap" role="button" tabindex="0" aria-label="종이를 아래로 밀어 개봉">' +
+          '<span class="peel-stripe"></span>' +
+          '<span class="peel-head"><em>쿠지킹</em><b>KUJIKING</b></span>' +
+          '<span class="peel-jp">一番くじ</span>' +
+          '<span class="peel-no">#' + no + '</span>' +
+          '<span class="peel-line">ONLINE KUJI · 1매 한정</span>' +
+          '<span class="peel-barcode" aria-hidden="true"></span>' +
+          '<span class="peel-tiny">개봉 후 교환·환불 불가 · NO. ' + no + '</span>' +
+          '<span class="peel-perf"><i></i><em>절취선</em><i></i></span>' +
+          '<span class="peel-handle"><span class="peel-handle-arrow">↓</span>밀어서 뜯기</span>' +
+          '<span class="peel-seal">미개봉</span>' +
+        '</div>' +
       '</div>' +
-      '<p class="pull-hint">한 번 개봉하면 되돌릴 수 없어요.</p>' +
+      '<div class="peel-meter" aria-hidden="true"><span class="peel-meter-bar"><i id="peelMeterFill"></i></span><span class="peel-meter-text" id="peelMeterText">밀어서 뜯기 ↓</span></div>' +
+      '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
       '<p class="result-meta">' + (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || ''))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
+  }
+
+  var peelDrag = null;
+
+  /* 뽑기권/코드 확인 직후: 결과를 먼저 뽑아 두고, 종이 뒤에 숨긴 채로 개봉 연출을 보여준다 */
+  function enterPeel(opts) {
+    var d = ui.draw;
+    if (!d) return;
+    opts = opts || {};
+    ui.draw = {
+      boardId: d.boardId, n: d.n, step: 'peel',
+      couponId: opts.couponId || null,
+      code: opts.code || null,
+      demo: !!opts.demo, busy: true, ready: false, revealing: false, result: null
+    };
+    renderDrawModal();
+    prepareDraw();
+  }
+
+  async function prepareDraw() {
+    var d = ui.draw;
+    if (!d || d.step !== 'peel' || d.ready) return;
+    var board = getBoard(d.boardId);
+    if (!board) return;
+    try {
+      var res = await Backend.draw({
+        boardId: board.id, n: d.n,
+        couponId: d.couponId || null,
+        code: d.code || null
+      });
+      var tuned = tierOf(board, res.grade);
+      if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
+      ui.pendingCode = '';
+      if (!ui.draw || ui.draw !== d || d.step !== 'peel') {
+        /* 화면이 닫혔거나 다른 단계로 넘어간 경우: 결과는 이미 서버·보관함에 기록됐다 */
+        toast('뽑기 완료! ' + res.grade + '상', 'ok');
+        try { await Backend.refreshData(); renderAll(); } catch (e0) {}
+        return;
+      }
+      d.result = res;
+      d.ready = true;
+      d.busy = false;
+      paintPeek(d);
+      updatePeelText(peelDrag ? peelDrag.p : 0);
+    } catch (e) {
+      if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(errMsg(e), 'err'); return; }
+      d.busy = false;
+      ui.draw = { boardId: d.boardId, n: d.n, step: 'source', busy: false };
+      renderDrawModal();
+      toast(errMsg(e), 'err');
+      try { await Backend.refreshData(); renderAll(); } catch (e2) {}
+    }
+  }
+
+  function peelColor(grade) {
+    var g = String(grade || '');
+    if (g === 'LAST') return 'var(--gold)';
+    if (/^[A-L]$/i.test(g)) return 'var(--grade-' + g.toLowerCase() + ')';
+    return 'var(--yellow)';
+  }
+
+  /* 결과가 준비되면 속지(inner)에 흐린 실루엣과 등급 색 광채를 깔아 둔다 */
+  function paintPeek(d) {
+    var fig = $('#peelFigure');
+    var card = $('#peelCard');
+    if (!card) return;
+    var aura = card.querySelector('.peel-aura');
+    var grade = d && d.result ? d.result.grade : '';
+    if (aura) aura.style.setProperty('--peel-glow', peelColor(grade));
+    if (!fig) return;
+    var board = d ? getBoard(d.boardId) : null;
+    var tier = board && d && d.result ? tierOf(board, d.result.grade) : null;
+    var src = d && d.result ? (d.result.tierImage || (tier && tier.image) || '') : '';
+    if (src) { fig.src = src; fig.hidden = false; }
+    else { fig.hidden = true; fig.removeAttribute('src'); }
+  }
+
+  function updatePeelText(p) {
+    var fill = $('#peelMeterFill'), text = $('#peelMeterText'), card = $('#peelCard');
+    var pct = Math.round(Math.min(1, p / 0.75) * 100);
+    if (fill) fill.style.width = pct + '%';
+    if (text) {
+      text.textContent = p >= 0.75 ? '놓으면 뜯겨요!'
+        : (p >= 0.45 ? '거의 다 왔어요 · ' + Math.round(p * 100) + '%'
+        : (p > 0.02 ? '쪼는 중… ' + Math.round(p * 100) + '%' : '밀어서 뜯기 ↓'));
+      text.classList.toggle('is-armed', p >= 0.75);
+    }
+    if (card) card.classList.toggle('is-armed', p >= 0.75);
+  }
+
+  function bindPeel() {
+    var card = $('#peelCard'), flap = $('#peelFlap');
+    if (!card || !flap) return;
+    var st = { dragging: false, id: null, startX: 0, startY: 0, base: 0, p: 0, max: 1, height: 420, armed: false };
+    st.height = card.getBoundingClientRect().height || 420;
+    st.max = Math.max(120, st.height * 0.78);
+    peelDrag = st;
+
+    function applyPeel(p, animate) {
+      st.p = p;
+      var y = p * st.height * 0.9;
+      flap.style.transition = animate ? '' : 'none';
+      flap.style.transform = 'translate3d(0,' + y.toFixed(1) + 'px,0) rotate(' + (p * 1.6).toFixed(2) + 'deg)';
+      card.style.setProperty('--peel', p.toFixed(3));
+      card.style.setProperty('--peel-blur', (22 - 17 * p).toFixed(1) + 'px');
+      card.style.setProperty('--peel-alpha', (0.2 + 0.75 * p).toFixed(2));
+      card.style.setProperty('--peel-zoom', (1 + 0.05 * p).toFixed(3));
+    }
+    st.apply = applyPeel;
+    applyPeel(0, false);
+    updatePeelText(0);
+
+    function onDown(e) {
+      if (st.dragging) return;
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (ui.draw && ui.draw.revealing) return;
+      st.height = card.getBoundingClientRect().height || st.height;
+      st.max = Math.max(120, st.height * 0.78);
+      st.dragging = true; st.id = e.pointerId;
+      st.startX = e.clientX; st.startY = e.clientY; st.base = st.p;
+      flap.classList.add('is-dragging'); card.classList.add('is-dragging');
+      try { card.setPointerCapture(e.pointerId); } catch (err) {}
+      e.preventDefault();
+    }
+
+    function onMove(e) {
+      if (!st.dragging || e.pointerId !== st.id) return;
+      var dy = e.clientY - st.startY;
+      var dx = e.clientX - st.startX;
+      var travel = Math.max(dy, dx * 0.55);   /* 대각선으로 당겨도 뜯긴다 */
+      var p = Math.min(1, Math.max(0, (st.base * st.max + travel) / st.max));
+      applyPeel(p, false);
+      updatePeelText(p);
+      if (p >= 0.75 && !st.armed) { st.armed = true; try { navigator.vibrate && navigator.vibrate(12); } catch (err) {} }
+      if (p < 0.72) st.armed = false;
+      e.preventDefault();
+    }
+
+    function onUp(e) {
+      if (!st.dragging) return;
+      if (e.type !== 'pointercancel' && e.type !== 'lostpointercapture' && e.pointerId !== st.id) return;
+      st.dragging = false; st.id = null; st.armed = false;
+      flap.classList.remove('is-dragging'); card.classList.remove('is-dragging');
+      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (st.p >= 0.75) { peelSnap(); return; }
+      if (Math.abs(e.clientY - st.startY) < 8 && Math.abs(e.clientX - st.startX) < 8) {
+        /* 그냥 톡 눌렀을 때: 손잡이를 흔들어 "밀어서 뜯기"를 알려준다 */
+        card.classList.add('is-hinting');
+        setTimeout(function () { card.classList.remove('is-hinting'); }, 720);
+      }
+      applyPeel(0, true);
+      updatePeelText(0);
+      try { navigator.vibrate && navigator.vibrate(4); } catch (err) {}
+    }
+
+    card.addEventListener('pointerdown', onDown);
+    card.addEventListener('pointermove', onMove);
+    card.addEventListener('pointerup', onUp);
+    card.addEventListener('pointercancel', onUp);
+    card.addEventListener('lostpointercapture', onUp);
+    flap.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); peelSnap(); }
+    });
+  }
+
+  /* 75% 이상 당겨 놓으면 종이가 쫙 찢기며 결과가 나온다 */
+  async function peelSnap() {
+    var d = ui.draw;
+    if (!d || d.step !== 'peel' || d.revealing) return;
+    d.revealing = true;
+    var card = $('#peelCard'), flap = $('#peelFlap');
+    if (card) card.classList.add('is-tearing');
+    if (flap) {
+      var hgt = card ? (card.getBoundingClientRect().height || 420) : 420;
+      flap.style.transition = 'transform .3s cubic-bezier(.45,0,.7,.25), opacity .26s ease';
+      flap.style.transform = 'translate3d(0,' + (hgt * 1.12).toFixed(0) + 'px,0) rotate(7deg)';
+      flap.style.opacity = '0';
+    }
+    var fill = $('#peelMeterFill');
+    if (fill) fill.style.width = '100%';
+    try { navigator.vibrate && navigator.vibrate([0, 22, 34, 30]); } catch (err) {}
+
+    var waited = 0;
+    while (ui.draw === d && !d.ready && waited < 9000) { await waitMs(120); waited += 120; }
+    await waitMs(300);
+    if (!ui.draw || ui.draw !== d || d.step !== 'peel') return;
+    if (!d.result) {
+      d.revealing = false;
+      toast('결과를 확인하지 못했어요. 잠시 후 다시 시도해 주세요.', 'err');
+      return;
+    }
+    d.step = 'result';
+    d.busy = false;
+    renderDrawModal();
+    renderAll();
+    toast(d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + d.result.grade + '상', 'ok');
   }
 
   function confettiHTML() {
@@ -2448,38 +2668,6 @@
         '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
       '</div>' +
     '</div>';
-  }
-
-  async function performDraw(opts) {
-    var d = ui.draw;
-    if (!d || d.busy) return;
-    var board = getBoard(d.boardId);
-    if (!board) return;
-    d.busy = true;
-    var btn = $('#modalPanel .btn-primary');
-    if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '뽑는 중…'; }
-    try {
-      var res = await Backend.draw({
-        boardId: board.id, n: d.n,
-        couponId: opts.couponId || null,
-        code: opts.code || null
-      });
-      ui.draw = { boardId: board.id, n: d.n, step: 'result', result: res, busy: false };
-      var tuned = tierOf(board, res.grade);
-      if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
-      ui.pendingCode = '';
-      renderDrawModal();
-      renderAll();
-      toast(res.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + res.grade + '상', 'ok');
-      return res;
-    } catch (e) {
-      ui.draw = { boardId: board.id, n: d.n, step: 'source', busy: false };
-      renderDrawModal();
-      toast(errMsg(e), 'err');
-      // 목록이 낡았을 수 있으니 최신화
-      try { await Backend.refreshData(); renderAll(); } catch (e2) {}
-      return null;
-    }
   }
 
   function showTicketInfo(n) {
@@ -3758,11 +3946,11 @@
         case 'zoom-tier': showTierZoom(el.getAttribute('data-grade')); break;
         case 'zoom-last': showTierZoom('LAST'); break;
         case 'ticket-info': showTicketInfo(n); break;
-        case 'draw-pull': performPull(); break;
+        case 'draw-pull': peelSnap(); break;
+        case 'peel-snap': peelSnap(); break;
         case 'draw-coupon': {
           if (!ui.draw) break;
-          ui.draw = { boardId: ui.draw.boardId, n: ui.draw.n, step: 'pull', couponId: id, busy: false };
-          renderDrawModal();
+          enterPeel({ couponId: id });
           break;
         }
 
@@ -3897,8 +4085,7 @@
             if (rec.boardId && rec.boardId !== board2.id) { if (err2) err2.textContent = '이 코드는 다른 판 전용이에요.'; return; }
           }
         }
-        ui.draw = { boardId: d.boardId, n: d.n, step: 'pull', code: raw, demo: isDemo, busy: false };
-        renderDrawModal();
+        enterPeel({ code: raw, demo: isDemo });
         return;
       }
 
@@ -4119,10 +4306,6 @@
         if (confirmResolve) { var r = confirmResolve; confirmResolve = null; closeModal(); r(false); }
         else closeModal();
       }
-      if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.classList && e.target.classList.contains('draw-ticket')) {
-        e.preventDefault();
-        performPull();
-      }
     });
 
     var navToggle = $('#navToggle');
@@ -4162,13 +4345,6 @@
     var board = getBoard(boardId);
     var amountEl = form.querySelector('#claimAmount') || form.querySelector('input[name="amount"]');
     if (board && amountEl) amountEl.value = board.price * qty;
-  }
-
-  async function performPull() {
-    var d = ui.draw;
-    if (!d || d.busy) return;
-    var opts = d.couponId ? { couponId: d.couponId } : { code: d.code };
-    await performDraw(opts);
   }
 
   async function convertPointsFlow(drawId) {
