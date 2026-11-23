@@ -725,6 +725,13 @@
 
   var Backend = {
     mode: 'local',
+    classify(e) {
+      var detail = (e && (e.message || e.error_description || e.details)) || String(e || '');
+      var test = String((e && (e.code || '')) + ' ' + detail);
+      if (/PGRST205|Could not find the table|does not exist|schema cache/i.test(test)) return 'missing_tables';
+      if (/Failed to fetch|NetworkError|Load failed|script load failed|timeout/i.test(test)) return 'network';
+      return 'error';
+    },
     sb: null,
     config: null,
     justFellBack: false,
@@ -743,7 +750,7 @@
           auth: { persistSession: true, autoRefreshToken: true }
         });
         var probe = await withTimeout(
-          this.sb.from('boards').select('id', { count: 'exact', head: true }),
+          this.sb.from('boards').select('id').limit(1),
           7000, 'Failed to fetch: timeout'
         );
         if (probe.error) throw probe.error;
@@ -755,14 +762,7 @@
         this.mode = 'local';
         this.justFellBack = true;
         this.fallbackDetail = (e && (e.message || e.error_description || e.details)) || String(e || '');
-        var test = String((e && (e.code || '')) + ' ' + this.fallbackDetail);
-        if (/PGRST205|Could not find the table|does not exist|schema cache|404/i.test(test)) {
-          this.fallbackReason = 'missing_tables';
-        } else if (/Failed to fetch|NetworkError|Load failed|script load failed/i.test(test)) {
-          this.fallbackReason = 'network';
-        } else {
-          this.fallbackReason = 'error';
-        }
+        this.fallbackReason = this.classify(e);
         return 'local';
       }
     },
@@ -3879,7 +3879,6 @@
       Backend.mode = 'local';
     }
     window.KUJIKING.mode = Backend.mode;
-    window.KUJIKING.backend = { reason: Backend.fallbackReason, detail: Backend.fallbackDetail };
 
     if (Backend.mode === 'local') {
       state = await loadLocalState();
@@ -3897,13 +3896,16 @@
         console.warn('[쿠지킹] 서버 데이터 로드 실패 → 데모 모드로 전환', e);
         Backend.mode = 'local';
         Backend.justFellBack = true;
-        Backend.fallbackReason = Backend.fallbackReason || 'data_load';
+        Backend.fallbackReason = Backend.fallbackReason || Backend.classify(e);
         Backend.fallbackDetail = Backend.fallbackDetail || ((e && e.message) || String(e || ''));
         window.KUJIKING.mode = 'local';
         state = await loadLocalState();
         buildLocalViews();
       }
     }
+
+    window.KUJIKING.mode = Backend.mode;
+    window.KUJIKING.backend = { reason: Backend.fallbackReason, detail: Backend.fallbackDetail };
 
     /* 기존 hash 가 없으면 홈으로 */
     if (!location.hash) history.replaceState(null, '', '#/');
