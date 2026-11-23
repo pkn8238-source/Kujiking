@@ -2050,3 +2050,16 @@ body.is-live .demo-only{display:none !important}
   background:conic-gradient(from 200deg,#fff,#e4eaff 22%,#f5b800 42%,#fffaf0 58%,#c9d3ff 76%,#fff);
   color:#1d1708;box-shadow:0 0 0 3px rgba(255,255,255,.5),0 12px 26px rgba(0,0,0,.45),0 0 40px rgba(255,230,150,.7)}
 .seal-stage.seal-lv3 .seal-grip{border-color:#fff3c4;color:#fff6d0;background:rgba(255,255,255,.12)}
+
+/* iOS Safari: 개봉 드래그 중에는 모달 스크롤·선택·콜아웃을 막는다 */
+.modal-shell.is-drag,
+.modal-shell.is-drag .modal-panel,
+.modal-shell.is-drag .peel-stage,
+.modal-shell.is-drag .peel-card,
+.modal-shell.is-drag .peel-flap,
+.modal-shell.is-drag .seal-stage,
+.modal-shell.is-drag .seal-card,
+.modal-shell.is-drag .seal-box{
+  touch-action:none;overscroll-behavior:contain;
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent;
+}

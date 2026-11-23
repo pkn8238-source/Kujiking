@@ -137,6 +137,25 @@
     return { x: x, y: y + dist };
   }
 
+  /* 터치 전용 드래그 (PointerEvent 없이 TouchEvent 만으로) — iOS Safari 경로 검증 */
+  function tev(el, type, x, y, id) {
+    var t = new Touch({ identifier: id, target: el, clientX: x, clientY: y, pageX: x, pageY: y });
+    var empty = type === 'touchend' || type === 'touchcancel';
+    el.dispatchEvent(new TouchEvent(type, {
+      bubbles: true, cancelable: true,
+      touches: empty ? [] : [t], targetTouches: empty ? [] : [t], changedTouches: [t]
+    }));
+  }
+  async function touchDrag(el, toP, factor, release) {
+    var b = el.getBoundingClientRect();
+    var max = Math.max(120, b.height * factor);
+    var x = b.left + b.width / 2, y = b.top + b.height * 0.32;
+    var dist = max * toP;
+    tev(el, 'touchstart', x, y, 21);
+    for (var i = 1; i <= 14; i++) { tev(el, 'touchmove', x, y + dist * i / 14, 21); await sleep(30); }
+    if (release) tev(el, 'touchend', x, y + dist, 21);
+  }
+
   function stagePeel(p) {
     var card = document.getElementById('peelCard');
     var flap = document.getElementById('peelFlap');
@@ -199,6 +218,29 @@
       await sleep(400);
       stageSeal(isNaN(p) ? 0.5 : p);
       say('STAGED seal p=' + (isNaN(p) ? 0.5 : p));
+      return;
+    }
+    if (auto === 'touch') {
+      /* 터치 전용 경로: 종이 → (봉인) → 결과 */
+      await touchDrag(document.getElementById('peelCard'), 0.95, 0.62, false);
+      await sleep(150);
+      var cardEl = document.getElementById('peelCard');
+      var hv = document.getElementById('peelMeterText');
+      say('TOUCH peel meter: ' + (hv ? hv.textContent : '?') + ' | flap=' +
+          (document.getElementById('peelFlap').style.transform || 'none'));
+      await touchDrag(document.getElementById('peelCard'), 1, 0.62, true);
+      await sleep(900);
+      var hasSeal2 = !!document.getElementById('sealBox');
+      say('TOUCH seal stage: ' + hasSeal2);
+      if (hasSeal2) {
+        await sleep(300);
+        await touchDrag(document.getElementById('sealBox'), 0.85, 0.55, false);
+        var sm = document.getElementById('sealMeterText');
+        say('TOUCH seal meter: ' + (sm ? sm.textContent : '?'));
+        await touchDrag(document.getElementById('sealBox'), 1, 0.55, true);
+      }
+      for (var kk = 0; kk < 80 && !document.getElementById('revealStage'); kk++) await sleep(100);
+      say('TOUCH reveal: ' + !!document.getElementById('revealStage'));
       return;
     }
     if (auto === 'reveal') {

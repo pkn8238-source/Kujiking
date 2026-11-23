@@ -1684,6 +1684,7 @@
     modalRoot.hidden = false;
     modalShell.classList.toggle('wide', !!opts.wide);
     modalShell.classList.toggle('dark', !!opts.dark);
+    modalShell.classList.toggle('is-drag', !!opts.dragLock);
     modalPanel.innerHTML = html;
     if (opts.resetScroll && modalShell) { try { modalShell.scrollTop = 0; } catch (e) {} }
     document.body.style.overflow = 'hidden';
@@ -2356,7 +2357,8 @@
       keepFocus: d.step === 'result',
       noAutofocus: d.step === 'peel' || d.step === 'seal',
       dark: dark,
-      resetScroll: d.step === 'result' || d.step === 'seal'
+      dragLock: d.step === 'peel' || d.step === 'seal',
+      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel'
     });
     if (d.step === 'source') {
       var input = $('#drawCodeInput');
@@ -2698,7 +2700,7 @@
     if (stubTeethEl) stubTeethEl.style.backgroundImage = teethURL('#ffeec2', 26);
     kujiSound.refreshToggle();
 
-    var st = { dragging: false, id: null, startX: 0, startY: 0, base: 0, p: 0, max: 1, height: 420, armed: false, tooth: 0 };
+    var st = { dragging: false, src: null, startX: 0, startY: 0, base: 0, p: 0, max: 1, height: 420, armed: false, tooth: 0 };
     st.height = card.getBoundingClientRect().height || 420;
     st.max = Math.max(130, st.height * 0.62);
     peelDrag = st;
@@ -2748,30 +2750,28 @@
     }
     st.dust = dustAtTear;
 
-    function onDown(e) {
-      if (st.dragging) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (ui.draw && ui.draw.revealing) return;
+    /* --- 포인터·터치 공통 제스처 (iOS Safari 는 touch 이벤트로도 잡아 준다) --- */
+    function start(x, y) {
+      if (st.dragging) return false;
+      if (ui.draw && ui.draw.revealing) return false;
       st.height = card.getBoundingClientRect().height || st.height;
       st.max = Math.max(130, st.height * 0.62);
-      st.dragging = true; st.id = e.pointerId;
-      st.startX = e.clientX; st.startY = e.clientY; st.base = st.p;
+      st.dragging = true;
+      st.startX = x; st.startY = y; st.base = st.p;
       st.tooth = Math.floor(st.p / 0.02);
-      flap.classList.add('is-dragging'); card.classList.add('is-dragging');
-      try { card.setPointerCapture(e.pointerId); } catch (err) {}
+      flap.classList.add('is-dragging');
+      card.classList.add('is-dragging');
       kujiSound.tear(0.2);
-      e.preventDefault();
+      return true;
     }
-
-    function onMove(e) {
-      if (!st.dragging || e.pointerId !== st.id) return;
-      var dy = e.clientY - st.startY;
-      var dx = e.clientX - st.startX;
+    function move(x, y) {
+      if (!st.dragging) return;
+      var dy = y - st.startY;
+      var dx = x - st.startX;
       var travel = Math.max(dy, dx * 0.55);   /* 대각선으로 당겨도 찢긴다 */
       var p = Math.min(1, Math.max(0, (st.base * st.max + travel) / st.max));
       applyPeel(p, false);
       updatePeelText(p);
-      /* 20%마다 한 칸씩 끊어지는 느낌: 부스러기 + 소리 */
       var tooth = Math.floor(p / 0.02);
       if (tooth !== st.tooth) {
         st.tooth = tooth;
@@ -2783,17 +2783,16 @@
         try { navigator.vibrate && navigator.vibrate(14); } catch (err) {}
       }
       if (p < 0.72) st.armed = false;
-      e.preventDefault();
     }
-
-    function onUp(e) {
+    function end(x, y) {
       if (!st.dragging) return;
-      if (e.type !== 'pointercancel' && e.type !== 'lostpointercapture' && e.pointerId !== st.id) return;
-      st.dragging = false; st.id = null; st.armed = false;
-      flap.classList.remove('is-dragging'); card.classList.remove('is-dragging');
-      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+      st.dragging = false;
+      st.src = null;
+      st.armed = false;
+      flap.classList.remove('is-dragging');
+      card.classList.remove('is-dragging');
       if (st.p >= 0.75) { peelSnap(); return; }
-      if (Math.abs(e.clientY - st.startY) < 8 && Math.abs(e.clientX - st.startX) < 8) {
+      if (Math.abs(y - st.startY) < 8 && Math.abs(x - st.startX) < 8) {
         /* 그냥 톡 눌렀을 때: 손잡이를 흔들어 "찢어서 열기"를 알려준다 */
         card.classList.add('is-hinting');
         setTimeout(function () { card.classList.remove('is-hinting'); }, 720);
@@ -2803,11 +2802,56 @@
       try { navigator.vibrate && navigator.vibrate(4); } catch (err) {}
     }
 
-    card.addEventListener('pointerdown', onDown);
-    card.addEventListener('pointermove', onMove);
-    card.addEventListener('pointerup', onUp);
-    card.addEventListener('pointercancel', onUp);
-    card.addEventListener('lostpointercapture', onUp);
+    card.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!start(e.clientX, e.clientY)) return;
+      st.src = 'pointer';
+      try { card.setPointerCapture(e.pointerId); } catch (err) {}
+      if (e.cancelable) e.preventDefault();
+    });
+    card.addEventListener('pointermove', function (e) {
+      if (st.src !== 'pointer') return;
+      move(e.clientX, e.clientY);
+      if (e.cancelable) e.preventDefault();
+    });
+    function pointerEnd(e) {
+      if (st.src !== 'pointer') return;
+      end(e.clientX, e.clientY);
+      try { card.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    card.addEventListener('pointerup', pointerEnd);
+    card.addEventListener('pointercancel', function (e) {
+      /* 스크롤 제스처로 뺏겨도 찢긴 만큼은 남긴다 */
+      if (st.src !== 'pointer') return;
+      if (st.p >= 0.75) { peelSnap(); return; }
+      pointerEnd(e);
+    });
+
+    /* iOS Safari 대비: 터치 이벤트에서 스크롤을 막고, 포인터가 없으면 이쪽이 직접 찢는다 */
+    card.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      if (st.src === 'pointer') return;
+      var t = e.touches[0];
+      if (start(t.clientX, t.clientY)) st.src = 'touch';
+    }, { passive: false });
+    card.addEventListener('touchmove', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch' || e.touches.length !== 1) return;
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    card.addEventListener('touchend', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch') return;
+      var t = e.changedTouches[0] || { clientX: st.startX, clientY: st.startY };
+      end(t.clientX, t.clientY);
+    }, { passive: false });
+    card.addEventListener('touchcancel', function (e) {
+      if (st.src !== 'touch') return;
+      if (st.p >= 0.75) { peelSnap(); return; }
+      end(st.startX, st.startY);
+    }, { passive: false });
+
     flap.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); peelSnap(); }
     });
@@ -2919,7 +2963,7 @@
     if (tl) tl.style.backgroundImage = teethURL(toothFill, 30, true);
     if (tr) tr.style.backgroundImage = teethURL(toothFill, 30, true);
 
-    var st = { p: 0, dragging: false, id: null, startX: 0, startY: 0, base: 0, max: 190, armed: false, holdTimer: null, raf: 0 };
+    var st = { p: 0, dragging: false, src: null, startX: 0, startY: 0, base: 0, max: 190, armed: false, holdTimer: null, raf: 0 };
     st.max = Math.max(120, (card.getBoundingClientRect().height || 340) * 0.55);
     sealDrag = st;
 
@@ -2967,52 +3011,89 @@
       st.raf = requestAnimationFrame(step);
     }
 
-    function onDown(e) {
-      if (st.dragging) return;
-      if (e.pointerType === 'mouse' && e.button !== 0) return;
-      if (ui.draw && ui.draw.revealing) return;
-      st.dragging = true; st.id = e.pointerId;
-      st.startX = e.clientX; st.startY = e.clientY; st.base = st.p;
+    function start(x, y, arm) {
+      if (st.dragging) return false;
+      if (ui.draw && ui.draw.revealing) return false;
+      st.dragging = true;
+      st.startX = x; st.startY = y; st.base = st.p;
       box.classList.add('is-straining');
-      try { box.setPointerCapture(e.pointerId); } catch (err) {}
       kujiSound.tear(0.3);
       clearHold();
-      st.holdTimer = setTimeout(charge, 620);
-      e.preventDefault();
+      if (arm !== false) st.holdTimer = setTimeout(charge, 620);
+      return true;
     }
-
-    function onMove(e) {
-      if (!st.dragging || e.pointerId !== st.id) return;
-      var dy = e.clientY - st.startY, dx = e.clientX - st.startX;
+    function move(x, y) {
+      if (!st.dragging) return;
+      var dy = y - st.startY, dx = x - st.startX;
       if (Math.abs(dy) > 6 || Math.abs(dx) > 6) clearHold();
       var travel = Math.max(dy, dx * 0.4);
       var p = Math.min(1, Math.max(0, (st.base * st.max + travel) / st.max));
       if (Math.abs(p - st.p) > 0.01) kujiSound.tear(p);
       apply(p);
-      e.preventDefault();
     }
-
-    function onUp(e) {
+    function end(x, y) {
       if (!st.dragging) return;
-      if (e.type !== 'pointercancel' && e.type !== 'lostpointercapture' && e.pointerId !== st.id) return;
-      st.dragging = false; st.id = null;
+      st.dragging = false;
+      st.src = null;
       box.classList.remove('is-straining');
       clearHold();
       if (st.raf) { cancelAnimationFrame(st.raf); st.raf = 0; }
-      try { box.releasePointerCapture(e.pointerId); } catch (err) {}
       if (st.p >= 0.7) { sealSnap(); return; }
-      if (Math.abs(e.clientY - st.startY) < 8 && Math.abs(e.clientX - st.startX) < 8) {
+      if (Math.abs(y - st.startY) < 8 && Math.abs(x - st.startX) < 8) {
         box.classList.add('is-hinting');
         setTimeout(function () { box.classList.remove('is-hinting'); }, 700);
       }
       apply(0);
     }
 
-    box.addEventListener('pointerdown', onDown);
-    box.addEventListener('pointermove', onMove);
-    box.addEventListener('pointerup', onUp);
-    box.addEventListener('pointercancel', onUp);
-    box.addEventListener('lostpointercapture', onUp);
+    box.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      if (!start(e.clientX, e.clientY)) return;
+      st.src = 'pointer';
+      try { box.setPointerCapture(e.pointerId); } catch (err) {}
+      if (e.cancelable) e.preventDefault();
+    });
+    box.addEventListener('pointermove', function (e) {
+      if (st.src !== 'pointer') return;
+      move(e.clientX, e.clientY);
+      if (e.cancelable) e.preventDefault();
+    });
+    function pointerEnd(e) {
+      if (st.src !== 'pointer') return;
+      end(e.clientX, e.clientY);
+      try { box.releasePointerCapture(e.pointerId); } catch (err) {}
+    }
+    box.addEventListener('pointerup', pointerEnd);
+    box.addEventListener('pointercancel', function (e) {
+      if (st.src !== 'pointer') return;
+      if (st.p >= 0.7) { sealSnap(); return; }
+      pointerEnd(e);
+    });
+
+    box.addEventListener('touchstart', function (e) {
+      if (e.touches.length !== 1) return;
+      if (e.cancelable) e.preventDefault();
+      if (st.src === 'pointer') return;
+      var t = e.touches[0];
+      if (start(t.clientX, t.clientY)) st.src = 'touch';
+    }, { passive: false });
+    box.addEventListener('touchmove', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch' || e.touches.length !== 1) return;
+      move(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: false });
+    box.addEventListener('touchend', function (e) {
+      if (e.cancelable) e.preventDefault();
+      if (st.src !== 'touch') return;
+      var t = e.changedTouches[0] || { clientX: st.startX, clientY: st.startY };
+      end(t.clientX, t.clientY);
+    }, { passive: false });
+    box.addEventListener('touchcancel', function (e) {
+      if (st.src !== 'touch') return;
+      if (st.p >= 0.7) { sealSnap(); return; }
+      end(st.startX, st.startY);
+    }, { passive: false });
+
     box.addEventListener('keydown', function (e) {
       if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sealSnap(); }
     });
