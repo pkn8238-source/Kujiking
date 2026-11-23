@@ -2033,8 +2033,9 @@
       var left = Number(t.count) - sold;
       return '<div class="grade-row' + (left <= 0 ? ' is-out' : '') + '">' +
         tierThumb(t, 'tier-thumb sm') +
-        '<span class="grade-name"><b><i class="grade-dot" style="background:' + gradeColor(t.grade) + '"></i>' + h(t.grade) + '상 · ' + h(t.label) + '</b>' +
-        '<span>' + (t.pointOnly ? '굿즈 포인트 ' + fmt(t.points) + 'P' : h(t.desc || ('전환 ' + fmt(t.points) + 'P'))) + '</span></span>' +
+        '<span class="grade-name"><b>' + h(t.label) + '</b>' +
+        '<span><i class="grade-dot" style="background:' + gradeColor(t.grade) + '"></i>' + h(t.grade) + '상 · ' +
+        (t.pointOnly ? '굿즈 포인트 ' + fmt(t.points) + 'P' : h(t.desc || ('전환 ' + fmt(t.points) + 'P'))) + '</span></span>' +
         '<span class="grade-count">' + (left <= 0 ? '소진' : '<em>' + fmt(left) + '</em> / ' + fmt(t.count)) + '</span>' +
       '</div>';
     }).join('');
@@ -2116,7 +2117,7 @@
           '<span class="prize-media">' +
             (t.image ? '<img src="' + h(t.image) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
                      : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>') +
-            '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>' +
+            (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
             (left === 0 ? '<span class="prize-out">소진</span>' : '') +
           '</span>' +
           '<span class="prize-body">' +
@@ -2131,7 +2132,7 @@
         '<span class="prize-media">' +
           (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="' + h(board.lastOneLabel || '라스트원상') + '" loading="lazy" decoding="async">'
                               : '<span class="prize-media-empty">★</span>') +
-          '<span class="rank-badge grade-last">LAST ONE</span>' +
+          (board.lastOneImage ? '' : '<span class="rank-badge grade-last">LAST ONE</span>') +
         '</span>' +
         '<span class="prize-body">' +
           '<b class="prize-name">' + h(board.lastOneLabel || '라스트원상') + '</b>' +
@@ -2210,7 +2211,7 @@
       '<div class="zoom-view">' +
         '<div class="zoom-media">' +
           (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">' : '<div class="zoom-empty">이미지 준비 중</div>') +
-          '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>' +
+          (image ? '' : '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>') +
         '</div>' +
         '<h2 class="zoom-title">' + h(label) + '</h2>' +
         (desc ? '<p class="zoom-desc">' + h(desc) + '</p>' : '') +
@@ -2408,8 +2409,7 @@
       '<h2 class="modal-title" id="modalTitle">' + n + '번 · 판매 완료</h2>' +
       '<p class="modal-sub">이미 뽑힌 번호입니다. 결과는 변경되지 않아요.</p>' +
       '<div class="result-stage">' +
-        (tier.image ? '<div class="result-media"><img src="' + h(tier.image) + '" alt="">' +
-          '<span class="rank-badge grade-' + h(String(o.grade).toLowerCase()) + ' lg">' + h(o.grade) + '상</span></div>' : '') +
+        (tier.image ? '<div class="result-media"><img src="' + h(tier.image) + '" alt=""></div>' : '') +
         '<div class="result-badge" style="background:' + gradeColor(o.grade) + '">' + h(o.grade) + '</div>' +
         '<p class="result-grade">' + h(o.grade) + '상</p>' +
         '<p class="result-prize">' + h(tier.label || '') + '</p>' +
