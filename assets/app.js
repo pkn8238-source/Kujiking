@@ -705,6 +705,13 @@
   /* =========================================================
      3. 백엔드 (localStorage ↔ Supabase)
      ========================================================= */
+  function withTimeout(promise, ms, message) {
+    return new Promise(function (resolve, reject) {
+      var timer = setTimeout(function () { reject(new Error(message || 'timeout')); }, ms);
+      Promise.resolve(promise).then(function (v) { clearTimeout(timer); resolve(v); }, function (e) { clearTimeout(timer); reject(e); });
+    });
+  }
+
   function loadScript(src) {
     return new Promise(function (resolve, reject) {
       var el = document.createElement('script');
@@ -721,18 +728,23 @@
     sb: null,
     config: null,
     justFellBack: false,
+    fallbackReason: '',
+    fallbackDetail: '',
 
     async init() {
       var cfg = (window.KUJI_CONFIG || {});
       this.config = cfg;
       if (cfg.FORCE_DEMO || !cfg.SUPABASE_URL || !cfg.SUPABASE_ANON_KEY) return 'local';
       try {
-        await loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2');
+        await withTimeout(loadScript('https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2'), 7000, 'script load failed: timeout');
         if (!window.supabase || !window.supabase.createClient) throw new Error('supabase-js unavailable');
         this.sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, {
           auth: { persistSession: true, autoRefreshToken: true }
         });
-        var probe = await this.sb.from('boards').select('id', { count: 'exact', head: true });
+        var probe = await withTimeout(
+          this.sb.from('boards').select('id', { count: 'exact', head: true }),
+          7000, 'Failed to fetch: timeout'
+        );
         if (probe.error) throw probe.error;
         this.mode = 'supabase';
         this.subscribe();
@@ -741,6 +753,15 @@
         console.warn('[쿠지킹] Supabase 연결에 실패해 데모 모드로 실행합니다.', e);
         this.mode = 'local';
         this.justFellBack = true;
+        this.fallbackDetail = (e && (e.message || e.error_description || e.details)) || String(e || '');
+        var test = String((e && (e.code || '')) + ' ' + this.fallbackDetail);
+        if (/PGRST205|Could not find the table|does not exist|schema cache|404/i.test(test)) {
+          this.fallbackReason = 'missing_tables';
+        } else if (/Failed to fetch|NetworkError|Load failed|script load failed/i.test(test)) {
+          this.fallbackReason = 'network';
+        } else {
+          this.fallbackReason = 'error';
+        }
         return 'local';
       }
     },
@@ -1508,11 +1529,21 @@
         modeBar.hidden = true;
       } else {
         modeBar.hidden = false;
+        var barText;
+        if (Backend.fallbackReason === 'missing_tables') {
+          barText = 'Supabase에 연결했지만 데이터베이스 테이블이 아직 없어 데모 모드로 실행 중입니다 · SQL Editor에서 schema.sql을 실행해 주세요';
+        } else if (Backend.fallbackReason === 'network') {
+          barText = 'Supabase 서버에 닿지 않아 데모 모드로 실행 중입니다 · 데이터는 이 브라우저에만 저장됩니다';
+        } else if (Backend.fallbackReason === 'error') {
+          barText = 'Supabase 설정을 확인하지 못해 데모 모드로 실행 중입니다 · 데이터는 이 브라우저에만 저장됩니다';
+        } else {
+          barText = '데모 모드 · 데이터는 이 브라우저에만 저장됩니다 · Supabase 키를 넣으면 실시간 서버 모드로 전환됩니다';
+        }
         modeBar.innerHTML = '<div class="container mode-inner">' +
           '<span class="mode-dot"></span>' +
           '<b>데모 모드</b>' +
-          '<span>데이터는 이 브라우저에만 저장됩니다 · Supabase 키를 넣으면 실시간 서버 모드로 전환됩니다</span>' +
-          '<a href="#/admin" class="mode-link">연결 방법 보기 →</a>' +
+          '<span>' + h(barText) + '</span>' +
+          '<a href="#/admin" class="mode-link">' + (Backend.fallbackReason === 'missing_tables' ? 'SQL 실행 안내 →' : '연결 방법 보기 →') + '</a>' +
           '</div>';
       }
     }
@@ -2742,6 +2773,32 @@
     }).join('');
   }
 
+  function supabaseProjectRef(url) {
+    var m = String(url || '').match(/^https:\/\/([a-z0-9]+)\.supabase\.co/i);
+    return m ? m[1] : '';
+  }
+
+  function fallbackBoxHTML(cfg) {
+    if (!Backend.justFellBack) return '';
+    var ref = supabaseProjectRef(cfg && cfg.SUPABASE_URL);
+    var sqlUrl = ref ? 'https://supabase.com/dashboard/project/' + ref + '/sql/new' : 'https://supabase.com/dashboard';
+    var title = Backend.fallbackReason === 'missing_tables'
+      ? 'Supabase는 연결됐지만 테이블이 아직 없습니다'
+      : Backend.fallbackReason === 'network' ? 'Supabase 서버에 연결하지 못했습니다' : 'Supabase 설정을 확인하지 못했습니다';
+    var desc = Backend.fallbackReason === 'missing_tables'
+      ? '아래 SQL Editor에서 <code>supabase/schema.sql</code> 전체를 붙여넣고 Run 하면, 새로고침만으로 실시간 서버 모드로 바뀝니다. 그 전까지는 이 브라우저의 데모 데이터로 정상 동작합니다.'
+      : '잠시 후 새로고침하거나, URL·Publishable 키·프로젝트 상태를 확인해 주세요. 그 전까지는 데모 모드로 정상 동작합니다.';
+    return '<div class="fallback-box">' +
+      '<strong>' + h(title) + '</strong>' +
+      '<p>' + desc + '</p>' +
+      '<div class="btn-row tight">' +
+        '<a class="btn btn-primary btn-sm" href="' + sqlUrl + '" target="_blank" rel="noopener">SQL Editor 열기</a>' +
+        '<a class="btn btn-outline btn-sm" href="https://github.com/pkn8238-source/Kujiking/blob/main/supabase/schema.sql" target="_blank" rel="noopener">schema.sql 보기</a>' +
+      '</div>' +
+      (Backend.fallbackDetail ? '<p class="fallback-detail">' + h(Backend.fallbackDetail) + '</p>' : '') +
+    '</div>';
+  }
+
   function renderSettingsTab() {
     var card = $('#backendCard');
     if (card) {
@@ -2761,7 +2818,7 @@
           '<li>회원가입 후 SQL Editor 에서 <code>update public.profiles set is_admin = true where email = \'내 이메일\';</code> 를 실행합니다.</li>' +
         '</ol>' +
         '<p class="storage-info">현재 설정 · URL <code>' + (cfg.SUPABASE_URL ? h(cfg.SUPABASE_URL) : '비어 있음') + '</code> · KEY <code>' + (cfg.SUPABASE_ANON_KEY ? '입력됨' : '비어 있음') + '</code></p>' +
-        (Backend.justFellBack ? '<p class="form-error" style="display:block">키는 있지만 서버에 연결하지 못해 데모 모드로 실행 중입니다. SQL 설치와 키 값을 확인해 주세요.</p>' : '');
+        fallbackBoxHTML(cfg);
     }
 
     var info = $('#storageInfo');
