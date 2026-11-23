@@ -25,9 +25,49 @@
   });
 
   function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
-  async function shaHex(str) {
-    var buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-    return [].slice.call(new Uint8Array(buf)).map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+  /* http(비보안 컨텍스트)에서는 crypto.subtle 이 없으므로 순수 JS SHA-256 사용 */
+  function shaHex(ascii) {
+    function rr(v, a) { return (v >>> a) | (v << (32 - a)); }
+    var mathPow = Math.pow, maxWord = mathPow(2, 32), result = '', words = [], bitLen = ascii.length * 8;
+    var hash = shaHex.h = shaHex.h || [];
+    var k = shaHex.k = shaHex.k || [];
+    var counter = k.length, isC = {};
+    for (var c = 2; counter < 64; c++) {
+      if (!isC[c]) {
+        for (var i = 0; i < 313; i += c) isC[i] = c;
+        hash[counter] = (mathPow(c, .5) * maxWord) | 0;
+        k[counter++] = (mathPow(c, 1 / 3) * maxWord) | 0;
+      }
+    }
+    ascii += '\x80';
+    while (ascii.length % 64 - 56) ascii += '\x00';
+    for (i = 0; i < ascii.length; i++) {
+      var j = ascii.charCodeAt(i);
+      if (j >> 8) return '';
+      words[i >> 2] |= j << ((3 - i) % 4) * 8;
+    }
+    words[words.length] = (bitLen / maxWord) | 0;
+    words[words.length] = bitLen;
+    for (j = 0; j < words.length;) {
+      var w = words.slice(j, j += 16), oldHash = hash;
+      hash = hash.slice(0, 8);
+      for (i = 0; i < 64; i++) {
+        var w15 = w[i - 15], w2 = w[i - 2], a = hash[0], e = hash[4];
+        var temp1 = hash[7] + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & hash[5]) ^ ((~e) & hash[6])) + k[i] +
+          (w[i] = (i < 16) ? w[i] : (w[i - 16] + (rr(w15, 7) ^ rr(w15, 18) ^ (w15 >>> 3)) + w[i - 7] + (rr(w2, 17) ^ rr(w2, 19) ^ (w2 >>> 10))) | 0);
+        var temp2 = (rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & hash[1]) ^ (a & hash[2]) ^ (hash[1] & hash[2]));
+        hash = [(temp1 + temp2) | 0].concat(hash);
+        hash[4] = (hash[4] + temp1) | 0;
+      }
+      for (i = 0; i < 8; i++) hash[i] = (hash[i] + oldHash[i]) | 0;
+    }
+    for (i = 0; i < 8; i++) {
+      for (j = 3; j + 1; j--) {
+        var b = (hash[i] >> (j * 8)) & 255;
+        result += ((b < 16) ? 0 : '') + b.toString(16);
+      }
+    }
+    return result;
   }
 
   async function findTarget(want) {
@@ -37,7 +77,7 @@
       var opened = {};
       (b.opens || []).forEach(function (o) { opened[o.n] = 1; });
       var hashes = [];
-      for (var n = 1; n <= b.tickets; n++) hashes.push({ n: n, hash: await shaHex(b.seed + ':' + n) });
+      for (var n = 1; n <= b.tickets; n++) hashes.push({ n: n, hash: shaHex(b.seed + ':' + n) });
       hashes.sort(function (a, c) { return a.hash < c.hash ? -1 : a.hash > c.hash ? 1 : 0; });
       var map = {}, i = 0;
       b.tiers.forEach(function (t) {
