@@ -1312,9 +1312,10 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .hero-facts li{padding:8px 12px;min-width:86px;border-radius:11px}
 .hero-facts strong{font-size:16px}
 .hero-facts span{font-size:11px}
-.hero-art{min-height:270px}
-.hero-logo{width:min(292px,80%)}
-.hero-disc{width:min(306px,80%)}
+.hero-art{min-height:252px}
+.hero-logo{width:min(262px,78%)}
+.hero-disc{width:min(278px,78%)}
+.live-ticker{margin-top:0}
 .hero-burst{width:640px;height:640px}
 .float-chip{font-size:11.5px;padding:6px 11px;border-width:2px}
 .pill{padding:5px 12px;font-size:12px}
