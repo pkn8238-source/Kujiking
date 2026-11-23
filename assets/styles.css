@@ -2177,6 +2177,8 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .reveal-stage.lv3 .rv-spot{width:460px;height:380px;margin-left:-230px;
   background:linear-gradient(180deg,rgba(255,248,220,.55),rgba(255,226,140,.18) 55%,transparent 88%)}
 .reveal-stage.lv2 .rv-burst,.reveal-stage.lv3 .rv-burst{width:420px;height:420px;margin:-210px 0 0 -210px}
+.reveal-stage.lv2 .rv-kicker,.reveal-stage.lv3 .rv-kicker{color:#ffe9a8;letter-spacing:.26em;
+  text-shadow:0 2px 10px rgba(0,0,0,.9),0 0 18px rgba(255,200,60,.7)}
 .reveal-stage.lv2 .rv-halo{opacity:.62;filter:blur(30px)}
 .reveal-stage.lv3 .rv-figure{box-shadow:0 0 0 3px rgba(255,255,255,.95),0 18px 30px rgba(0,0,0,.5),0 0 46px rgba(255,214,90,.85)}
 
