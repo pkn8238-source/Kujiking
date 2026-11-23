@@ -365,6 +365,37 @@ revoke insert on public.profiles from anon;
 grant insert (id, email, nickname, phone) on public.profiles to authenticated;
 
 -- ---------------------------------------------------------
+-- 5-3. 테이블 접근 권한 (GRANT)
+--   RLS 만 켜 두면 anon/authenticated 롤이 테이블 자체에 접근하지 못해
+--   "permission denied for table boards" (42501) 가 납니다. 반드시 함께 실행하세요.
+-- ---------------------------------------------------------
+grant usage on schema public to anon, authenticated;
+
+-- 비로그인 방문자: 판 · 번호표 · 설정 읽기 (개인 데이터는 RLS 가 막습니다)
+grant select on public.boards, public.tickets, public.draws, public.app_settings to anon;
+
+-- 로그인 회원: 조회 + 본인 데이터 쓰기 (행 제한은 RLS 가 담당)
+grant select on public.boards, public.tickets, public.app_settings,
+                public.profiles, public.coupons, public.draws,
+                public.purchase_claims, public.deliveries, public.exchange_codes
+  to authenticated;
+
+grant insert, update on public.purchase_claims to authenticated;
+grant insert on public.deliveries to authenticated;
+
+-- 관리자 동작 (RLS 의 is_admin() 가 실제 허용 범위를 제한)
+grant select, insert, update, delete on public.boards, public.tickets,
+      public.coupons, public.draws, public.exchange_codes, public.app_settings
+  to authenticated;
+
+-- 프로필은 닉네임·전화만 수정 가능 (is_admin / points 는 못 바꿈)
+grant update (nickname, phone) on public.profiles to authenticated;
+grant insert (id, email, nickname, phone) on public.profiles to authenticated;
+
+grant usage, select on all sequences in schema public to authenticated;
+grant execute on all functions in schema public to anon, authenticated;
+
+-- ---------------------------------------------------------
 -- 6. 뽑기 (쿠폰 또는 교환 코드) — 동시에 두 명이 같은 번호를 뽑을 수 없도록
 --    한 트랜잭션 안에서 티켓 행을 FOR UPDATE 로 잠급니다.
 -- ---------------------------------------------------------
