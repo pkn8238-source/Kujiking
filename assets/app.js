@@ -2486,7 +2486,7 @@
     var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA'];
     var muted = null, lastTick = 0, lastSeal = 0, flashTimer = 0;
     var ctx = null, master = null, noiseBuf = null, running = false;
-    var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0;
+    var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
 
     /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 소리가 나도록 오디오 세션을 'playback' 으로 */
     function markPlayback() {
@@ -2779,6 +2779,7 @@
       }
       if (!list.length) return;
       primeTries++;
+      var seqAtStart = playSeq;
       var left = list.length, okCount = 0;
       var settle = function () {
         if (--left > 0) return;
@@ -2792,7 +2793,8 @@
           var p = el.play();
           if (p && p.then) {
             p.then(function () {
-              try { el.pause(); el.currentTime = 0; el.muted = false; } catch (e) {}
+              /* 프라임 도중에 실제 효과음이 시작됐다면 그 소리를 끊지 않는다 */
+              try { if (playSeq === seqAtStart) { el.pause(); el.currentTime = 0; } el.muted = false; } catch (e) {}
               htmlOk[el.__key] = true; okCount++; settle();
             }, function () {
               try { el.muted = false; } catch (e) {}
@@ -2815,6 +2817,7 @@
       if (!pool || !pool.length) return false;
       var el = pool[cursor[key] % pool.length];
       cursor[key] = (cursor[key] + 1) % 1024;
+      playSeq++;
       try { el.muted = false; } catch (e) {}
       try { el.volume = Math.max(0.05, Math.min(1, vol == null ? 1 : vol)); } catch (e) {}
       try { el.pause(); } catch (e) {}
