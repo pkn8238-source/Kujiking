@@ -2176,6 +2176,12 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   animation:rv-spot 5s ease-in-out infinite}
 .reveal-stage.lv3 .rv-spot{width:460px;height:380px;margin-left:-230px;
   background:linear-gradient(180deg,rgba(255,248,220,.55),rgba(255,226,140,.18) 55%,transparent 88%)}
+/* 폭죽·반짝임이 피규어 위로 내려오도록 (v3.6) */
+.reveal-stage .rv-confetti{z-index:5}
+.reveal-stage .rv-sparks{z-index:4}
+.reveal-stage .rv-flash,.reveal-stage .rv-boom{z-index:6}
+.reveal-stage.lv2 .rv-kicker,.reveal-stage.lv3 .rv-kicker{margin-top:10px}
+
 .reveal-stage.lv2 .rv-burst,.reveal-stage.lv3 .rv-burst{width:420px;height:420px;margin:-210px 0 0 -210px}
 .reveal-stage.lv2 .rv-kicker,.reveal-stage.lv3 .rv-kicker{color:#ffe9a8;letter-spacing:.26em;
   text-shadow:0 2px 10px rgba(0,0,0,.9),0 0 18px rgba(255,200,60,.7)}
