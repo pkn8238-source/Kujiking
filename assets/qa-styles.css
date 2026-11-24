@@ -2283,6 +2283,7 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .yt-live-btn:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--ink);background:linear-gradient(180deg,#fff2d3 0%,#ffdc9a 100%)}
 .yt-live-btn:active{transform:translateY(1px);box-shadow:0 2px 0 var(--ink)}
 .yt-live-mark{display:grid;place-items:center;width:19px;height:19px;flex:none;color:var(--red);animation:ytLiveBeat 1.8s ease-in-out infinite}
+.yt-live-btn.is-soon .yt-live-mark{animation:none;opacity:.85}
 .yt-live-mark svg{width:19px;height:19px;display:block}
 .yt-live-word{line-height:1}
 .yt-live-word .yt-live-prefix{font-weight:800;color:var(--ink-soft)}

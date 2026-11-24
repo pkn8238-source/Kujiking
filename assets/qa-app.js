@@ -1912,11 +1912,29 @@
       "on conflict (key) do update set value = excluded.value;";
   }
 
+  function openInNewTab(url) {
+    if (!url) return false;
+    try {
+      var a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return true;
+    } catch (e) {
+      var win = window.open(url, '_blank', 'noopener');
+      if (win) { try { win.opener = null; } catch (e2) {} }
+      return !!win;
+    }
+  }
+
   function openYoutubeLive() {
     var target = youtubeLiveUrl();
     if (target) {
-      var win = window.open(target, '_blank', 'noopener');
-      if (win) { try { win.opener = null; } catch (e) {} }
+      openInNewTab(target);
       return true;
     }
     openModal('<div class="yt-soon">' +
@@ -5372,7 +5390,7 @@
           var ytTyped = ytInput ? ytInput.value.trim() : '';
           var ytTarget = youtubeLiveTarget(ytTyped) || youtubeLiveUrl();
           if (!ytTarget) { toast('먼저 유튜브 주소를 입력해 주세요', 'err'); break; }
-          window.open(ytTarget, '_blank', 'noopener');
+          openInNewTab(ytTarget);
           break;
         }
         case 'copy-youtube-sql': {
