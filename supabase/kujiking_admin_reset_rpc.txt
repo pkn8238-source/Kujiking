@@ -1,0 +1,49 @@
+-- =========================================================
+-- 쿠지킹(KujiKing) — 관리자 '판매 초기화' 서버 함수
+-- ---------------------------------------------------------
+-- 사용법
+--  1) Supabase Dashboard → SQL Editor → New query
+--  2) 이 파일 전체를 붙여넣고 Run (한 번만 실행하면 됩니다. 다시 실행해도 안전)
+--  3) 사이트에서 관리자 로그인 → [관리자 > 판 관리] → 각 판의 `🔄 판매 초기화` 버튼
+--
+-- 하는 일: 그 판의 판매 기록만 0건으로 되돌립니다.
+--   · tickets  : status='available', 구매자·등급·뽑기시각 비우기
+--   · draws    : 그 판의 보관함 기록 삭제 (내 보관함)
+--   · deliveries: 그 판의 배송 요청 삭제
+--   · boards   : status='open' (다시 판매 중)
+--   · 시드(seed)·봉인 해시·등급 배치는 건드리지 않습니다.
+--   · 회원 계정, 쿠폰, 구매확인(입금 확인) 요청, 교환 코드는 건드리지 않습니다.
+-- =========================================================
+
+create or replace function public.admin_reset_board(p_board_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  v_sold integer;
+begin
+  -- 관리자만 실행 가능 (profiles.is_admin = true)
+  if not public.is_admin() then
+    raise exception '관리자만 사용할 수 있습니다.';
+  end if;
+
+  select count(*) into v_sold
+  from public.tickets
+  where board_id = p_board_id and status = 'sold';
+
+  delete from public.deliveries where board_id = p_board_id;
+  delete from public.draws      where board_id = p_board_id;
+  update public.tickets
+     set status = 'available', buyer_id = null, buyer_name = null, grade = null, drawn_at = null
+   where board_id = p_board_id;
+  update public.boards set status = 'open' where id = p_board_id;
+
+  return jsonb_build_object('board_id', p_board_id, 'reset', v_sold);
+end;
+$$;
+
+grant execute on function public.admin_reset_board(uuid) to authenticated;
+
+-- 확인용 (실행 후 아래 두 줄을 따로 Run 해 보면 초기화된 상태를 볼 수 있습니다)
+-- select b.title, count(*) filter (where t.status = 'sold') as sold, b.status
+--   from public.boards b join public.tickets t on t.board_id = b.id group by b.id, b.title, b.status;
