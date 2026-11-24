@@ -758,6 +758,12 @@
     return Math.max(0, board.tickets - sold);
   }
   function openedCount(board) { return Array.isArray(board.opens) ? board.opens.length : 0; }
+  /* 품절임박: 열린 판인데 남은 번호가 30% 미만 */
+  function isLowStock(board) {
+    var left = remaining(board);
+    var total = Number(board.tickets || 0);
+    return board.status === 'open' && left > 0 && total > 0 && (left / total) < 0.3;
+  }
   function tierSum(board) {
     return board.tiers.reduce(function (s, t) { return s + Number(t.count || 0); }, 0);
   }
@@ -1860,25 +1866,43 @@
     if (confirmResolve) { var p = confirmResolve; confirmResolve = null; p(false); }
     if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch (e) {} }
   }
-  /* ---------- 주소 검색 (다음/카카오 우편번호, API 키 불필요) ---------- */
-  var DAUM_POSTCODE_SRC = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+  /* ---------- 주소 검색 (카카오/다음 우편번호, API 키 불필요) ---------- */
+  /* t1.daumcdn.net 은 2026-11-30 종료 예정 → t1.kakaocdn.net 먼저, 안 되면 기존 도메인 */
+  var POSTCODE_SRCS = [
+    'https://t1.kakaocdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js',
+    'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js'
+  ];
   var daumPostcodeLoading = null;
 
-  function loadDaumPostcode() {
-    if (window.daum && window.daum.Postcode) return Promise.resolve(true);
-    if (daumPostcodeLoading) return daumPostcodeLoading;
-    daumPostcodeLoading = new Promise(function (resolve) {
+  function postcodeNS() {
+    if (window.kakao && window.kakao.Postcode) return window.kakao.Postcode;
+    if (window.daum && window.daum.Postcode) return window.daum.Postcode;
+    return null;
+  }
+
+  function loadPostcodeScript(src) {
+    return new Promise(function (resolve) {
       var settled = false;
       function finish(ok) { if (settled) return; settled = true; resolve(ok); }
       var s = document.createElement('script');
-      s.src = DAUM_POSTCODE_SRC;
+      s.src = src;
       s.async = true;
-      s.onload = function () { finish(!!(window.daum && window.daum.Postcode)); };
-      s.onerror = function () { daumPostcodeLoading = null; finish(false); };
+      s.onload = function () { finish(!!postcodeNS()); };
+      s.onerror = function () { finish(false); };
       document.head.appendChild(s);
-      setTimeout(function () {
-        if (!(window.daum && window.daum.Postcode)) { daumPostcodeLoading = null; finish(false); }
-      }, 8000);
+      setTimeout(function () { finish(!!postcodeNS()); }, 8000);
+    });
+  }
+
+  function loadDaumPostcode() {
+    if (postcodeNS()) return Promise.resolve(true);
+    if (daumPostcodeLoading) return daumPostcodeLoading;
+    daumPostcodeLoading = loadPostcodeScript(POSTCODE_SRCS[0]).then(function (ok) {
+      if (ok) return true;
+      return loadPostcodeScript(POSTCODE_SRCS[1]);
+    }).then(function (ok) {
+      if (!ok) daumPostcodeLoading = null; /* 다음 시도 때 다시 받도록 */
+      return ok;
     });
     return daumPostcodeLoading;
   }
@@ -1918,7 +1942,8 @@
       }
       body.innerHTML = '';
       try {
-        new window.daum.Postcode({
+        var PostcodeCtor = postcodeNS();
+        new PostcodeCtor({
           width: '100%',
           height: '100%',
           oncomplete: function (data) {
@@ -2381,6 +2406,7 @@
     var left = remaining(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var soldout = left === 0;
+    var low = isLowStock(board);
     var statusBadge = soldout
       ? '<span class="badge badge-closed cover-status">전량 소진</span>'
       : board.status === 'open'
@@ -2393,7 +2419,7 @@
         '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
         '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>';
     return '' +
-      '<article class="board-card">' +
+      '<article class="board-card' + (low ? ' is-lowstock' : '') + '">' +
         '<a class="board-card-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
           coverInner +
           '<span class="badge cover-tag">' + h(board.category || '자체 스페셜') + '</span>' +
@@ -2401,6 +2427,7 @@
           '<span class="cover-price">1장 ' + won(board.price) + ' · ' + fmt(board.tickets) + '장</span>' +
         '</a>' +
         '<div class="board-card-body">' +
+          (low ? '<span class="lowstock-flag">🔥 품절임박 · ' + fmt(left) + '장 남음</span>' : '') +
           '<div class="board-card-top">' +
             '<span class="band-tag band-' + priceBand(board.price) + '">' + priceBandLabel(board.price) + '</span>' +
             '<span class="muted sold-line">판매 ' + fmt(openedCount(board)) + '장</span>' +
@@ -2567,6 +2594,8 @@
     if (!el) return;
     var left = remaining(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
+    var low = isLowStock(board);
+    el.classList.toggle('is-lowstock', low);
     el.innerHTML = '' +
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
         (board.cover
@@ -2578,6 +2607,7 @@
       '</div>' +
       '<div class="board-hero-body">' +
         '<span class="pill pill-cream">' + h(board.category) + ' · ' + priceBandLabel(board.price) + '</span>' +
+        (low ? '<span class="pill pill-lowstock">🔥 품절임박! 라스트원 찬스</span>' : '') +
         '<h1>' + h(board.title) + '</h1>' +
         '<div class="board-meta">' +
           '<span>1장 <b>' + won(board.price) + '</b></span>' +

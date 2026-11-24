@@ -2957,3 +2957,41 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .batch-cards{gap:3px}
   .bcard-n{font-size:9px}
 }
+
+/* =========================================================
+   v3.9.6 — 🔥 품절임박 (잔여 30% 미만) 강조
+   ========================================================= */
+.board-card.is-lowstock{
+  border-color:#d4210d;
+  box-shadow:0 5px 0 #7d1207,0 0 0 3px rgba(255,91,26,.45),0 10px 24px rgba(255,91,26,.3);
+  animation:lowStockGlow 2.4s ease-in-out infinite;
+}
+.board-card.is-lowstock:hover{box-shadow:0 8px 0 #7d1207,0 0 0 4px rgba(255,91,26,.6),0 14px 30px rgba(255,91,26,.36)}
+.lowstock-flag{
+  display:flex;align-items:center;justify-content:center;gap:5px;
+  margin:-2px 0 2px;padding:7px 10px;border-radius:10px;
+  font-size:12.5px;font-weight:900;letter-spacing:-.02em;line-height:1.2;text-align:center;
+  color:#fff;background:linear-gradient(100deg,#e01a0a,#ff5b1a 58%,#ff8a00);
+  border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);
+  text-shadow:0 1px 0 rgba(0,0,0,.22);
+  animation:lowStockPulse 1.5s ease-in-out infinite;
+}
+.pill-lowstock{
+  background:linear-gradient(100deg,#e01a0a,#ff5b1a 60%,#ff8a00);
+  color:#fff;border-color:var(--ink);box-shadow:0 3px 0 var(--ink);
+  text-shadow:0 1px 0 rgba(0,0,0,.22);
+  animation:lowStockPulse 1.5s ease-in-out infinite;
+}
+.board-hero.is-lowstock{border-color:#d4210d;box-shadow:0 5px 0 #7d1207,0 0 0 3px rgba(255,91,26,.4),0 10px 24px rgba(255,91,26,.26)}
+@keyframes lowStockPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
+@keyframes lowStockGlow{
+  0%,100%{box-shadow:0 5px 0 #7d1207,0 0 0 3px rgba(255,91,26,.4),0 8px 18px rgba(255,91,26,.24)}
+  50%{box-shadow:0 5px 0 #7d1207,0 0 0 5px rgba(255,91,26,.62),0 12px 28px rgba(255,91,26,.38)}
+}
+@media (max-width:760px){
+  .lowstock-flag{font-size:10.5px;padding:4px 6px;border-width:1.5px;box-shadow:0 2px 0 var(--ink);border-radius:8px}
+  .pill-lowstock{font-size:11.5px;padding:4px 10px}
+}
+@media (prefers-reduced-motion: reduce){
+  .board-card.is-lowstock,.lowstock-flag,.pill-lowstock{animation:none}
+}
