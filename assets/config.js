@@ -17,6 +17,9 @@ window.KUJI_CONFIG = {
   FORCE_DEMO: false,
 
   /* 화면 표시용 */
-  STORE_NAME: '쿠지통령',
+  STORE_NAME: '쿠지킹',
+  STORE_URL: 'https://smartstore.naver.com/kujiking',
+  STORE_PRODUCT_URL: 'https://smartstore.naver.com/kujiking/products/13893473264',
+  KAKAO_CHAT_URL: 'https://pf.kakao.com/_xnxhmvX/chat',
   CONTACT: 'kujiking@kujiking.co.kr'
 };

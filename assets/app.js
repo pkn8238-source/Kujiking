@@ -18,6 +18,11 @@
   var STATE_VERSION = 5;   // v5: 실물 등급 각 1개 + P상(굿즈 포인트 1,200P) 구성으로 재시드
   var MAX_TICKETS = 500;
 
+  /* ---------- 스토어 · 카카오톡 채널 링크 (2026-11-24 개설) ---------- */
+  var STORE_URL = 'https://smartstore.naver.com/kujiking';
+  var STORE_PRODUCT_URL = 'https://smartstore.naver.com/kujiking/products/13893473264';
+  var KAKAO_CHAT_URL = 'https://pf.kakao.com/_xnxhmvX/chat';
+
   /* ---------- 회원가입 이메일 제한 ----------
      스팸 가입 방지를 위해 네이버·지메일 주소만 가입을 받는다.
      이미 가입한 다른 도메인 계정도 로그인은 그대로 된다(가입에만 적용). */
@@ -398,7 +403,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: '', shippingFeeNotice: '' },
+      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
@@ -963,7 +968,7 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: '', shippingFeeNotice: '' }, s.settings || {});
+    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' }, s.settings || {});
     s.users = s.users || [];
     s.coupons = s.coupons || [];
     s.draws = s.draws || [];
@@ -1187,7 +1192,7 @@
         if (typeof settingsMap.youtube_live_enabled === 'string') {
           state.settings.youtubeLiveEnabled = !/^(false|0|off|no)$/i.test(settingsMap.youtube_live_enabled.trim());
         }
-        if (typeof settingsMap.kakao_openchat_url === 'string') state.settings.kakaoOpenchatUrl = settingsMap.kakao_openchat_url;
+        if (typeof settingsMap.kakao_openchat_url === 'string' && settingsMap.kakao_openchat_url.trim()) state.settings.kakaoOpenchatUrl = settingsMap.kakao_openchat_url;
         if (typeof settingsMap.shipping_fee_notice === 'string') state.settings.shippingFeeNotice = settingsMap.shipping_fee_notice;
       }
 
@@ -2197,7 +2202,7 @@
 
   /* ---------- 고객센터 · 배송비 ---------- */
   var SHIP_NOTICE_DEFAULT = '기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)';
-  var KAKAO_SOON = '현재 1:1 오픈채팅을 연결 중입니다! 잠시만 기다려 주세요.';
+  var KAKAO_SOON = '현재 1:1 카카오톡 상담을 연결 중입니다! 잠시만 기다려 주세요.';
 
   function shippingNotice() {
     var s = String(state.settings.shippingFeeNotice == null ? '' : state.settings.shippingFeeNotice).replace(/\s+/g, ' ').trim();
@@ -2218,7 +2223,7 @@
   }
 
   function kakaoOpenchatUrl() {
-    return kakaoTarget(state.settings.kakaoOpenchatUrl);
+    return kakaoTarget(state.settings.kakaoOpenchatUrl) || KAKAO_CHAT_URL;
   }
 
   function kakaoMarkHTML(cls) {
@@ -2228,7 +2233,7 @@
   function kakaoPillHTML(cls) {
     return '<button class="kakao-pill' + (cls ? ' ' + cls : '') + '" type="button" data-action="open-kakao">' +
       kakaoMarkHTML() +
-    '<span class="kakao-pill-word">1:1 오픈채팅 문의</span></button>';
+    '<span class="kakao-pill-word">1:1 카카오톡 문의</span></button>';
   }
 
   function openKakaoInquiry(raw) {
@@ -2239,7 +2244,7 @@
     }
     openModal('<div class="kakao-soon">' +
       '<span class="kakao-soon-mark" aria-hidden="true">' + kakaoMarkHTML('kakao-mark-lg') + '</span>' +
-      '<h2 class="modal-title" id="modalTitle">1:1 오픈채팅 문의</h2>' +
+      '<h2 class="modal-title" id="modalTitle">1:1 카카오톡 문의</h2>' +
       '<p class="modal-sub">' + h(KAKAO_SOON) + '</p>' +
       '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">확인</button></div>' +
       '</div>');
@@ -2255,7 +2260,7 @@
     var on = !!kakaoOpenchatUrl();
     $$('[data-action="open-kakao"]').forEach(function (el) {
       el.classList.toggle('is-soon', !on);
-      el.setAttribute('title', on ? '카카오톡 1:1 오픈채팅 열기 (새 창)' : '1:1 오픈채팅 연결 준비 중');
+      el.setAttribute('title', on ? '카카오톡 1:1 상담 열기 (새 창)' : '1:1 카카오톡 상담 연결 준비 중');
     });
   }
 
@@ -2317,7 +2322,7 @@
     prev.innerHTML = '<span>방문자에게 보이는 배송비 안내 → <b>' + h(noteText) + '</b></span>' +
       (typed.kakao
         ? (target ? '<span>문의 버튼 → <a href="' + h(target) + '" target="_blank" rel="noopener">' + h(target) + '</a></span>'
-                  : '<span>주소를 확인해 주세요. 예: <code>https://open.kakao.com/o/xxxxxxxx</code></span>')
+                  : '<span>주소를 확인해 주세요. 예: <code>https://pf.kakao.com/_xnxhmvX/chat</code></span>')
         : '<span>문의 버튼 → 지금은 “' + h(KAKAO_SOON) + '” 안내가 보입니다.</span>');
   }
 
@@ -2333,7 +2338,7 @@
     if (badge) {
       var on = !!kakaoOpenchatUrl();
       badge.className = 'badge ' + (on ? 'badge-live' : 'badge-closed');
-      badge.textContent = on ? '오픈채팅 연결됨' : '연결 전 · 준비 중 안내';
+      badge.textContent = on ? '카카오톡 상담 연결됨' : '연결 전 · 준비 중 안내';
       badge.hidden = false;
     }
     updateCsPreview();
@@ -5807,7 +5812,7 @@
       '<p>당첨 상품은 내 보관함에서 배송 신청한 주소로 발송됩니다. 주소 오류로 인한 반송은 재발송 비용이 발생할 수 있습니다.</p>' +
       '<h3>6. 배송비 · 합배송</h3>' +
       '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
-      '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 1:1 오픈채팅으로 받고 있습니다.</p>' +
+      '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
       kakaoPillHTML('kakao-pill-sm') +
       '<h3>7. 미성년자 이용</h3>' +
       '<p>미성년자는 법정대리인의 동의를 받은 후 이용할 수 있습니다. 만 14세 미만은 이용할 수 없습니다.</p>' +
@@ -6816,8 +6821,8 @@
           var csForm = $('form[data-form="save-cs"]');
           var csInput = csForm ? csForm.querySelector('input[name="kakao"]') : null;
           var csTyped = csInput ? csInput.value.trim() : '';
-          if (csTyped && !kakaoTarget(csTyped)) { toast('주소를 확인해 주세요. 예: https://open.kakao.com/o/xxxxxxxx', 'err'); break; }
-          if (!csTyped && !kakaoOpenchatUrl()) { toast('먼저 카카오톡 오픈채팅 주소를 입력해 주세요', 'err'); break; }
+          if (csTyped && !kakaoTarget(csTyped)) { toast('주소를 확인해 주세요. 예: https://pf.kakao.com/_xnxhmvX/chat', 'err'); break; }
+          if (!csTyped && !kakaoOpenchatUrl()) { toast('먼저 카카토톡 채널 상담 주소를 입력해 주세요', 'err'); break; }
           openKakaoInquiry(csTyped);
           break;
         }
@@ -7180,7 +7185,7 @@
         var csUrl = fieldValue(form, 'kakao').trim();
         var csNotice = fieldValue(form, 'shipping').replace(/\s+/g, ' ').trim();
         if (csUrl && !kakaoTarget(csUrl)) {
-          if (csErr) csErr.textContent = '오픈채팅 주소를 확인해 주세요. 예: https://open.kakao.com/o/xxxxxxxx';
+          if (csErr) csErr.textContent = '카카오톡 채널 주소를 확인해 주세요. 예: https://pf.kakao.com/_xnxhmvX/chat';
           return;
         }
         if (csNotice.length > 160) {
