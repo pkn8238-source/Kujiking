@@ -2120,6 +2120,19 @@
     };
   }
 
+  function updateCsPreview() {
+    var prev = $('#csPreview');
+    if (!prev) return;
+    var typed = csTypedValues();
+    var noteText = typed.notice || SHIP_NOTICE_DEFAULT;
+    var target = kakaoTarget(typed.kakao);
+    prev.innerHTML = '<span>방문자에게 보이는 배송비 안내 → <b>' + h(noteText) + '</b></span>' +
+      (typed.kakao
+        ? (target ? '<span>문의 버튼 → <a href="' + h(target) + '" target="_blank" rel="noopener">' + h(target) + '</a></span>'
+                  : '<span>주소를 확인해 주세요. 예: <code>https://open.kakao.com/o/xxxxxxxx</code></span>')
+        : '<span>문의 버튼 → 지금은 “' + h(KAKAO_SOON) + '” 안내가 보입니다.</span>');
+  }
+
   function renderCsSettings() {
     var form = $('form[data-form="save-cs"]');
     if (form) {
@@ -2135,17 +2148,7 @@
       badge.textContent = on ? '오픈채팅 연결됨' : '연결 전 · 준비 중 안내';
       badge.hidden = false;
     }
-    var prev = $('#csPreview');
-    if (prev) {
-      var typed = csTypedValues();
-      var noteText = typed.notice || SHIP_NOTICE_DEFAULT;
-      var target = kakaoTarget(typed.kakao);
-      prev.innerHTML = '<span>방문자에게 보이는 배송비 안내 → <b>' + h(noteText) + '</b></span>' +
-        (typed.kakao
-          ? (target ? '<span>문의 버튼 → <a href="' + h(target) + '" target="_blank" rel="noopener">' + h(target) + '</a></span>'
-                    : '<span>주소를 확인해 주세요. 예: <code>https://open.kakao.com/o/xxxxxxxx</code></span>')
-          : '<span>문의 버튼 → 지금은 “' + h(KAKAO_SOON) + '” 안내가 보입니다.</span>');
-    }
+    updateCsPreview();
     var code = $('#csSqlCode');
     if (code) code.textContent = csSettingsSql(state.settings.kakaoOpenchatUrl || '', state.settings.shippingFeeNotice || '');
   }
@@ -5988,7 +5991,7 @@
 
     document.addEventListener('input', function (e) {
       if (e.target.closest('form[data-form="save-youtube"]')) updateYoutubePreview();
-      if (e.target.closest('form[data-form="save-cs"]')) renderCsSettings();
+      if (e.target.closest('form[data-form="save-cs"]')) updateCsPreview();
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
       if (e.target.getAttribute('data-role') === 'tier-image') {
         var prev = e.target.closest('.tier-extra') && e.target.closest('.tier-extra').querySelector('[data-role="tier-thumb"]');
