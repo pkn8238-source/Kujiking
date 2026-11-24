@@ -2459,3 +2459,119 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .cs-sql[open] summary::before{content:"－"}
 .cs-sql pre{margin:10px 0;padding:12px 14px;overflow-x:auto;background:#1d1815;color:#ffe9b8;border-radius:12px;font-size:12px;line-height:1.6;white-space:pre}
 .cs-sql .muted{margin-top:8px}
+
+/* =========================================================
+   v3.8.0 — 승격 연출 (C → B → A · 라스트원 대역전)
+   봉인이 깨진 뒤 등급 배지가 C → B → A 로 올라간다.
+   승격 단계에서는 배지·빛만 보이고 상품 이미지는 최종 결과에서 공개.
+   ========================================================= */
+.promo-stage{
+  position:relative;text-align:center;color:#fff;overflow:hidden;border-radius:22px;
+  margin:calc(-1 * var(--pad-t)) calc(-1 * var(--pad-x)) calc(-1 * var(--pad-b));
+  padding:30px 18px 20px;
+  background:radial-gradient(130% 82% at 50% 0%,#2a2166 0%,#12102b 44%,#050409 100%);
+  transition:background .3s ease;
+  --promo:#9a8cff;--promo2:#4f8bff;--promo-glow:rgba(140,120,255,.45);--promo-ink:#0d0a22;
+}
+.promo-stage[data-mood="b"]{
+  background:radial-gradient(130% 82% at 50% 0%,#5e1c0a 0%,#260d07 44%,#070302 100%);
+  --promo:#ff7a1a;--promo2:#ff2d20;--promo-glow:rgba(255,110,40,.48);--promo-ink:#2a0a02}
+.promo-stage[data-mood="a"]{
+  background:radial-gradient(130% 90% at 50% 0%,#6b4711 0%,#2a1a08 40%,#050403 100%);
+  --promo:#ffd84a;--promo2:#ff5ea8;--promo-glow:rgba(255,210,90,.52);--promo-ink:#241a02}
+
+.promo-bg{position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(58% 42% at 50% 34%,var(--promo-glow),transparent 72%);
+  opacity:.6;animation:promo-bg-pulse 2.4s ease-in-out infinite}
+@keyframes promo-bg-pulse{0%,100%{opacity:.42}50%{opacity:.78}}
+
+.promo-rays{position:absolute;left:50%;top:34%;width:720px;height:720px;margin:-360px 0 0 -360px;
+  pointer-events:none;opacity:.45;animation:promo-spin 18s linear infinite;
+  background:repeating-conic-gradient(from 0deg,var(--promo-glow) 0deg 3deg,transparent 3deg 13deg);
+  -webkit-mask-image:radial-gradient(closest-side,#000 26%,transparent 76%);
+  mask-image:radial-gradient(closest-side,#000 26%,transparent 76%)}
+@keyframes promo-spin{to{transform:rotate(360deg)}}
+.promo-stage[data-mood="b"] .promo-rays{animation-duration:11s;opacity:.58}
+.promo-stage[data-mood="a"] .promo-rays{animation-duration:6.5s;opacity:.72}
+
+.promo-kicker{position:relative;z-index:4;display:inline-block;margin:0 0 4px;padding:5px 14px;border-radius:999px;
+  font-size:11.5px;font-weight:900;letter-spacing:.14em;color:#fff;
+  background:rgba(255,255,255,.1);border:1.5px solid rgba(255,255,255,.45)}
+.promo-kicker span{color:var(--promo);margin-right:5px}
+
+.promo-slot{position:relative;z-index:3;display:grid;place-items:center;height:200px;margin:2px 0 0}
+.promo-aura{position:absolute;width:250px;height:250px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,var(--promo-glow),transparent 72%);
+  animation:promo-aura 1.8s ease-in-out infinite}
+@keyframes promo-aura{0%,100%{opacity:.5;transform:scale(.94)}50%{opacity:1;transform:scale(1.06)}}
+.promo-badge{position:relative;z-index:2;width:148px;height:148px;border-radius:50%;display:grid;place-items:center;
+  line-height:1;background:conic-gradient(from 210deg,#eef2ff,#7b6bff 30%,#dbe4ff 48%,#4a3fd0 72%,#eef2ff);
+  color:var(--promo-ink);
+  box-shadow:0 0 0 4px rgba(255,255,255,.28) inset,0 0 34px var(--promo-glow),0 16px 32px rgba(0,0,0,.55)}
+.promo-badge b{display:block;font-size:76px;font-weight:900;letter-spacing:-.05em}
+.promo-badge i{display:block;font-style:normal;font-size:14px;font-weight:900;letter-spacing:.2em;opacity:.82;margin-top:-2px}
+.promo-badge.is-pop{animation:promo-pop .52s cubic-bezier(.18,1.5,.4,1) both}
+@keyframes promo-pop{0%{opacity:0;transform:scale(.26) rotate(-14deg)}
+  58%{opacity:1;transform:scale(1.17) rotate(4deg)}100%{opacity:1;transform:scale(1) rotate(0)}}
+.promo-badge[data-mood="b"]{
+  background:conic-gradient(from 200deg,#fff3d6,#ff9a3c 26%,#ff3b30 48%,#ffd166 68%,#fff3d6);
+  box-shadow:0 0 0 4px rgba(255,240,200,.3) inset,0 0 44px rgba(255,110,40,.9),0 16px 32px rgba(0,0,0,.55)}
+.promo-badge[data-mood="a"]{
+  background:conic-gradient(from 200deg,#fff,#ffe9a8 18%,#f5b800 34%,#fffdf7 48%,#a855f7 66%,#3d7bfd 80%,#fff);
+  box-shadow:0 0 0 4px rgba(255,255,255,.44) inset,0 0 58px rgba(255,220,120,1),0 16px 34px rgba(0,0,0,.55);
+  animation:promo-pop .52s cubic-bezier(.18,1.5,.4,1) both,promo-rainbow 3.4s .5s linear infinite}
+@keyframes promo-rainbow{0%,100%{filter:hue-rotate(0deg) brightness(1)}50%{filter:hue-rotate(28deg) brightness(1.12)}}
+
+.promo-ring{position:absolute;inset:0;display:grid;place-items:center;pointer-events:none}
+.promo-ring i{position:absolute;width:150px;height:150px;border-radius:50%;border:2px solid var(--promo);opacity:0}
+.promo-ring.is-on i{animation:promo-ring .9s ease-out both}
+.promo-ring.is-on i:nth-child(2){animation-delay:.13s}
+.promo-ring.is-on i:nth-child(3){animation-delay:.26s}
+@keyframes promo-ring{0%{opacity:.95;transform:scale(.82)}100%{opacity:0;transform:scale(2.25)}}
+
+.promo-impact{position:relative;z-index:4;min-height:46px;margin:10px 0 0;
+  font-size:clamp(23px,6.8vw,33px);font-weight:900;letter-spacing:-.04em;line-height:1.15;opacity:0;color:#fff}
+.promo-impact.is-on{animation:promo-impact-in .55s cubic-bezier(.16,1.2,.3,1) both}
+@keyframes promo-impact-in{0%{opacity:0;transform:scale(.45) translateY(12px)}
+  55%{opacity:1;transform:scale(1.13)}100%{opacity:1;transform:scale(1)}}
+.promo-impact[data-mood="c"]{color:#eae5ff;text-shadow:0 0 14px rgba(150,130,255,.95),0 0 36px rgba(80,110,255,.75)}
+.promo-impact[data-mood="b"]{color:#fff3da;text-shadow:0 2px 0 #7a1a00,0 0 16px rgba(255,130,40,.95),0 0 42px rgba(255,60,20,.8)}
+.promo-impact[data-mood="a"]{font-size:clamp(25px,7.4vw,37px);color:#fffdf4;
+  text-shadow:0 2px 0 #4a2c00,0 0 16px rgba(255,225,120,1),0 0 44px rgba(255,150,20,.9),0 0 72px rgba(255,90,170,.5)}
+
+.promo-fx{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.promo-stars{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden}
+.promo-star{position:absolute;color:#fff;font-size:12px;opacity:0;pointer-events:none;
+  text-shadow:0 0 10px rgba(255,240,190,1),0 0 22px rgba(255,200,90,.9);
+  animation:promo-star-fall 1.7s linear both}
+@keyframes promo-star-fall{
+  0%{opacity:0;transform:translate3d(0,-16px,0) scale(.4)}
+  14%{opacity:1}
+  72%{opacity:1}
+  100%{opacity:0;transform:translate3d(-34px,400px,0) scale(1.25)}}
+
+.promo-bolts{position:absolute;inset:0;z-index:5;pointer-events:none}
+.promo-bolt{position:absolute;width:16px;height:var(--len,90px);transform:rotate(var(--rot,0deg));
+  background:linear-gradient(180deg,#fff,rgba(255,255,255,.15));
+  clip-path:polygon(48% 0,100% 0,58% 44%,92% 44%,10% 100%,34% 52%,0 52%);
+  filter:drop-shadow(0 0 8px rgba(255,255,255,.95)) drop-shadow(0 0 20px var(--promo));
+  animation:promo-bolt .55s steps(2,end) both}
+@keyframes promo-bolt{0%{opacity:0}10%{opacity:1}28%{opacity:.05}44%{opacity:1}70%{opacity:.4}100%{opacity:0}}
+
+.promo-flash{position:absolute;inset:0;z-index:6;pointer-events:none;opacity:0;mix-blend-mode:screen;
+  background:radial-gradient(circle at 50% 38%,#fff,rgba(205,225,255,.5) 40%,transparent 74%)}
+.promo-flash.zap.is-on{animation:promo-flash-hit .44s ease-out both}
+.promo-flash.mega{background:radial-gradient(circle at 50% 38%,#fff,rgba(255,236,170,.72) 34%,rgba(255,150,60,.28) 56%,transparent 78%)}
+.promo-flash.mega.is-on{animation:promo-flash-hit .68s ease-out both}
+@keyframes promo-flash-hit{0%{opacity:.96}20%{opacity:.3}36%{opacity:.92}100%{opacity:0}}
+
+.promo-foot{position:relative;z-index:4;margin:14px 0 0;font-size:11.5px;font-weight:700;color:rgba(255,255,255,.42)}
+
+/* 좁은 화면 */
+@media (max-width:420px){
+  .promo-slot{height:176px}
+  .promo-badge{width:132px;height:132px}
+  .promo-badge b{font-size:66px}
+  .promo-ring i,.promo-aura{width:132px;height:132px}
+  .promo-stage{padding:26px 14px 18px}
+}

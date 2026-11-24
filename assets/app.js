@@ -1850,6 +1850,8 @@
     /* 이미 뽑힌 결과를 종이·봉인 뒤에 숨긴 채로 닫지 않는다 — 먼저 개봉 연출로 보여준다 */
     if (ui.draw && ui.draw.step === 'peel' && ui.draw.result && !ui.draw.revealed) { peelSnap(); return; }
     if (ui.draw && ui.draw.step === 'seal' && ui.draw.result && !ui.draw.revealed) { sealSnap(); return; }
+    /* 승격 연출 중에는 먼저 끝까지 보여준다 (한 번 더 누르면 닫힌다) */
+    if (ui.draw && ui.draw.step === 'promote' && ui.draw.result) { ui.draw.promoSkip = true; return; }
     modalRoot.hidden = true;
     modalPanel.innerHTML = '';
     document.body.style.overflow = '';
@@ -2798,18 +2800,19 @@
     if (!d) return;
     var board = getBoard(d.boardId);
     if (!board) return;
-    var dark = d.step === 'seal' || (d.step === 'result' && isEpicGrade(d.result && d.result.grade));
+    var dark = d.step === 'seal' || d.step === 'promote' || (d.step === 'result' && isEpicGrade(d.result && d.result.grade));
     var html;
     if (d.step === 'source') html = drawSourceHTML(board, d);
     else if (d.step === 'peel') html = drawPeelHTML(board, d);
     else if (d.step === 'seal') html = drawSealHTML(board, d);
+    else if (d.step === 'promote') html = drawPromoteHTML(board, d);
     else html = drawResultHTML(board, d);
     openModal(html, {
       keepFocus: d.step === 'result',
-      noAutofocus: d.step === 'peel' || d.step === 'seal',
+      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote',
       dark: dark,
       dragLock: d.step === 'peel' || d.step === 'seal',
-      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel'
+      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote'
     });
     /* B상 · A상 · 라스트원은 결과가 터질 때 모달 전체가 흔들린다 */
     if (d.step === 'result' && modalShell) {
@@ -2829,6 +2832,8 @@
       paintPeek(d);
     } else if (d.step === 'seal') {
       bindSeal();
+    } else if (d.step === 'promote') {
+      bindPromote(d);
     }
   }
 
@@ -2906,7 +2911,7 @@
      <audio>.play() 가 거부되는 브라우저에서만 웹오디오로 폴백한다. */
   var kujiSound = (function () {
     var RATE = 22050, WA_GAIN = 3.4;
-    var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA'];
+    var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
     var muted = null, lastTick = 0, lastSeal = 0, flashTimer = 0;
     var ctx = null, master = null, noiseBuf = null, running = false;
     var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
@@ -3134,6 +3139,69 @@
       return toURL(b, 0.95);
     }
 
+    /* 승격 1막(C상 확인): 짧고 또렷한 밝은 벨 + 반짝임 (0.62초) */
+    function buildPromoC() {
+      var b = buf(0.62);
+      tone(b, 0, 0.22, 880, 0.46, 'triangle');
+      tone(b, 0.07, 0.3, 1174.66, 0.4, 'sine');
+      tone(b, 0.15, 0.36, 1760, 0.26, 'sine', 2349.32);
+      thump(b, 0, 168, 72, 0.14, 0.5);
+      noise(b, 0, 0.09, 0.22, { type: 'highpass', f: 5600, dec: 0.03, atk: 0.002 });
+      sparkle(b, 0.12, 6, 2600, 0.12);
+      return toURL(b, 0.9);
+    }
+    /* 1차 승격(C → B): 전기 지직 + 위로 훑는 아크 + 상승 화음 (1.05초) */
+    function buildPromote1() {
+      var b = buf(1.05), i;
+      for (i = 0; i < 7; i++) {
+        noise(b, 0.004 + i * 0.026, 0.07, 0.4 + i * 0.03,
+          { type: 'bandpass', f: 1200 + i * 900, dec: 0.018, atk: 0.001 });
+      }
+      tone(b, 0, 0.24, 190, 0.3, 'square', 2500, 0.002);
+      tone(b, 0.02, 0.2, 95, 0.26, 'saw', 760, 0.004);
+      [329.63, 415.3, 523.25].forEach(function (f, k) {
+        tone(b, 0.1 + k * 0.05, 0.52, f * 0.5, 0.3, 'saw', f);
+        tone(b, 0.1 + k * 0.05, 0.4, f, 0.17, 'triangle', f * 1.5);
+      });
+      thump(b, 0.3, 200, 46, 0.4, 0.85);
+      thump(b, 0.3, 72, 32, 0.5, 0.5);
+      noise(b, 0.3, 0.3, 0.5, { type: 'highpass', f: 4400, dec: 0.08, atk: 0.001 });
+      [659.25, 830.61, 987.77, 1318.51].forEach(function (f, k) {
+        tone(b, 0.33 + k * 0.045, 0.55 - k * 0.05, f, 0.28, 'sine');
+      });
+      sparkle(b, 0.38, 9, 2600, 0.13);
+      return toURL(b, 0.94);
+    }
+    /* 2차 승격(B → A·라스트원): 천둥 저음 드롭 + 번개 크랙 + 클라이맥스 팡파레 (2.25초) */
+    function buildPromote2() {
+      var b = buf(2.25), i;
+      noise(b, 0, 0.95, 0.5, { type: 'lowpass', f: 380, dec: 0.44, atk: 0.02 });
+      noise(b, 0, 0.22, 0.62, { type: 'highpass', f: 3200, dec: 0.06, atk: 0.001 });
+      for (i = 0; i < 9; i++) {
+        noise(b, 0.02 + i * 0.021, 0.065, 0.34 + Math.random() * 0.22,
+          { type: 'highpass', f: 2600 + Math.random() * 4200, dec: 0.013, atk: 0.001 });
+      }
+      tone(b, 0, 0.5, 150, 0.5, 'sine', 32, 0.004);
+      thump(b, 0, 132, 28, 0.58, 0.95);
+      thump(b, 0.02, 62, 24, 0.7, 0.6);
+      [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
+        tone(b, 0.16 + k * 0.072, 0.3, f * 0.5, 0.24, 'saw', f);
+        tone(b, 0.16 + k * 0.072, 0.22, f, 0.14, 'triangle', f * 2);
+      });
+      var t1 = 0.7;
+      [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
+        tone(b, t1 + k * 0.055, 0.5, f, 0.32, 'saw');
+        tone(b, t1 + k * 0.055, 0.3, f * 2, 0.16, 'sine');
+      });
+      [1046.5, 1318.51, 1567.98, 2093, 2637].forEach(function (f, k) {
+        tone(b, t1 + 0.34 + k * 0.05, 1.35 - k * 0.14, f, 0.28, 'sine');
+      });
+      thump(b, t1 + 0.3, 158, 34, 0.55, 0.9);
+      noise(b, t1 + 0.3, 1.5, 0.2, { type: 'highpass', f: 6800, dec: 0.6, atk: 0.06 });
+      sparkle(b, t1 + 0.34, 22, 2800, 0.14);
+      return toURL(b, 0.96);
+    }
+
     function buildAll() {
       try { urls.tear = buildTear(); } catch (e) {}
       try { urls.seal = buildSeal(); } catch (e) {}
@@ -3142,6 +3210,9 @@
       try { urls.fanC = buildFanfare(1); } catch (e) {}
       try { urls.fanB = buildFanfare(2); } catch (e) {}
       try { urls.fanA = buildFanfare(3); } catch (e) {}
+      try { urls.promoC = buildPromoC(); } catch (e) {}
+      try { urls.promote1 = buildPromote1(); } catch (e) {}
+      try { urls.promote2 = buildPromote2(); } catch (e) {}
     }
     /* WAV 마다 <audio> 요소를 만들고 사운드별로 1개(찢기는 3개) 풀을 둔다 */
     function buildElements() {
@@ -3255,6 +3326,9 @@
       if (key === 'tear') waTear(vol);
       else if (key === 'seal') waSeal();
       else if (key === 'snap') waSnap(0);
+      else if (key === 'promoC') waPromoC();
+      else if (key === 'promote1') waPromote1();
+      else if (key === 'promote2') waPromote2();
       else waFanfare(key === 'fanA' ? 3 : key === 'fanB' ? 2 : key === 'fanC' ? 1 : 0);
     }
     function buzz(pattern) {
@@ -3413,6 +3487,59 @@
         blip(c, now + 0.42 + i * 0.18, f, 0.7, 0.075, 'triangle');
       });
     }
+    function waPromoC() {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime + 0.01;
+      blip(c, now, 880, 0.22, 0.09, 'triangle');
+      blip(c, now + 0.07, 1174.66, 0.3, 0.08, 'sine');
+      blip(c, now + 0.15, 1760, 0.34, 0.06, 'sine');
+      thumpWA(c, now, 168, 72, 0.14, 0.16);
+      sparkleWA(c, now + 0.12, 5, 2600, 0.03);
+    }
+    function waPromote1() {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime + 0.01, i;
+      for (i = 0; i < 5; i++) {
+        noiseHit(c, now + i * 0.03, { f0: 1200 + i * 900, f1: 2600 + i * 900, sweep: 0.03, q: 1.2, vol: 0.11, dur: 0.07, attack: 0.001 });
+      }
+      blip(c, now, 190, 0.22, 0.09, 'square', 2500);
+      [329.63, 415.3, 523.25].forEach(function (f, k) {
+        blip(c, now + 0.08 + k * 0.05, f * 0.5, 0.3, 0.06, 'sawtooth', f);
+        blip(c, now + 0.08 + k * 0.05, f, 0.24, 0.035, 'triangle', f * 1.5);
+      });
+      thumpWA(c, now + 0.3, 190, 46, 0.35, 0.26);
+      noiseHit(c, now + 0.3, { type: 'highpass', f0: 4400, vol: 0.13, dur: 0.22, attack: 0.001 });
+      [659.25, 830.61, 987.77, 1318.51].forEach(function (f, k) {
+        blip(c, now + 0.34 + k * 0.05, f, 0.5, 0.055, 'sine');
+      });
+      sparkleWA(c, now + 0.4, 7, 2600, 0.03);
+    }
+    function waPromote2() {
+      var c = ac();
+      if (!c) return;
+      var now = c.currentTime + 0.01, i;
+      noiseHit(c, now, { type: 'lowpass', f0: 420, f1: 160, sweep: 0.7, vol: 0.2, dur: 0.9, attack: 0.02 });
+      for (i = 0; i < 7; i++) {
+        noiseHit(c, now + 0.03 + i * 0.03, { type: 'highpass', f0: 2800 + Math.random() * 3600, vol: 0.1, dur: 0.07, attack: 0.001 });
+      }
+      thumpWA(c, now, 130, 28, 0.6, 0.34);
+      [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
+        blip(c, now + 0.14 + k * 0.07, f * 0.5, 0.28, 0.05, 'sawtooth', f);
+      });
+      var t1 = now + 0.68;
+      [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
+        blip(c, t1 + k * 0.055, f, 0.5, 0.07, 'sawtooth');
+        blip(c, t1 + k * 0.055, f * 2, 0.3, 0.03, 'sine');
+      });
+      [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
+        blip(c, t1 + 0.34 + k * 0.05, f, 1.1 - k * 0.12, 0.07, 'sine');
+      });
+      thumpWA(c, t1 + 0.3, 158, 34, 0.55, 0.3);
+      noiseHit(c, t1 + 0.3, { type: 'highpass', f0: 6800, vol: 0.05, dur: 1.3, attack: 0.06 });
+      sparkleWA(c, t1 + 0.34, 16, 2800, 0.035);
+    }
     function waFanfare(level) {
       var c = ac();
       if (!c) return;
@@ -3487,6 +3614,18 @@
       elPlay('seal', 1);
       buzz([0, 40, 60, 32]);
     }
+    /* 승격 연출 1막(등급 확인 첫 비트) / 1차·2차 승격 */
+    function cBeat() {
+      if (isMuted()) return;
+      elPlay('promoC', 1);
+      buzz([0, 12, 16]);
+    }
+    function promote(step) {
+      if (isMuted()) return;
+      var s = Number(step) >= 2 ? 2 : 1;
+      elPlay(s >= 2 ? 'promote2' : 'promote1', 1);
+      buzz(s >= 2 ? [0, 26, 34, 22, 46, 30, 70, 44] : [0, 22, 30, 18, 38, 26]);
+    }
     function fanfare(level) {
       if (isMuted()) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
@@ -3516,6 +3655,7 @@
 
     return {
       tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge, test: test,
+      cBeat: cBeat, promote: promote,
       unlock: unlock, buzz: buzz,
       isMuted: isMuted, setMuted: setMuted, refreshToggle: refreshToggle,
       toggle: function () { setMuted(!isMuted()); }
@@ -4120,11 +4260,243 @@
     await waitMs(620);
     if (!ui.draw || ui.draw !== d || d.step !== 'seal') return;
     if (!d.result) { d.revealing = false; return; }
-    d.step = 'result';
-    d.revealing = false;
+    /* C·B·A·라스트원은 승격 연출(3단계)로 넘긴다 — 배지가 C → B → A 로 올라간다 */
     syncPointsBalance(d.result);
-    kujiSound.fanfare(gradeLevel(d.result && d.result.grade));
+    d.step = 'promote';
+    d.revealing = false;
+    d.promoStarted = false;
+    d.promoSkip = false;
     renderDrawModal();
+    renderAll();
+  }
+
+  /* =========================================================
+     3단계: 승격 연출 — C → B → A · 라스트원 대역전
+     승격 중에는 등급 배지와 빛만 보여 주고, 상품 이미지는
+     최종 등급의 결과 화면에서 처음 공개한다 (스포일러 없음)
+     ========================================================= */
+  var promoRun = null;
+
+  function promoLabel(grade) {
+    var g = String(grade || '').toUpperCase();
+    if (g === 'LAST') return { letter: 'L', unit: 'LAST', name: '라스트원' };
+    return { letter: g, unit: '상', name: g + '상' };
+  }
+
+  function drawPromoteHTML(board, d) {
+    var lv = gradeLevel(d.result && d.result.grade);
+    var no = ('00' + d.n).slice(-3);
+    return '<div class="promo-stage" id="promoStage" data-mood="c">' +
+      '<div class="promo-bg" aria-hidden="true"></div>' +
+      '<div class="promo-rays" aria-hidden="true"></div>' +
+      '<div class="promo-fx" id="promoFx1" aria-hidden="true"></div>' +
+      '<div class="promo-fx promo-fx-2" id="promoFx2" aria-hidden="true"></div>' +
+      '<div class="promo-bolts" id="promoBolts" aria-hidden="true"></div>' +
+      '<div class="promo-stars" id="promoStars" aria-hidden="true"></div>' +
+      '<div class="promo-flash" id="promoFlash" aria-hidden="true"></div>' +
+      '<p class="promo-kicker"><span>⚡</span> 상위상 봉인 해제 · 등급 확인</p>' +
+      '<div class="promo-slot">' +
+        '<div class="promo-aura" aria-hidden="true"></div>' +
+        '<div class="promo-ring" id="promoRing" aria-hidden="true"><i></i><i></i><i></i></div>' +
+        '<div class="promo-badge is-pop" id="promoBadge" data-mood="c"><b id="promoLetter">C</b><i id="promoUnit">상</i></div>' +
+      '</div>' +
+      '<p class="promo-impact" id="promoImpact" role="status" aria-live="polite"></p>' +
+      '<p class="promo-foot">화면을 누르면 빨리 볼 수 있어요 · ' + h(board.title) + ' ' + no + '번' + (d.demo ? ' · 체험 모드' : '') + '</p>' +
+    '</div>';
+  }
+
+  /* 승격 대기 — 화면을 누르면(promoSkip) 남은 간격을 짧게 줄인다 */
+  function promoWait(d, ms) {
+    var target = d.promoSkip ? Math.min(140, ms) : ms;
+    var t = 0;
+    return new Promise(function (resolve) {
+      function tick() {
+        if (!ui.draw || ui.draw !== d || d.step !== 'promote') { resolve(false); return; }
+        if (t >= target) { resolve(true); return; }
+        t += 50;
+        setTimeout(tick, 50);
+      }
+      tick();
+    });
+  }
+
+  function promoMood(mood) {
+    var stage = document.getElementById('promoStage');
+    if (stage) stage.setAttribute('data-mood', mood);
+  }
+
+  function promoBadge(letter, unit, mood) {
+    var b = document.getElementById('promoBadge');
+    var l = document.getElementById('promoLetter');
+    var u = document.getElementById('promoUnit');
+    var ring = document.getElementById('promoRing');
+    if (l) l.textContent = letter;
+    if (u) u.textContent = unit;
+    if (b) {
+      b.setAttribute('data-mood', mood);
+      b.classList.remove('is-pop');
+      void b.offsetWidth;
+      b.classList.add('is-pop');
+    }
+    if (ring) {
+      ring.classList.remove('is-on');
+      void ring.offsetWidth;
+      ring.classList.add('is-on');
+    }
+  }
+
+  /* 화면 번쩍임 + 모달 흔들림 (zap: 1차 승격 · mega: 2차 대역전) */
+  function promoFlash(kind) {
+    var f = document.getElementById('promoFlash');
+    if (f) {
+      f.className = 'promo-flash ' + kind;
+      void f.offsetWidth;
+      f.classList.add('is-on');
+    }
+    if (modalShell) {
+      modalShell.style.setProperty('--quake', kind === 'mega' ? '2' : '1.15');
+      modalShell.classList.remove('is-quake');
+      void modalShell.offsetWidth;
+      modalShell.classList.add('is-quake');
+    }
+  }
+
+  function promoBolts(n) {
+    var host = document.getElementById('promoBolts');
+    if (!host) return;
+    for (var i = 0; i < n; i++) {
+      var s = document.createElement('span');
+      s.className = 'promo-bolt';
+      s.style.left = (8 + Math.random() * 84).toFixed(1) + '%';
+      s.style.top = (-8 + Math.random() * 42).toFixed(1) + '%';
+      s.style.setProperty('--rot', (-28 + Math.random() * 56).toFixed(0) + 'deg');
+      s.style.setProperty('--len', (60 + Math.random() * 120).toFixed(0) + 'px');
+      s.style.animationDelay = (Math.random() * 0.16).toFixed(2) + 's';
+      host.appendChild(s);
+      (function (el) {
+        setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 900);
+      })(s);
+    }
+  }
+
+  function promoImpact(text, mood) {
+    var el = document.getElementById('promoImpact');
+    if (!el) return;
+    el.textContent = text;
+    el.setAttribute('data-mood', mood);
+    el.classList.remove('is-on');
+    void el.offsetWidth;
+    el.classList.add('is-on');
+  }
+
+  function promoConfetti(layerId, count, colors, opt) {
+    var el = document.getElementById(layerId);
+    if (!el) return;
+    var o = opt || {};
+    el.insertAdjacentHTML('beforeend', confettiHTML(count, {
+      drop: o.drop || 340, drift: o.drift || 160, spread: o.spread || .5, colors: colors
+    }));
+  }
+
+  function promoStars(n) {
+    var el = document.getElementById('promoStars');
+    if (el) el.insertAdjacentHTML('beforeend', sparkleHTML(n, 'promo-star'));
+  }
+
+  function promoClearFx() {
+    ['promoFx1', 'promoFx2', 'promoStars'].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.innerHTML = '';
+    });
+  }
+
+  function finishPromotion(d) {
+    if (!ui.draw || ui.draw !== d || d.step !== 'promote') return;
+    promoRun = null;
+    d.revealing = false;
+    d.step = 'result';
+    renderDrawModal();
+    renderAll();
+    var g = String((d.result && d.result.grade) || '').toUpperCase();
+    toast(d.result && d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + (g === 'LAST' ? '라스트원' : (d.result.grade + '상')), 'ok');
+  }
+
+  async function runPromotion(d) {
+    var stage = document.getElementById('promoStage');
+    if (!stage || !d.result) return;
+    var lv = gradeLevel(d.result.grade);
+    var fin = promoLabel(d.result.grade);
+    var alive = function () { return !!(ui.draw === d && d.step === 'promote'); };
+
+    /* 1막 — C상 확인 (실제 C상이면 여기서 끝, B·A 는 승격을 위한 속임수 단계) */
+    promoMood('c');
+    promoBadge('C', '상', 'c');
+    promoConfetti('promoFx1', lv >= 2 ? 14 : 24, ['#8b7cff', '#5b8bff', '#b7a6ff', '#8ee3ff', '#ffd8ff', '#ffffff'], { drop: 320, drift: 130, spread: .38 });
+    promoStars(lv >= 2 ? 6 : 11);
+    kujiSound.cBeat();
+
+    if (lv <= 1) {
+      if (!(await promoWait(d, 240)) || !alive()) return;
+      promoImpact('✨ C상!', 'c');
+      promoConfetti('promoFx1', 20, ['#a99cff', '#5b8bff', '#8ee3ff', '#ffffff'], { drop: 360, drift: 170, spread: .5 });
+      kujiSound.fanfare(1);
+      if (!(await promoWait(d, 1250)) || !alive()) return;
+      return finishPromotion(d);
+    }
+
+    if (!(await promoWait(d, lv >= 3 ? 560 : 650)) || !alive()) return;
+
+    /* 2막 — C → B 승격 */
+    promoMood('b');
+    kujiSound.promote(1);
+    promoFlash('zap');
+    promoBolts(lv >= 3 ? 5 : 4);
+    promoImpact('⚡ 승격! B상!', 'b');
+    if (!(await promoWait(d, lv >= 3 ? 300 : 380)) || !alive()) return;
+    promoBadge('B', '상', 'b');
+    promoConfetti('promoFx1', 24, ['#ff8a3d', '#ff2d20', '#ffb703', '#fff3c4', '#ffffff'], { drop: 350, drift: 170, spread: .5 });
+    promoConfetti('promoFx2', 16, ['#ffd166', '#ff7a1a', '#ff3b30', '#ffffff'], { drop: 400, drift: 200, spread: .55 });
+    promoStars(10);
+    kujiSound.fanfare(2);
+
+    if (lv <= 2) {
+      if (!(await promoWait(d, 1450)) || !alive()) return;
+      return finishPromotion(d);
+    }
+
+    if (!(await promoWait(d, 460)) || !alive()) return;
+
+    /* 3막 — B → A · 라스트원 대역전 */
+    promoMood('a');
+    kujiSound.promote(2);
+    promoFlash('mega');
+    promoBolts(10);
+    promoImpact(fin.unit === 'LAST' ? '🔥 대역전!! 라스트원!' : '🔥 대역전!! A상!', 'a');
+    if (!(await promoWait(d, 340)) || !alive()) return;
+    promoClearFx();
+    promoBadge(fin.letter, fin.unit, 'a');
+    promoConfetti('promoFx1', 30, ['#ffd51e', '#f5b800', '#ff3b30', '#12a87a', '#3d7bfd', '#a855f7', '#ffffff'], { drop: 380, drift: 190, spread: .55 });
+    promoConfetti('promoFx2', 26, ['#ffe9a8', '#ffffff', '#ff7ac8', '#8ee3ff', '#ffd51e'], { drop: 430, drift: 220, spread: .6 });
+    promoStars(30);
+    kujiSound.fanfare(3);
+    if (!(await promoWait(d, 1550)) || !alive()) return;
+    return finishPromotion(d);
+  }
+
+  function bindPromote(d) {
+    var stage = document.getElementById('promoStage');
+    if (!stage || !d) return;
+    if (!d.promoStarted) {
+      d.promoStarted = true;
+      d.promoSkip = false;
+      stage.addEventListener('click', function () {
+        if (ui.draw === d && d.step === 'promote') d.promoSkip = true;
+      });
+      promoRun = d;
+      runPromotion(d);
+      return;
+    }
+    /* 다시 그려졌을 때(회전·재렌더) 는 타임라인을 새로 시작하지 않는다 */
   }
 
   /* =========================================================
@@ -6463,6 +6835,25 @@
     renderAll();
     route();
   }
+
+  /* ── QA 전용 임시 훅 (검증 후 제거): ?promo=C|B|A|LAST 로 승격 연출만 미리 재생 ── */
+  (function () {
+    var m = /[?&]promo=(C|B|A|LAST)/i.exec(location.search);
+    if (!m) return;
+    var g = m[1].toUpperCase(), tries = 0;
+    var t = setInterval(function () {
+      if (++tries > 120) { clearInterval(t); return; }
+      if (!ui.ready || !state.boards || !state.boards.length) return;
+      clearInterval(t);
+      var board = state.boards[0];
+      ui.draw = {
+        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false,
+        result: { grade: g, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
+          remaining: 12, source: 'demo', demo: true }
+      };
+      renderDrawModal();
+    }, 100);
+  })();
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
