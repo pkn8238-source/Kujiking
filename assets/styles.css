@@ -2355,3 +2355,10 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .header-inner{gap:16px}
   .yt-live-word .yt-live-prefix{display:none}
 }
+
+/* 345px 이하(아이폰 SE 1세대 등)에서는 계정 칩을 아바타만 남겨 헤더가 넘치지 않게 한다 */
+@media (max-width:345px){
+  .user-chip-body{display:none}
+  .user-chip{padding:5px 6px}
+  .brand-word{font-size:18px}
+}
