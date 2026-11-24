@@ -1879,15 +1879,18 @@
 
   /* 입력값을 방문자에게 열어 줄 주소로 바꾼다. @핸들이나 채널 주소는 /live 로 붙는다. */
   function youtubeLiveTarget(raw) {
-    var s = String(raw == null ? '' : raw).trim();
+    var s = String(raw == null ? '' : raw).trim().replace(/\/+$/, '');
     if (!s) return '';
-    if (s.charAt(0) === '@' || /^[A-Za-z0-9._-]{2,60}$/.test(s)) {
-      return 'https://www.youtube.com/' + (s.charAt(0) === '@' ? s : '@' + s) + '/live';
+    /* @핸들, 또는 점·슬래시 없는 채널명 */
+    if (/^@[A-Za-z0-9._-]{2,60}$/.test(s)) return 'https://www.youtube.com/' + s + '/live';
+    if (!/[\/\s]/.test(s) && !/\.[a-z]{2,}$/i.test(s) && /^[A-Za-z0-9._-]{2,60}$/.test(s)) {
+      return 'https://www.youtube.com/@' + s + '/live';
     }
     if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
     var url;
     try { url = new URL(s); } catch (e) { return ''; }
     var host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host)) return '';
     if (!/(^|\.)youtube\.com$/.test(host)) return url.href;
     var path = url.pathname.replace(/\/+$/, '');
     if (!path) return 'https://www.youtube.com/';
