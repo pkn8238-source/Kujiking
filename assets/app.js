@@ -6839,19 +6839,28 @@
 
   /* ── QA 전용 임시 훅 (검증 후 제거): ?promo=C|B|A|LAST · __promoReplay(grade, slow) ── */
   (function () {
-    function qaStart(grade, slow) {
-      if (!ui.ready || !state.boards || !state.boards.length) return false;
-      var board = state.boards[0];
-      ui.draw = {
-        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false,
+    function qaData(grade, slow) {
+      return {
+        boardId: state.boards[0].id, n: 1, demo: true, revealing: false, promoStarted: false,
         promoSlow: Math.max(1, Math.min(8, Number(slow) || 1)),
         result: { grade: grade, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
           remaining: 12, source: 'demo', demo: true }
       };
+    }
+    function qaStart(grade, slow) {
+      if (!ui.ready || !state.boards || !state.boards.length) return false;
+      ui.draw = Object.assign(qaData(grade, slow), { step: 'promote' });
+      renderDrawModal();
+      return true;
+    }
+    function qaSeal(grade, slow) {
+      if (!ui.ready || !state.boards || !state.boards.length) return false;
+      ui.draw = Object.assign(qaData(grade, slow), { step: 'seal', ready: true });
       renderDrawModal();
       return true;
     }
     window.__promoReplay = qaStart;
+    window.__promoSeal = qaSeal;
     var m = /[?&]promo=(C|B|A|LAST)/i.exec(location.search);
     if (!m) return;
     var g = m[1].toUpperCase(), tries = 0, slow = 1;
