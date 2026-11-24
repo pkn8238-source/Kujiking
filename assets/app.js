@@ -3970,20 +3970,28 @@
     '</div>';
   }
 
-  /* ---------- 개봉 효과음: 실제 PCM WAV(<audio>) 재생 · 웹오디오는 폴백 ----------
-     iOS 사파리·인앱 웹뷰는 드래그(touchmove) 중 AudioContext 를 suspend 하거나
-     작은 gain(0.02~0.1)을 통째로 무음 처리한다. 그래서 시작할 때 16bit PCM WAV 를
-     직접 합성해 blob URL 로 만들고, <audio> 로 실제 재생한다(음량도 크게).
-     <audio>.play() 가 거부되는 브라우저에서만 웹오디오로 폴백한다. */
+  /* ---------- 개봉 효과음: 합성 PCM → Web Audio(AudioBuffer) 재생 ----------
+     iOS 사파리에서 HTML5 <audio>.play() 는 '미디어' 오디오 세션으로 재생돼
+     아이폰 하드웨어 무음 스위치를 무시한다(무음 모드인데 소리가 난다).
+     반면 AudioContext(Web Audio)는 무음 스위치를 그대로 따르므로, 합성해 둔
+     16bit PCM 을 AudioBuffer 로 디코드해 BufferSource 로 재생한다.
+     (audioSession 은 'ambient' 로 두고 'playback' 으로는 절대 바꾸지 않는다.)
+     AudioContext 자체가 없는 브라우저에서만 <audio> 로 폴백한다. */
   var kujiSound = (function () {
-    var RATE = 22050, WA_GAIN = 3.4;
+    var RATE = 22050, WA_GAIN = 3.4, PCM_PEAK = 0.95, PCM_GAIN = 1.22;
     var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
     var muted = null, lastTick = 0, lastSeal = 0, flashTimer = 0;
-    var ctx = null, master = null, noiseBuf = null, running = false;
+    var ctx = null, master = null, pcmBus = null, noiseBuf = null, running = false;
     var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
+    var pcm = {}, abuf = {}, lastPCM = null, gestureHooked = false;
 
-    /* iOS 사파리에서 아이폰 무음 스위치를 무시하게 만드는 audioSession='playback' 은
-       쓰지 않는다. 무음 모드에서는 사이트도 조용해야 하므로 세션 타입을 건드리지 않는다. */
+    /* iOS 16.4+ 오디오 세션: 'ambient' = 다른 오디오와 섞이고 하드웨어 무음 스위치를 따른다.
+       아이폰 무음 모드에서 사이트도 조용해야 하므로 'playback' 은 절대 쓰지 않는다. */
+    function ambientSession() {
+      try {
+        if (navigator.audioSession) navigator.audioSession.type = 'ambient';
+      } catch (e) {}
+    }
     function isMuted() {
       if (muted === null) {
         try { muted = window.localStorage.getItem('kujiking.sound') === 'off'; } catch (e) { muted = false; }
@@ -4084,23 +4092,32 @@
         tone(b, t0 + i * 0.028 + Math.random() * 0.02, 0.1 + Math.random() * 0.08, base + Math.random() * 1900, vol, 'sine');
       }
     }
-    /* Float32 버퍼 → 16bit PCM WAV blob URL (피크를 크게 정규화해 또렷하게) */
-    function toURL(b, peak) {
+    /* Float32 버퍼 → 피크 정규화 PCM (AudioBuffer 재생용 원본) */
+    function toPCM(b, peak) {
       var n = b.n, d = b.d, i, m = 0, a, v;
       for (i = 0; i < n; i++) { a = d[i] < 0 ? -d[i] : d[i]; if (a > m) m = a; }
-      var g = m > 0.0002 ? (peak || 0.9) / m : 1;
+      var g = m > 0.0002 ? (peak || PCM_PEAK) / m : 1;
       var fade = Math.min(Math.floor(0.01 * b.rate), Math.floor(n / 3));
+      var out = new Float32Array(n);
+      for (i = 0; i < n; i++) {
+        v = d[i] * g;
+        if (i > n - fade) v *= (n - i) / fade;
+        out[i] = v > 1 ? 1 : (v < -1 ? -1 : v);
+      }
+      return { rate: b.rate, n: n, d: out };
+    }
+    /* 정규화 PCM → 16bit PCM WAV blob URL (AudioContext 가 없을 때의 <audio> 폴백용) */
+    function toURL(p) {
+      var n = p.n, d = p.d, i, v;
       var size = 44 + n * 2, ab = new ArrayBuffer(size), dv = new DataView(ab);
       function str(off, s) { for (var j = 0; j < s.length; j++) dv.setUint8(off + j, s.charCodeAt(j)); }
       str(0, 'RIFF'); dv.setUint32(4, size - 8, true); str(8, 'WAVE');
       str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-      dv.setUint32(24, b.rate, true); dv.setUint32(28, b.rate * 2, true);
+      dv.setUint32(24, p.rate, true); dv.setUint32(28, p.rate * 2, true);
       dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
       str(36, 'data'); dv.setUint32(40, n * 2, true);
       for (i = 0; i < n; i++) {
-        v = d[i] * g;
-        if (i > n - fade) v *= (n - i) / fade;
-        if (v > 1) v = 1; else if (v < -1) v = -1;
+        v = d[i];
         dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
       }
       try {
@@ -4120,7 +4137,7 @@
       }
       for (i = 0; i < 3; i++) tone(b, 0.008 + i * 0.022, 0.014, 3400 + Math.random() * 2200, 0.22, 'square', null, 0.001);
       tone(b, 0, 0.1, 240, 0.22, 'triangle', 120, 0.004);
-      return toURL(b, 0.8);
+      return toURL(lastPCM = toPCM(b, 0.8));
     }
     /* 황금 봉인: 두근-두근 심장박동 + 금빛 셔머 + 낮게 깔리는 서브베이스 (0.7초) */
     function buildSeal() {
@@ -4134,7 +4151,7 @@
       [261.63, 329.63, 392.0, 523.25].forEach(function (f, k) {
         tone(b, 0.34 + k * 0.07, 0.42, f, 0.26, 'triangle');
       });
-      return toURL(b, 0.93);
+      return toURL(lastPCM = toPCM(b, 0.93));
     }
     /* 찢어지는 순간: 펀치 크랙 + 반짝이는 종소리 (0.38초) */
     function buildSnap() {
@@ -4147,7 +4164,7 @@
         tone(b, 0.07 + k * 0.05, 0.34 - k * 0.03, f, 0.3, 'sine');
       });
       for (i = 0; i < 6; i++) tone(b, 0.12 + Math.random() * 0.18, 0.13, 2800 + Math.random() * 2200, 0.12, 'sine');
-      return toURL(b, 0.94);
+      return toURL(lastPCM = toPCM(b, 0.94));
     }
     /* 등급별 팡파레 — 0: D 이하 팝 · 1: C 밝은 신스 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
     function buildFanfare(level) {
@@ -4160,7 +4177,7 @@
         tone(b, 0.2, 0.52, 1318.51, 0.36, 'triangle');
         thump(b, 0, 170, 60, 0.18, 0.55);
         sparkle(b, 0.12, 7, 2500, 0.16);
-        return toURL(b, 0.9);
+        return toURL(lastPCM = toPCM(b, 0.9));
       }
       if (level === 1) {
         b = buf(1.05);
@@ -4172,7 +4189,7 @@
         tone(b, 0.38, 0.6, 1318.51, 0.3, 'triangle');
         thump(b, 0, 150, 55, 0.22, 0.6);
         sparkle(b, 0.3, 10, 2400, 0.14);
-        return toURL(b, 0.92);
+        return toURL(lastPCM = toPCM(b, 0.92));
       }
       if (level === 2) {
         b = buf(1.32);
@@ -4185,7 +4202,7 @@
         thump(b, 0.7, 140, 46, 0.34, 0.65);
         tone(b, 0.7, 0.62, 1567.98, 0.32, 'sine');
         sparkle(b, 0.62, 12, 2500, 0.14);
-        return toURL(b, 0.93);
+        return toURL(lastPCM = toPCM(b, 0.93));
       }
       b = buf(2.0);
       [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
@@ -4202,7 +4219,7 @@
       thump(b, tail, 150, 42, 0.5, 0.8);
       noise(b, tail, 0.95, 0.2, { type: 'highpass', f: 7000, q: 0.6, dec: 0.4, atk: 0.05 });
       sparkle(b, tail, 18, 2600, 0.16);
-      return toURL(b, 0.95);
+      return toURL(lastPCM = toPCM(b, 0.95));
     }
 
     /* 승격 1막(C상 확인): 짧고 또렷한 밝은 벨 + 반짝임 (0.62초) */
@@ -4214,7 +4231,7 @@
       thump(b, 0, 168, 72, 0.14, 0.5);
       noise(b, 0, 0.09, 0.22, { type: 'highpass', f: 5600, dec: 0.03, atk: 0.002 });
       sparkle(b, 0.12, 6, 2600, 0.12);
-      return toURL(b, 0.9);
+      return toURL(lastPCM = toPCM(b, 0.9));
     }
     /* 1차 승격(C → B): 전기 지직 + 위로 훑는 아크 + 상승 화음 (1.05초) */
     function buildPromote1() {
@@ -4236,7 +4253,7 @@
         tone(b, 0.33 + k * 0.045, 0.55 - k * 0.05, f, 0.28, 'sine');
       });
       sparkle(b, 0.38, 9, 2600, 0.13);
-      return toURL(b, 0.94);
+      return toURL(lastPCM = toPCM(b, 0.94));
     }
     /* 2차 승격(B → A·라스트원): 천둥 저음 드롭 + 번개 크랙 + 클라이맥스 팡파레 (2.25초) */
     function buildPromote2() {
@@ -4265,20 +4282,20 @@
       thump(b, t1 + 0.3, 158, 34, 0.55, 0.9);
       noise(b, t1 + 0.3, 1.5, 0.2, { type: 'highpass', f: 6800, dec: 0.6, atk: 0.06 });
       sparkle(b, t1 + 0.34, 22, 2800, 0.14);
-      return toURL(b, 0.96);
+      return toURL(lastPCM = toPCM(b, 0.96));
     }
 
     function buildAll() {
-      try { urls.tear = buildTear(); } catch (e) {}
-      try { urls.seal = buildSeal(); } catch (e) {}
-      try { urls.snap = buildSnap(); } catch (e) {}
-      try { urls.fanD = buildFanfare(0); } catch (e) {}
-      try { urls.fanC = buildFanfare(1); } catch (e) {}
-      try { urls.fanB = buildFanfare(2); } catch (e) {}
-      try { urls.fanA = buildFanfare(3); } catch (e) {}
-      try { urls.promoC = buildPromoC(); } catch (e) {}
-      try { urls.promote1 = buildPromote1(); } catch (e) {}
-      try { urls.promote2 = buildPromote2(); } catch (e) {}
+      try { urls.tear = buildTear(); pcm.tear = lastPCM; } catch (e) {}
+      try { urls.seal = buildSeal(); pcm.seal = lastPCM; } catch (e) {}
+      try { urls.snap = buildSnap(); pcm.snap = lastPCM; } catch (e) {}
+      try { urls.fanD = buildFanfare(0); pcm.fanD = lastPCM; } catch (e) {}
+      try { urls.fanC = buildFanfare(1); pcm.fanC = lastPCM; } catch (e) {}
+      try { urls.fanB = buildFanfare(2); pcm.fanB = lastPCM; } catch (e) {}
+      try { urls.fanA = buildFanfare(3); pcm.fanA = lastPCM; } catch (e) {}
+      try { urls.promoC = buildPromoC(); pcm.promoC = lastPCM; } catch (e) {}
+      try { urls.promote1 = buildPromote1(); pcm.promote1 = lastPCM; } catch (e) {}
+      try { urls.promote2 = buildPromote2(); pcm.promote2 = lastPCM; } catch (e) {}
     }
     /* WAV 마다 <audio> 요소를 만들고 사운드별로 1개(찢기는 3개) 풀을 둔다 */
     function buildElements() {
@@ -4364,10 +4381,14 @@
         }
       });
     }
-    /* <audio> 로 재생. 실패(거부)하면 웹오디오로 폴백한다 */
+    /* <audio> 로 재생(폴백). 필요할 때 처음 한 번 <audio> 풀을 만든다 */
     function elPlay(key, vol) {
       if (isMuted()) return true;
       var pool = els[key];
+      if (!pool || !pool.length) {
+        try { buildElements(); } catch (e) {}
+        pool = els[key];
+      }
       if (!pool || !pool.length) return false;
       var el = pool[cursor[key] % pool.length];
       cursor[key] = (cursor[key] + 1) % 1024;
@@ -4410,6 +4431,26 @@
         try { ctx = new C(); } catch (e) { return null; }
         try { ctx.onstatechange = function () { running = (ctx.state === 'running'); }; } catch (e) {}
         try {
+          /* PCM 전용 버스: 1.22배로 올리고 리미터로 어깨만 다듬어 크고 또렷하게.
+             (작은 gain 은 iOS 에서 통째로 무음 처리되는 사례가 있다) */
+          if (ctx.createGain) {
+            pcmBus = ctx.createGain();
+            pcmBus.gain.value = PCM_GAIN;
+            if (ctx.createDynamicsCompressor) {
+              var lim = ctx.createDynamicsCompressor();
+              lim.threshold.value = -2;
+              lim.knee.value = 0;
+              lim.ratio.value = 20;
+              lim.attack.value = 0.001;
+              lim.release.value = 0.08;
+              pcmBus.connect(lim);
+              lim.connect(ctx.destination);
+            } else {
+              pcmBus.connect(ctx.destination);
+            }
+          }
+        } catch (e) { pcmBus = null; }
+        try {
           if (ctx.createDynamicsCompressor) {
             master = ctx.createDynamicsCompressor();
             master.threshold.value = -14;
@@ -4437,8 +4478,53 @@
       setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 480);
     }
     function unlock() {
+      ambientSession();
       wakeCtx();
-      prime();
+      /* AudioContext 가 없는 브라우저만 <audio> 를 미리 깨워 둔다 */
+      if (!(window.AudioContext || window.webkitAudioContext)) prime();
+    }
+
+    /* ================= AudioBuffer 재생 (기본) ================= */
+    function audioBuf(key) {
+      if (abuf[key]) return abuf[key];
+      var p = pcm[key];
+      if (!p || !ctx) return null;
+      try {
+        var b = ctx.createBuffer(1, p.n, p.rate);
+        b.getChannelData(0).set(p.d);
+        abuf[key] = b;
+        return b;
+      } catch (e) { return null; }
+    }
+    /* BufferSource → 볼륨 GainNode → PCM 버스. 재생이 시작되면 true */
+    function ctxPlay(key, vol) {
+      if (isMuted()) return true;
+      var c = makeCtx();
+      if (!c) return false;
+      if (c.state === 'suspended' || c.state === 'interrupted') { try { c.resume(); } catch (e) {} }
+      var buf = audioBuf(key);
+      if (!buf) return false;
+      try {
+        var src = c.createBufferSource();
+        src.buffer = buf;
+        var v = Math.max(0.05, Math.min(1, vol == null ? 1 : vol));
+        if (c.createGain) {
+          var g = c.createGain();
+          g.gain.value = v;
+          src.connect(g);
+          g.connect(pcmBus || out(c));
+        } else {
+          src.connect(pcmBus || out(c));
+        }
+        src.start(0);
+        return true;
+      } catch (e) { return false; }
+    }
+    /* 기본은 AudioBuffer, 안 되면 <audio>(→ 웹오디오 신스) 폴백 */
+    function play(key, vol) {
+      if (isMuted()) return true;
+      if (ctxPlay(key, vol)) return true;
+      return elPlay(key, vol);
     }
     function noiseBuffer(c) {
       if (noiseBuf) return noiseBuf;
@@ -4678,13 +4764,13 @@
       var now = Date.now();
       if (now - lastTick < 50) return;
       lastTick = now;
-      elPlay('tear', 0.7 + a * 0.3);
+      play('tear', 0.7 + a * 0.3);
       ripBuzz(a);
     }
     function snap(level) {
       if (isMuted()) return;
       var lv = Number(level) || 0;
-      elPlay('snap', 1);
+      play('snap', 1);
       buzz(lv >= 2 ? [0, 22, 26, 16, 40, 30] : [18]);
     }
     function sealCharge() {
@@ -4692,47 +4778,61 @@
       var now = Date.now();
       if (now - lastSeal < 700) return;
       lastSeal = now;
-      elPlay('seal', 1);
+      play('seal', 1);
       buzz([35, 40, 60]);
     }
     /* 승격 연출 1막(등급 확인 첫 비트) / 1차·2차 승격 */
     function cBeat() {
       if (isMuted()) return;
-      elPlay('promoC', 1);
+      play('promoC', 1);
       buzz([0, 12, 16]);
     }
     function promote(step) {
       if (isMuted()) return;
       var s = Number(step) >= 2 ? 2 : 1;
-      elPlay(s >= 2 ? 'promote2' : 'promote1', 1);
+      play(s >= 2 ? 'promote2' : 'promote1', 1);
       buzz(s >= 2 ? [50, 40, 70, 40, 110] : [35, 40, 60]);
     }
     function fanfare(level) {
       if (isMuted()) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
-      elPlay(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', 1);
+      play(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', 1);
       buzz(lv >= 3 ? [50, 40, 70, 40, 110] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : [18]);
     }
     /* 소리 켜기 버튼: 바로 들리는 테스트음 */
     function test(withFanfare) {
       if (isMuted()) return;
       unlock();
-      elPlay('snap', 1);
-      if (withFanfare) setTimeout(function () { if (!isMuted()) elPlay('fanC', 1); }, 430);
+      play('snap', 1);
+      if (withFanfare) setTimeout(function () { if (!isMuted()) play('fanC', 1); }, 430);
     }
 
-    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께)
-       단, 방문 직후 화면 아무 곳이나 누를 때 소리가 나면 안 되므로 문서 전체가 아니라
-       실제 뽑기·찢기 동작이 시작되는 지점(enterPeel · peelSnap · sealSnap)에서만 부른다. */
+    /* 첫 제스처에서 오디오 잠금 해제.
+       AudioContext 는 제스처 안에서 resume() 해야 계속 살아 있으므로, 소리를 내지 않는
+       resume 만 문서 전체 제스처에 걸어 둔다(누른다고 소리가 나지는 않는다). */
     try {
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden && ctx && ctx.state === 'running') running = true;
+        if (!document.hidden) { ambientSession(); wakeCtx(); }
+        else if (ctx && ctx.state === 'running') running = true;
       }, { passive: true });
     } catch (e) {}
 
-    /* 시작할 때 한 번 합성 → blob URL 생성 → <audio> 요소 준비 */
-    try { buildAll(); buildElements(); } catch (e) {}
-    try { document.addEventListener('DOMContentLoaded', function () { buildElements(); refreshToggle(false); }, { once: true }); } catch (e) {}
+    function hookGestures() {
+      if (gestureHooked) return;
+      gestureHooked = true;
+      var wake = function () { ambientSession(); wakeCtx(); };
+      ['pointerdown', 'touchstart', 'touchend', 'click', 'keydown'].forEach(function (ev) {
+        try { document.addEventListener(ev, wake, { passive: true, capture: true }); } catch (e) {}
+      });
+    }
+
+    /* 시작: PCM 합성 + 세션 타입(ambient) + 제스처 잠금 해제 */
+    try {
+      ambientSession();
+      buildAll();
+      hookGestures();
+    } catch (e) {}
+    try { document.addEventListener('DOMContentLoaded', function () { refreshToggle(false); }, { once: true }); } catch (e) {}
 
     return {
       tear: tear, snap: snap, fanfare: fanfare, sealCharge: sealCharge, test: test,

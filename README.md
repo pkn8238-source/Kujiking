@@ -354,3 +354,35 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 - 페이지를 열자마자 잠깐 "0명"으로 보이던 현상도 이 로딩 표시로 없어졌습니다.
 
 파일: `assets/app.js`(`fetchUserCoupons` · `revokeCoupons` · `openRevokeModal` · `loadAdminMembersFromTables`), `assets/styles.css`(`.revoke-*`)
+
+## 14. 무음 모드 존중 · 커버 잘림 수정 (v4.0.3 · 2026-11-25)
+
+### 개봉 효과음이 무음 모드에서도 나던 문제
+
+아이폰 하드웨어 무음 스위치를 내려도 개봉 효과음이 났습니다. 원인은 재생 경로였습니다.
+
+- v3.6.6 은 합성한 16bit PCM WAV 를 **HTML5 `<audio>.play()`** 로 재생했습니다.
+  iOS 사파리에서 `<audio>` 는 '미디어' 오디오 세션으로 재생돼 **무음 스위치를 무시**합니다
+  (`audioSession='playback'` 을 안 써도 마찬가지).
+- v4.0.3 은 같은 합성 PCM 을 **Web Audio(`AudioContext`)의 `AudioBuffer`** 로 디코드해
+  `BufferSource → GainNode(1.22배) → 리미터 → 출력` 으로 재생합니다. `AudioContext` 는
+  iOS 사파리에서도 무음 스위치를 그대로 따릅니다.
+- `navigator.audioSession.type = 'ambient'` (iOS 16.4+) 로 고정하고 `'playback'` 은 쓰지 않습니다.
+- 첫 제스처(`pointerdown`·`touchstart`·`touchend`·`click`·`keydown`)와 화면 복귀 시
+  `ctx.resume()` 만 조용히 걸어 드래그·연타 중에도 컨텍스트가 잠기지 않습니다.
+- 음량: 피크 0.95 로 정규화한 PCM × 1.22 + 리미터 → 작은 gain 이 iOS 에서 무음 처리되던 문제 없이 크게 들립니다.
+- 🔇/🔊 토글은 그대로이고, `AudioContext` 가 없는 브라우저에서만 `<audio>`(→ 웹오디오 신스)로 폴백합니다.
+
+파일: `assets/app.js`(`kujiSound` — `toPCM` · `audioBuf` · `ctxPlay` · `play` · `ambientSession` · `hookGestures`)
+
+### 실물 커버가 잘리던 문제
+
+판 상세 히어로의 커버 썸네일은 180×130 상자에 `object-fit:cover` 로 채워져, 1600×1100 커버의
+좌우가 20% 넘게 잘려 **판 제목("드래곤볼")이 "지볼"처럼 반쯤 잘려** 보였습니다. 홈 카드 커버도
+좌우 3%씩 잘렸습니다.
+
+- `.board-card-cover.has-image` · `.board-cover.has-image` 에 `aspect-ratio:1600/1100`,
+  `min-height:0`, 이미지는 `object-fit:contain` → 커버 원본이 잘리지 않고 그대로 보입니다.
+- `@supports not (aspect-ratio)` 폴백으로 예전 브라우저에서는 기존 최소 높이를 유지합니다.
+
+파일: `assets/styles.css`(v4.0.3 블록)

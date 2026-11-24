@@ -3078,3 +3078,20 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .soldout-stamp{font-size:11px;padding:6px 8px;border-width:1.5px;box-shadow:0 2px 0 rgba(23,18,14,.45);border-radius:9px}
   .soldout-stamp span{font-size:7.5px}
 }
+
+/* =========================================================
+   v4.0.3 — 실물 커버(1600×1100)가 잘리지 않게 원본 비율로 보여 준다
+   object-fit:cover 로 좌우가 잘려 커버의 판 제목/양끝 피규어가
+   반쯤 잘리던 문제 수정 (홈 카드 · 판 상세 히어로 공통)
+   ========================================================= */
+.board-card-cover.has-image,
+.board-cover.has-image{min-height:0;aspect-ratio:1600/1100}
+.board-card-cover.has-image .cover-img,
+.board-cover.has-image .cover-img{
+  object-fit:contain;object-position:center center;
+}
+/* aspect-ratio 미지원 브라우저 폴백 */
+@supports not (aspect-ratio: 16 / 11){
+  .board-card-cover.has-image{min-height:220px}
+  .board-cover.has-image{min-height:180px}
+}
