@@ -2304,9 +2304,15 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .user-chip-body b{max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .nav-toggle{width:40px;height:40px}
 }
-@media (max-width:345px){
+/* 400px 이하(아이폰 대부분)에서는 로그인 칩과 함께 놓아도 넘치지 않게 라이브는 아이콘만 남긴다 */
+@media (max-width:400px){
   .yt-live-word{display:none}
   .yt-live-btn{padding:7px 9px;gap:0}
+  .user-chip{gap:5px;padding:5px 8px 5px 5px}
+  .user-avatar{width:26px;height:26px;font-size:13px}
+  .user-chip-body b{max-width:56px}
+  .brand-word{font-size:20px}
+  .brand-mark{height:32px}
 }
 @media (prefers-reduced-motion:reduce){
   .yt-live-mark{animation:none}
