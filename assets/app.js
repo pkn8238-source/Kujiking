@@ -1852,6 +1852,7 @@
     if (ui.draw && ui.draw.step === 'seal' && ui.draw.result && !ui.draw.revealed) { sealSnap(); return; }
     /* 승격 연출 중에는 먼저 끝까지 보여준다 (한 번 더 누르면 닫힌다) */
     if (ui.draw && ui.draw.step === 'promote' && ui.draw.result) { ui.draw.promoSkip = true; return; }
+    closePostcodeLayer();
     modalRoot.hidden = true;
     modalPanel.innerHTML = '';
     document.body.style.overflow = '';
@@ -1859,6 +1860,95 @@
     if (confirmResolve) { var p = confirmResolve; confirmResolve = null; p(false); }
     if (lastFocused && lastFocused.focus) { try { lastFocused.focus(); } catch (e) {} }
   }
+  /* ---------- 주소 검색 (다음/카카오 우편번호, API 키 불필요) ---------- */
+  var DAUM_POSTCODE_SRC = 'https://t1.daumcdn.net/mapjsapi/bundle/postcode/prod/postcode.v2.js';
+  var daumPostcodeLoading = null;
+
+  function loadDaumPostcode() {
+    if (window.daum && window.daum.Postcode) return Promise.resolve(true);
+    if (daumPostcodeLoading) return daumPostcodeLoading;
+    daumPostcodeLoading = new Promise(function (resolve) {
+      var settled = false;
+      function finish(ok) { if (settled) return; settled = true; resolve(ok); }
+      var s = document.createElement('script');
+      s.src = DAUM_POSTCODE_SRC;
+      s.async = true;
+      s.onload = function () { finish(!!(window.daum && window.daum.Postcode)); };
+      s.onerror = function () { daumPostcodeLoading = null; finish(false); };
+      document.head.appendChild(s);
+      setTimeout(function () {
+        if (!(window.daum && window.daum.Postcode)) { daumPostcodeLoading = null; finish(false); }
+      }, 8000);
+    });
+    return daumPostcodeLoading;
+  }
+
+  function closePostcodeLayer() {
+    var layer = document.getElementById('postcodeLayer');
+    if (layer && layer.parentNode) layer.parentNode.removeChild(layer);
+  }
+
+  function openPostcodeLayer(form) {
+    if (!form) return;
+    if (document.getElementById('postcodeLayer')) return;
+    var layer = document.createElement('div');
+    layer.id = 'postcodeLayer';
+    layer.className = 'postcode-layer';
+    layer.setAttribute('role', 'dialog');
+    layer.setAttribute('aria-modal', 'true');
+    layer.setAttribute('aria-label', '주소 검색');
+    layer.innerHTML =
+      '<div class="postcode-frame">' +
+        '<div class="postcode-head"><b>주소 검색</b>' +
+          '<button type="button" class="postcode-close" data-action="close-postcode" aria-label="주소 검색 닫기">✕</button>' +
+        '</div>' +
+        '<div class="postcode-body" data-role="postcode-body">' +
+          '<p class="postcode-loading">주소 검색을 불러오는 중…</p>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(layer);
+
+    var body = layer.querySelector('[data-role="postcode-body"]');
+    loadDaumPostcode().then(function (ok) {
+      if (!document.getElementById('postcodeLayer') || !body) return;
+      if (!ok) {
+        body.innerHTML = '<div class="postcode-loading">주소 검색을 불러오지 못했어요.<br>' +
+          '인터넷 연결을 확인하고 다시 눌러주세요.<br>우편번호·주소는 직접 입력해도 됩니다.</div>';
+        return;
+      }
+      body.innerHTML = '';
+      try {
+        new window.daum.Postcode({
+          width: '100%',
+          height: '100%',
+          oncomplete: function (data) {
+            var base = data.userSelectedType === 'R'
+              ? (data.roadAddress || data.autoRoadAddress || '')
+              : (data.jibunAddress || data.autoJibunAddress || '');
+            if (data.userSelectedType === 'R' && data.buildingName) base += ' (' + data.buildingName + ')';
+            var pc = form.querySelector('input[name="postcode"]');
+            var addr = form.querySelector('input[name="address"]');
+            var det = form.querySelector('input[name="detail"]');
+            if (pc) pc.value = data.zonecode || '';
+            if (addr) addr.value = base;
+            closePostcodeLayer();
+            if (det) { try { det.focus(); } catch (e) {} }
+          },
+          onclose: function () { closePostcodeLayer(); }
+        }).embed(body);
+        var ifr = body.querySelector('iframe');
+        if (ifr) {
+          ifr.style.width = '100%';
+          ifr.style.height = '100%';
+          ifr.style.border = '0';
+          ifr.style.display = 'block';
+        }
+      } catch (e) {
+        body.innerHTML = '<div class="postcode-loading">주소 검색을 열지 못했어요.<br>우편번호·주소를 직접 입력해 주세요.</div>';
+      }
+    });
+  }
+
   function confirmDialog(opts) {
     return new Promise(function (resolve) {
       openModal(
@@ -6248,8 +6338,14 @@
       '<form data-form="delivery" novalidate data-id="' + h(d.id) + '">' +
         '<label class="field"><span>받는 사람</span><input name="recipient" type="text" maxlength="20" required value="' + h(user ? user.nickname : '') + '"></label>' +
         '<label class="field"><span>연락처</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required value="' + h(user ? user.phone : '') + '" placeholder="010-0000-0000"></label>' +
-        '<label class="field"><span>우편번호 (선택)</span><input name="postcode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 05510"></label>' +
-        '<label class="field"><span>주소</span><input name="address" type="text" maxlength="120" required placeholder="도로명 주소 + 상세 주소"></label>' +
+        '<div class="field field-postcode"><span>우편번호 (선택)</span>' +
+          '<div class="postcode-row">' +
+            '<input name="postcode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 05510" autocomplete="postal-code">' +
+            '<button type="button" class="btn btn-outline btn-sm postcode-btn" data-action="open-postcode">🔍 주소 검색</button>' +
+          '</div>' +
+        '</div>' +
+        '<label class="field"><span>주소</span><input name="address" type="text" maxlength="120" required placeholder="🔍 주소 검색을 누르거나 직접 입력" autocomplete="street-address"></label>' +
+        '<label class="field"><span>상세 주소 (선택)</span><input name="detail" type="text" maxlength="60" placeholder="예: 101동 1004호" autocomplete="address-line2"></label>' +
         '<label class="field"><span>배송 요청사항 (선택)</span><input name="memo" type="text" maxlength="80" placeholder="예: 문 앞에 놓아주세요"></label>' +
         shipNoticeBoxHTML('ship-note-modal') +
         '<p class="form-error" data-role="delivery-error" role="alert"></p>' +
@@ -6802,6 +6898,8 @@
         case 'reset-filter': ui.filters = { category: '전체', price: 'all', sort: 'recommend' }; renderHome(); break;
 
         case 'open-delivery': openDeliveryModal(id); break;
+        case 'open-postcode': openPostcodeLayer(document.querySelector('form[data-form="delivery"]')); break;
+        case 'close-postcode': closePostcodeLayer(); break;
         case 'convert-points': convertPointsFlow(id); break;
 
         case 'grant-open': openGrantModal(id); break;
@@ -7100,7 +7198,7 @@
           recipient: fieldValue(form, 'recipient').trim(),
           phone: fieldValue(form, 'phone').trim(),
           postcode: fieldValue(form, 'postcode').trim(),
-          address: fieldValue(form, 'address').trim(),
+          address: [fieldValue(form, 'address').trim(), fieldValue(form, 'detail').trim()].filter(Boolean).join(' '),
           memo: fieldValue(form, 'memo').trim()
         };
         if (!info.recipient || !info.phone || !info.address) {
@@ -7246,6 +7344,7 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && modalRoot && !modalRoot.hidden) {
+        if (document.getElementById('postcodeLayer')) { closePostcodeLayer(); return; }
         if (confirmResolve) { var r = confirmResolve; confirmResolve = null; closeModal(); r(false); }
         else closeModal();
       }
