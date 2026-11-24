@@ -1801,6 +1801,10 @@ body.is-live .demo-only{display:none !important}
 .cat-jojo{background:radial-gradient(circle at 82% 15%,rgba(255,255,255,.55),transparent 44%),linear-gradient(150deg,#b57ce0,#7d43b8 58%,#3f1f68)}
 .cat-jojo .cover-title,.cat-jojo .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.35)}
 .cat-apothecary{background:radial-gradient(circle at 22% 20%,rgba(255,255,255,.75),transparent 42%),linear-gradient(150deg,#f5b6c1,#dd7d92 58%,#9d3f57)}
+.cat-jujutsu{background:radial-gradient(circle at 80% 16%,rgba(255,255,255,.5),transparent 44%),linear-gradient(150deg,#9a7bf0,#5b35b0 58%,#2a1650)}
+.cat-jujutsu .cover-title,.cat-jujutsu .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(20,10,40,.4)}
+.cat-myhero{background:radial-gradient(circle at 20% 18%,rgba(255,255,255,.6),transparent 44%),linear-gradient(150deg,#ffa14a,#e6531a 58%,#8f2506)}
+.cat-myhero .cover-title,.cat-myhero .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(60,18,4,.4)}
 .cat-apothecary .cover-title,.cat-apothecary .cover-mini{color:#fff;text-shadow:2px 2px 0 rgba(23,18,14,.3)}
 
 /* ---------- 등급 썸네일 ---------- */

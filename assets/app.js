@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v3.7, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v3.9.9, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -60,7 +60,7 @@
     'grant execute on function public.admin_reset_board(uuid) to authenticated;'
   ].join('\n');
 
-  var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
+  var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '주술회전', '나의 히어로 아카데미아', '산리오', '치이카와', '자체 스페셜'];
   var PRICE_BANDS = [
     { id: 'all', label: '전체 금액' },
     { id: 'under', label: '1만 원 이하' },
@@ -340,7 +340,8 @@
   }
   function categoryClass(cat) {
     return { '원피스': 'cat-onepiece', '귀멸의 칼날': 'cat-kimetsu', '산리오': 'cat-sanrio', '치이카와': 'cat-chiikawa',
-      '드래곤볼': 'cat-dragonball', '헌터×헌터': 'cat-hunter', '죠죠의 기묘한 모험': 'cat-jojo', '약사의 혼잣말': 'cat-apothecary' }[cat] || 'cat-special';
+      '드래곤볼': 'cat-dragonball', '헌터×헌터': 'cat-hunter', '죠죠의 기묘한 모험': 'cat-jojo', '약사의 혼잣말': 'cat-apothecary',
+      '주술회전': 'cat-jujutsu', '나의 히어로 아카데미아': 'cat-myhero' }[cat] || 'cat-special';
   }
   function errMsg(e) {
     if (!e) return '문제가 생겼어요. 잠시 후 다시 시도해 주세요.';
@@ -720,6 +721,298 @@
           '일본 발매가 2026년 12월 5일인 신작으로, 이 판은 입고분에 한해 순차 발송됩니다.'
         ]
       }
+    },
+    {
+      id: 'b-chiikawa-onsen',
+      title: '[치이카와] 포근포근 치이카와의 탕 쿠지',
+      category: '치이카와',
+      cover: 'assets/products/chiikawa/cover.jpg',
+      price: 12000,
+      tickets: 160,
+      sold: 0,
+      kicker: 'CHIIKAWA',
+      sub: '치이카와 · 하치와레 · 우사기',
+      tiers: [
+        { grade: 'A', label: '포근포근 목욕탕 소품 수납 피규어', count: 1, points: 14000,
+          image: 'assets/products/chiikawa/tier_a.jpg',
+          desc: '약 16cm · 서랍에 소품을 넣을 수 있는 실용 피규어' },
+        { grade: 'B', label: '어서 오세요★ 번대 피규어', count: 1, points: 10000,
+          image: 'assets/products/chiikawa/tier_b.jpg',
+          desc: '약 9cm · 영업중/휴무 표찰을 돌릴 수 있는 카운터' },
+        { grade: 'C', label: '푸하~! 목욕 후 피규어', count: 1, points: 9000,
+          image: 'assets/products/chiikawa/tier_c.jpg',
+          desc: '약 10cm · 우사기와 쿠리만쥬의 건배 장면' },
+        { grade: 'D', label: '귀여운? 세신장 피규어', count: 1, points: 9000,
+          image: 'assets/products/chiikawa/tier_d.jpg',
+          desc: '약 9cm · 모몽가와 후루혼야의 거울 앞 장면' },
+        { grade: 'E', label: '목욕 후 글라스', count: 1, points: 6000,
+          image: 'assets/products/chiikawa/tier_e.jpg',
+          desc: '글라스 약 8cm · 우유병 약 14cm / 전 4종 중 1종' },
+        { grade: 'F', label: '목욕탕 러버 참 컬렉션', count: 1, points: 4000,
+          image: 'assets/products/chiikawa/tier_f.jpg',
+          desc: '약 6cm · 사물함 열쇠 모양 포함 / 전 8종 중 1종' },
+        { grade: 'G', label: '스테이셔너리', count: 1, points: 3500,
+          image: 'assets/products/chiikawa/tier_g.jpg',
+          desc: 'A4 클리어파일·메모·부착 메모 등 / 전 5종 중 1종' },
+        { grade: 'H', label: '패브릭 컬렉션', count: 1, points: 3000,
+          image: 'assets/products/chiikawa/tier_h.jpg',
+          desc: '파우치 약 22cm · 타월 약 25~60cm / 전 6종 중 1종' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+      ],
+      lastOneLabel: '라스트원상 · 함께 포근포근♪ 목욕 후 쿠션',
+      lastOneImage: 'assets/products/chiikawa/last_one.jpg',
+      lastOneDesc: '약 60cm · 치이카와·하치와레·우사기가 그려진 대형 쿠션',
+      manual: {
+        summary: '목욕탕(센토)을 테마로 한 치이카와 이치방쿠지입니다. A~D상이 전부 소품 수납 기능이 있는 피규어이고, E~H상은 목욕 후 글라스·러버 참·문구·패브릭입니다.',
+        specs: [
+          { k: '시리즈', v: '치이카와' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2025.09.19' },
+          { k: '일본 판매가', v: '1회 750엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~H상 8종 + 라스트원상 · 총 9종' },
+          { k: '이 판 구성', v: '실물 8종 각 1개 + P상 152장 = 160장' },
+          { k: '주요 크기', v: '피규어 약 9~16cm · 라스트원 쿠션 약 60cm' }
+        ],
+        lineup: [
+          'A상 포근포근 목욕탕 소품 수납 피규어 (약 16cm)',
+          'B상 어서 오세요★ 번대 피규어 (약 9cm)',
+          'C상 푸하~! 목욕 후 피규어 (약 10cm)',
+          'D상 귀여운? 세신장 피규어 (약 9cm)',
+          'E상 목욕 후 글라스 (글라스 약 8cm·우유병 약 14cm / 전 4종)',
+          'F상 목욕탕 러버 참 컬렉션 (약 6cm / 전 8종)',
+          'G상 스테이셔너리 (A4 클리어파일·메모·부착 메모 등 / 전 5종)',
+          'H상 패브릭 컬렉션 (파우치·타월 / 전 6종)',
+          '라스트원상 함께 포근포근♪ 목욕 후 쿠션 (약 60cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~H상 8종을 등급별로 각 1개씩(실물 8개) 두고, 나머지 152장을 P상(굿즈 포인트 1,200P)으로 채운 총 160장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
+          '2025년 9월 발매 세트로, 이 판은 확보한 입고분에 한해 순차 발송됩니다.'
+        ]
+      }
+    },
+    {
+      id: 'b-kimetsu-jogen2',
+      title: '[귀멸의 칼날] 상현의 2 쿠지',
+      category: '귀멸의 칼날',
+      cover: 'assets/products/kimetsu/cover.jpg',
+      price: 12000,
+      tickets: 160,
+      sold: 0,
+      kicker: 'UPPER RANK 2',
+      sub: '시노부 · 카나오 · 도마',
+      tiers: [
+        { grade: 'A', label: '코초 시노부 MASTERLISE', count: 1, points: 26000,
+          image: 'assets/products/kimetsu/tier_a.jpg',
+          desc: '약 22.5cm · 충주(蟲柱)의 전투 자세' },
+        { grade: 'B', label: '쿠리하나 카나오 MASTERLISE', count: 1, points: 20000,
+          image: 'assets/products/kimetsu/tier_b.jpg',
+          desc: '약 22.5cm · MASTERLISE 첫 등장' },
+        { grade: 'C', label: '도마 MASTERLISE', count: 1, points: 22000,
+          image: 'assets/products/kimetsu/tier_c.jpg',
+          desc: '약 27cm · 상현의 2, 부채를 든 모습' },
+        { grade: 'D', label: '탄지로와 기유의 테치테치 피규어', count: 1, points: 12000,
+          image: 'assets/products/kimetsu/tier_d.jpg',
+          desc: '약 7cm · 2체 세트 데포르메 피규어' },
+        { grade: 'E', label: '메탈릭 비주얼 시트', count: 1, points: 4000,
+          image: 'assets/products/kimetsu/tier_e.jpg',
+          desc: 'B4 · 전 5종 중 1종 랜덤' },
+        { grade: 'F', label: '아크릴 참', count: 1, points: 3500,
+          image: 'assets/products/kimetsu/tier_f.jpg',
+          desc: '약 4.5cm · 전 11종 중 1종 랜덤' },
+        { grade: 'G', label: '포토풍 카드 세트', count: 1, points: 3000,
+          image: 'assets/products/kimetsu/tier_g.jpg',
+          desc: '약 8cm 3장 세트 · 전 10종 중 1종' },
+        { grade: 'H', label: '아크릴 배지', count: 1, points: 2500,
+          image: 'assets/products/kimetsu/tier_h.jpg',
+          desc: '약 5.5cm · 전 22종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+      ],
+      lastOneLabel: '라스트원상 · 도마 MASTERLISE 라스트원 ver.',
+      lastOneImage: 'assets/products/kimetsu/last_one.jpg',
+      lastOneDesc: '약 27cm · 두 개의 부채를 든 특별 사양',
+      manual: {
+        summary: '상현의 2 도마와 충주·카나오가 MASTERLISE로 모인 세트입니다. A~C상이 대형 피규어, D상은 테치테치 2체 세트, E~H상은 시트·참·카드·배지입니다.',
+        specs: [
+          { k: '시리즈', v: '귀멸의 칼날' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.07.30' },
+          { k: '일본 판매가', v: '1회 850엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~H상 8종 + 라스트원상 · 총 9종' },
+          { k: '이 판 구성', v: '실물 8종 각 1개 + P상 152장 = 160장' },
+          { k: '주요 크기', v: 'MASTERLISE 약 22.5~27cm' }
+        ],
+        lineup: [
+          'A상 코초 시노부 MASTERLISE (약 22.5cm)',
+          'B상 쿠리하나 카나오 MASTERLISE (약 22.5cm)',
+          'C상 도마 MASTERLISE (약 27cm)',
+          'D상 탄지로와 기유의 테치테치 피규어 (약 7cm / 2체 세트)',
+          'E상 메탈릭 비주얼 시트 (B4 / 전 5종)',
+          'F상 아크릴 참 (약 4.5cm / 전 11종)',
+          'G상 포토풍 카드 세트 (약 8cm 3장 / 전 10종)',
+          'H상 아크릴 배지 (약 5.5cm / 전 22종)',
+          '라스트원상 도마 MASTERLISE 라스트원 ver. (약 27cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~H상 8종을 등급별로 각 1개씩(실물 8개) 두고, 나머지 152장을 P상(굿즈 포인트 1,200P)으로 채운 총 160장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
+          '피규어는 공장 조립·도색 상태에 따라 개체 차이가 있을 수 있습니다.'
+        ]
+      }
+    },
+    {
+      id: 'b-jujutsu-5th',
+      title: '[주술회전] 애니 5주년 FINAL! 쿠지',
+      category: '주술회전',
+      cover: 'assets/products/jujutsu/cover.jpg',
+      price: 12000,
+      tickets: 200,
+      sold: 0,
+      kicker: '5th ANNIVERSARY',
+      sub: '이타도리 · 옷코츠 · 고조',
+      tiers: [
+        { grade: 'A', label: '이타도리 유지 MASTERLISE', count: 1, points: 16000,
+          image: 'assets/products/jujutsu/tier_a.jpg',
+          desc: '약 23cm · 교복 상의를 벗은 빨간 후드 차림' },
+        { grade: 'B', label: '옷코츠 유타 MASTERLISE', count: 1, points: 16000,
+          image: 'assets/products/jujutsu/tier_b.jpg',
+          desc: '약 24cm · 극장판 0 라스트 신 재현' },
+        { grade: 'C', label: '아크릴 보드', count: 1, points: 8000,
+          image: 'assets/products/jujutsu/tier_c.jpg',
+          desc: '약 30cm · 4개 시리즈 오리지널 일러스트' },
+        { grade: 'D', label: '극장판 주술회전 0 빅 아크릴 스탠드', count: 1, points: 6000,
+          image: 'assets/products/jujutsu/tier_d.jpg',
+          desc: '약 17cm · 전 2종 중 1종 (옷코츠·이누마키)' },
+        { grade: 'E', label: '회옥·옥절 빅 아크릴 스탠드', count: 1, points: 6000,
+          image: 'assets/products/jujutsu/tier_e.jpg',
+          desc: '약 17~18cm · 전 2종 중 1종 (고조·게토)' },
+        { grade: 'F', label: '시부야 사변 빅 아크릴 스탠드', count: 1, points: 6000,
+          image: 'assets/products/jujutsu/tier_f.jpg',
+          desc: '약 18~19cm · 전 2종 중 1종 (후시구로·나나미)' },
+        { grade: 'G', label: '사멸회유 빅 아크릴 스탠드', count: 1, points: 6000,
+          image: 'assets/products/jujutsu/tier_g.jpg',
+          desc: '약 18cm · 전 2종 중 1종 (이타도리·쵸소)' },
+        { grade: 'H', label: '아크릴 배지', count: 1, points: 2500,
+          image: 'assets/products/jujutsu/tier_h.jpg',
+          desc: '약 5~10cm · 전 28종 중 1종 랜덤' },
+        { grade: 'I', label: '클리어 포스터', count: 1, points: 3000,
+          image: 'assets/products/jujutsu/tier_i.jpg',
+          desc: 'A3 · 전 11종 중 1종 랜덤' },
+        { grade: 'J', label: '러버 참', count: 1, points: 2500,
+          image: 'assets/products/jujutsu/tier_j.jpg',
+          desc: '약 6cm · 전 17종 중 1종 랜덤' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+      ],
+      lastOneLabel: '라스트원상 · 고조 사토루 MASTERLISE',
+      lastOneImage: 'assets/products/jujutsu/last_one.jpg',
+      lastOneDesc: '약 17cm · "뭐 웃고 있는 거예요" … "별로♡" 장면',
+      manual: {
+        summary: 'TV 애니 5주년을 마무리하는 최종 세트입니다. A·B상이 이타도리·옷코츠 MASTERLISE 피규어이고, C~G상은 시리즈별 오리지널 일러스트 빅 아크릴, H~J상은 배지·포스터·러버 참입니다.',
+        specs: [
+          { k: '시리즈', v: '주술회전 (TV 애니메이션)' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.09.26' },
+          { k: '일본 판매가', v: '1회 800엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~J상 10종 + 라스트원상 · 총 11종' },
+          { k: '이 판 구성', v: '실물 10종 각 1개 + P상 190장 = 200장' },
+          { k: '주요 크기', v: 'MASTERLISE 약 23~24cm · 아크릴 약 17~30cm' }
+        ],
+        lineup: [
+          'A상 이타도리 유지 MASTERLISE (약 23cm)',
+          'B상 옷코츠 유타 MASTERLISE (약 24cm)',
+          'C상 아크릴 보드 (약 30cm)',
+          'D상 극장판 주술회전 0 빅 아크릴 스탠드 (약 17cm / 전 2종)',
+          'E상 회옥·옥절 빅 아크릴 스탠드 (약 17~18cm / 전 2종)',
+          'F상 시부야 사변 빅 아크릴 스탠드 (약 18~19cm / 전 2종)',
+          'G상 사멸회유 빅 아크릴 스탠드 (약 18cm / 전 2종)',
+          'H상 아크릴 배지 (약 5~10cm / 전 28종)',
+          'I상 클리어 포스터 (A3 / 전 11종)',
+          'J상 러버 참 (약 6cm / 전 17종)',
+          '라스트원상 고조 사토루 MASTERLISE (약 17cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~J상 10종을 등급별로 각 1개씩(실물 10개) 두고, 나머지 190장을 P상(굿즈 포인트 1,200P)으로 채운 총 200장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
+          '클리어 포스터는 A3 크기로, 배송 시 접히지 않도록 원통 포장됩니다.'
+        ]
+      }
+    },
+    {
+      id: 'b-myhero-best',
+      title: '[나의 히어로 아카데미아] 최고의 히어로가 되기까지의 이야기 쿠지',
+      category: '나의 히어로 아카데미아',
+      cover: 'assets/products/myhero/cover.jpg',
+      price: 12000,
+      tickets: 180,
+      sold: 0,
+      kicker: '10th ANNIVERSARY',
+      sub: '데쿠 · 올마이트 · 바쿠고',
+      tiers: [
+        { grade: 'A', label: '미도리야 이즈쿠 & 올마이트 MASTERLISE PLUS', count: 1, points: 30000,
+          image: 'assets/products/myhero/tier_a.jpg',
+          desc: '올마이트 약 27cm · 이즈쿠 약 5cm 2체 세트' },
+        { grade: 'B', label: '바쿠고 카츠키 MASTERLISE', count: 1, points: 22000,
+          image: 'assets/products/myhero/tier_b.jpg',
+          desc: '약 24cm · 유에이 입학 직후 교복 차림' },
+        { grade: 'C', label: '아이자와 쇼타 MASTERLISE', count: 1, points: 18000,
+          image: 'assets/products/myhero/tier_c.jpg',
+          desc: '약 26cm · 1-A 담임 이레이저 헤드' },
+        { grade: 'D', label: '네즈 교장 MASTERLISE', count: 1, points: 12000,
+          image: 'assets/products/myhero/tier_d.jpg',
+          desc: '약 12cm · 첫 입체화' },
+        { grade: 'E', label: '이즈쿠: 오리진 MASTERLISE', count: 1, points: 10000,
+          image: 'assets/products/myhero/tier_e.jpg',
+          desc: '본체 약 7cm(의자 포함 약 17cm) · 어린 시절 데쿠' },
+        { grade: 'F', label: '올마이트 인형 피규어 MASTERELIVE COLLECTION', count: 1, points: 8000,
+          image: 'assets/products/myhero/tier_f.jpg',
+          desc: '약 15cm · 어린 데쿠가 쥐고 있던 소프비 인형' },
+        { grade: 'G', label: 'A조 집합 아크릴 스탠드', count: 1, points: 4000,
+          image: 'assets/products/myhero/tier_g.jpg',
+          desc: '약 7~14cm · 에필로그 비주얼 / 전 24종' },
+        { grade: 'H', label: '유에이 아이템 컬렉션', count: 1, points: 3500,
+          image: 'assets/products/myhero/tier_h.jpg',
+          desc: '학생수첩풍 케이스 약 11cm·핀 배지 / 전 7종' },
+        { grade: 'I', label: '스테이셔너리 컬렉션', count: 1, points: 3000,
+          image: 'assets/products/myhero/tier_i.jpg',
+          desc: '메모·엽서 3장·학생증풍 카드 5장 / 전 8종' },
+        { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+      ],
+      lastOneLabel: '라스트원상 · 미도리야 이즈쿠 -10th ANNIVERSARY- MASTERLISE',
+      lastOneImage: 'assets/products/myhero/last_one.jpg',
+      lastOneDesc: '약 21cm · 애니 10주년 로고를 이미지한 기념 피규어',
+      manual: {
+        summary: '애니 10주년을 기념해 "최고의 히어로가 되기까지의 이야기"를 따라가는 세트입니다. A~F상이 전부 피규어이고, G~I상은 아크릴 스탠드·유에이 아이템·문구입니다.',
+        specs: [
+          { k: '시리즈', v: '나의 히어로 아카데미아' },
+          { k: '제조사', v: '반다이 스피리츠' },
+          { k: '일본 발매', v: '2026.09.12' },
+          { k: '일본 판매가', v: '1회 790엔 (세금 포함)' },
+          { k: '세트 구성', v: 'A~I상 9종 + 라스트원상 · 총 10종' },
+          { k: '이 판 구성', v: '실물 9종 각 1개 + P상 171장 = 180장' },
+          { k: '주요 크기', v: 'MASTERLISE 약 12~27cm · 라스트원 약 21cm' }
+        ],
+        lineup: [
+          'A상 미도리야 이즈쿠 & 올마이트 MASTERLISE PLUS (올마이트 약 27cm·이즈쿠 약 5cm)',
+          'B상 바쿠고 카츠키 MASTERLISE (약 24cm)',
+          'C상 아이자와 쇼타 MASTERLISE (약 26cm)',
+          'D상 네즈 교장 MASTERLISE (약 12cm)',
+          'E상 이즈쿠: 오리진 MASTERLISE (본체 약 7cm·의자 포함 약 17cm)',
+          'F상 올마이트 인형 피규어 MASTERELIVE COLLECTION (약 15cm)',
+          'G상 A조 집합 아크릴 스탠드 (약 7~14cm / 전 24종)',
+          'H상 유에이 아이템 컬렉션 (케이스 약 11cm·핀 배지 / 전 7종)',
+          'I상 스테이셔너리 컬렉션 (메모·엽서·학생증풍 카드 / 전 8종)',
+          '라스트원상 미도리야 이즈쿠 -10th ANNIVERSARY- MASTERLISE (약 21cm)'
+        ],
+        notes: [
+          '이 판은 실제 세트의 A~I상 9종을 등급별로 각 1개씩(실물 9개) 두고, 나머지 171장을 P상(굿즈 포인트 1,200P)으로 채운 총 180장입니다. 실물에 당첨되면 해당 등급의 여러 종 중 1종이 랜덤으로 지급됩니다.',
+          'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 12,000P를 모으면 이 판을 한 번 더 뽑을 수 있어요.',
+          'A상은 올마이트와 이즈쿠 2체 세트로, 일반 상품과 별도 박스로 발송됩니다.'
+        ]
+      }
     }
   ];
 
@@ -727,7 +1020,11 @@
     { label: '드래곤볼 SPIRIT OF THE SAIYAN', url: 'assets/products/dragonball-saiyan/cover.jpg' },
     { label: '헌터×헌터 키메라 앤트 ②', url: 'assets/products/hunter-chimera-ant/cover.jpg' },
     { label: '죠죠 The Gathering of RIVALS', url: 'assets/products/jojo-rivals/cover.jpg' },
-    { label: '약사의 혼잣말 망비의 비보', url: 'assets/products/apothecary-secret/cover.jpg' }
+    { label: '약사의 혼잣말 망비의 비보', url: 'assets/products/apothecary-secret/cover.jpg' },
+    { label: '치이카와 포근포근 치이카와의 탕', url: 'assets/products/chiikawa/cover.jpg' },
+    { label: '귀멸의 칼날 상현의 2', url: 'assets/products/kimetsu/cover.jpg' },
+    { label: '주술회전 애니 5주년 FINAL!', url: 'assets/products/jujutsu/cover.jpg' },
+    { label: '나의 히어로 아카데미아 최고의 히어로', url: 'assets/products/myhero/cover.jpg' }
   ];
 
   var SEED_BUYERS = ['박*남', '김**영', '이*우', '최*아', '정*호', '한*지', '윤*빈', '강*민', '오*서', '임**준', '서*진', '문*혁'];
