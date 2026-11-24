@@ -119,7 +119,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '3.2';
+  var COVER_VER = '4.0.0';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -806,7 +806,7 @@
         { grade: 'A', label: '코초 시노부 MASTERLISE', count: 1, points: 26000,
           image: 'assets/products/kimetsu/tier_a.jpg',
           desc: '약 22.5cm · 충주(蟲柱)의 전투 자세' },
-        { grade: 'B', label: '쿠리하나 카나오 MASTERLISE', count: 1, points: 20000,
+        { grade: 'B', label: '츠유리 카나오 MASTERLISE', count: 1, points: 20000,
           image: 'assets/products/kimetsu/tier_b.jpg',
           desc: '약 22.5cm · MASTERLISE 첫 등장' },
         { grade: 'C', label: '도마 MASTERLISE', count: 1, points: 22000,
@@ -846,7 +846,7 @@
         ],
         lineup: [
           'A상 코초 시노부 MASTERLISE (약 22.5cm)',
-          'B상 쿠리하나 카나오 MASTERLISE (약 22.5cm)',
+          'B상 츠유리 카나오 MASTERLISE (약 22.5cm)',
           'C상 도마 MASTERLISE (약 27cm)',
           'D상 탄지로와 기유의 테치테치 피규어 (약 7cm / 2체 세트)',
           'E상 메탈릭 비주얼 시트 (B4 / 전 5종)',
@@ -2971,7 +2971,7 @@
       return '<span class="' + (cls || 'tier-thumb') + ' is-empty" style="background:' + gradeColor(t ? t.grade : 'e') + '22">' +
         '<b style="color:' + gradeColor(t ? t.grade : 'e') + '">' + h(t ? t.grade : '-') + '</b></span>';
     }
-    return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(t.image) + '" alt="' + h(t.label || '') + '" loading="lazy" decoding="async"></span>';
+    return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label || '') + '" loading="lazy" decoding="async"></span>';
   }
 
   function renderBoardStatus(board) {
@@ -2991,7 +2991,7 @@
     el.innerHTML = '<h2>등급 현황 <span class="badge badge-live">실시간</span></h2>' +
       '<div class="grade-rows">' + rows + '</div>' +
       '<button type="button" class="lastone-card" data-action="zoom-last">' +
-        (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="" loading="lazy">' : '') +
+        (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="" loading="lazy">' : '') +
         '<span class="lastone-body"><span class="lastone-kicker">LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
         (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span>' +
       '</button>';
@@ -3136,7 +3136,7 @@
       var isP = String(t.grade).toUpperCase() === 'P' || !!t.pointOnly;
       return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
           '<span class="prize-media">' +
-            (t.image ? '<img src="' + h(t.image) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
+            (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
                      : (isP ? '<span class="prize-media-point"><b>P</b><em>' + fmt(t.points) + 'P</em></span>'
                             : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>')) +
             (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
@@ -3152,7 +3152,7 @@
 
     var lo = '<button type="button" class="prize-card prize-last" data-action="zoom-last">' +
         '<span class="prize-media">' +
-          (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="' + h(board.lastOneLabel || '라스트원상') + '" loading="lazy" decoding="async">'
+          (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="' + h(board.lastOneLabel || '라스트원상') + '" loading="lazy" decoding="async">'
                               : '<span class="prize-media-empty">★</span>') +
           (board.lastOneImage ? '' : '<span class="rank-badge grade-last">LAST ONE</span>') +
         '</span>' +
@@ -3572,7 +3572,7 @@
       var t = tierOf(board, r.grade) || {};
       var img = r.tierImage || t.image || '';
       return '<li><span class="mrv-sthumb" style="--bc:' + mrBc(r.grade) + '">' +
-          (img ? '<img src="' + h(img) + '" alt="" loading="lazy">' : '<b>' + h(String(r.grade).toUpperCase() === 'LAST' ? 'L' : r.grade) + '</b>') +
+          (img ? '<img src="' + h(coverSrc(img)) + '" alt="" loading="lazy">' : '<b>' + h(String(r.grade).toUpperCase() === 'LAST' ? 'L' : r.grade) + '</b>') +
         '</span>' +
         '<span class="mrv-sp" style="--bc:' + mrBc(r.grade) + '">' + h(mrGradeText(r.grade)) + '</span>' +
         '<span class="mrv-sl">' + h(r.tierLabel || t.label || '') + '</span>' +
@@ -3604,7 +3604,7 @@
     return '<div class="mrv-last" style="--bc:' + mrBc(r.grade) + '">' +
       (point || !img
         ? '<span class="mrv-last-thumb is-txt"><b>' + h(String(r.grade).toUpperCase() === 'LAST' ? 'L' : r.grade) + '</b></span>'
-        : '<span class="mrv-last-thumb"><img src="' + h(img) + '" alt="' + h(label) + '"></span>') +
+        : '<span class="mrv-last-thumb"><img src="' + h(coverSrc(img)) + '" alt="' + h(label) + '"></span>') +
       '<span class="mrv-last-body">' +
         '<span class="mrv-last-top">방금 개봉 · #' + r.n + ' · <b>' + h(mrGradeText(r.grade)) + '</b></span>' +
         '<span class="mrv-last-name">' + h(point ? ('굿즈 포인트 +' + fmt(Number(r.points) || 0) + 'P') : label) + '</span>' +
@@ -3812,7 +3812,7 @@
           var t = tierOf(board, r.grade) || {};
           var img = r.tierImage || t.image || '';
           return '<li class="bp-row">' +
-            (img ? '<span class="bp-thumb"><img src="' + h(img) + '" alt="" loading="lazy"></span>' : '<span class="bp-thumb is-empty">' + h(r.grade) + '</span>') +
+            (img ? '<span class="bp-thumb"><img src="' + h(coverSrc(img)) + '" alt="" loading="lazy"></span>' : '<span class="bp-thumb is-empty">' + h(r.grade) + '</span>') +
             '<span class="bp-body"><b>' + h(r.grade + '상') + '</b><span>' + h(r.tierLabel || t.label || '') + '</span></span>' +
             '<span class="bp-n">#' + r.n + '</span>' +
           '</li>';
@@ -5748,7 +5748,7 @@
         : ['#6d5bff', '#3d7bfd', '#8ee3ff', '#c7b6ff', '#ffffff']);
 
     var hero = img
-      ? '<img class="rv-figure" src="' + h(img) + '" alt="' + h(label) + '">'
+      ? '<img class="rv-figure" src="' + h(coverSrc(img)) + '" alt="' + h(label) + '">'
       : '<span class="rv-figure rv-figure-empty">' + h(g === 'LAST' ? 'L' : String(r.grade || '')) + '</span>';
 
     var emblem = '<span class="rv-emblem' + (g === 'LAST' ? ' is-last' : '') + '">' +
@@ -5782,7 +5782,7 @@
           '<div class="st-confetti" aria-hidden="true">' + confettiHTML(8, { drop: 240, drift: 110, spread: .4 }) + '</div>' +
           '<div class="st-hero">' +
             '<div class="st-media">' +
-              (img ? '<img src="' + h(img) + '" alt="' + h(label) + '">' : '<span class="st-empty">' + h(String(r.grade || '')) + '</span>') +
+              (img ? '<img src="' + h(coverSrc(img)) + '" alt="' + h(label) + '">' : '<span class="st-empty">' + h(String(r.grade || '')) + '</span>') +
               '<span class="rank-badge grade-' + h(gkey) + ' lg">' + h(g === 'LAST' ? 'LAST ONE' : r.grade + '상') + '</span>' +
             '</div>' +
           '</div>' +
@@ -5797,7 +5797,7 @@
         ? '<span class="result-points">' + icon('gift') + ' 굿즈 포인트 ' + fmt(r.points) + 'P 지급</span>'
         : '') +
       (r.isLast
-        ? '<div class="result-lastone">' + (board.lastOneImage ? '<img src="' + h(board.lastOneImage) + '" alt="">' : '') +
+        ? '<div class="result-lastone">' + (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="">' : '') +
           '<span class="result-lastone-body"><span>LAST ONE BONUS</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
           (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span></div>'
         : '') +
@@ -5824,7 +5824,7 @@
       '<h2 class="modal-title" id="modalTitle">' + n + '번 · 판매 완료</h2>' +
       '<p class="modal-sub">이미 뽑힌 번호입니다. 결과는 변경되지 않아요.</p>' +
       '<div class="result-stage">' +
-        (tier.image ? '<div class="result-media"><img src="' + h(tier.image) + '" alt=""></div>' : '') +
+        (tier.image ? '<div class="result-media"><img src="' + h(coverSrc(tier.image)) + '" alt=""></div>' : '') +
         '<div class="result-badge" style="background:' + gradeColor(o.grade) + '">' + h(o.grade) + '</div>' +
         '<p class="result-grade">' + h(o.grade) + '상</p>' +
         '<p class="result-prize">' + h(tier.label || '') + '</p>' +
@@ -6715,7 +6715,7 @@
         '</div>' +
         '<div class="tier-extra">' +
           '<span class="tier-thumb-prev" data-role="tier-thumb">' +
-            (t.image ? '<img src="' + h(t.image) + '" alt="">' : '') +
+            (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="">' : '') +
           '</span>' +
           '<input name="image" type="text" value="' + h(t.image || '') + '" placeholder="이미지 경로 (assets/products/…/tier_a.jpg)" data-role="tier-image">' +
           '<input name="desc" type="text" maxlength="60" value="' + h(t.desc || '') + '" placeholder="상품 설명 (약 20cm · MASTERLISE 피규어)">' +
