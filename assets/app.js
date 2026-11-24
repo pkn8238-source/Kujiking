@@ -6837,24 +6837,29 @@
     route();
   }
 
-  /* ── QA 전용 임시 훅 (검증 후 제거): ?promo=C|B|A|LAST 로 승격 연출만 미리 재생 ── */
+  /* ── QA 전용 임시 훅 (검증 후 제거): ?promo=C|B|A|LAST · __promoReplay(grade, slow) ── */
   (function () {
+    function qaStart(grade, slow) {
+      if (!ui.ready || !state.boards || !state.boards.length) return false;
+      var board = state.boards[0];
+      ui.draw = {
+        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false,
+        promoSlow: Math.max(1, Math.min(8, Number(slow) || 1)),
+        result: { grade: grade, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
+          remaining: 12, source: 'demo', demo: true }
+      };
+      renderDrawModal();
+      return true;
+    }
+    window.__promoReplay = qaStart;
     var m = /[?&]promo=(C|B|A|LAST)/i.exec(location.search);
     if (!m) return;
     var g = m[1].toUpperCase(), tries = 0, slow = 1;
     var sm = /[?&]slow=([0-9.]+)/.exec(location.search);
-    if (sm) slow = Math.max(1, Math.min(6, parseFloat(sm[1]) || 1));
+    if (sm) slow = Math.max(1, Math.min(8, parseFloat(sm[1]) || 1));
     var t = setInterval(function () {
       if (++tries > 120) { clearInterval(t); return; }
-      if (!ui.ready || !state.boards || !state.boards.length) return;
-      clearInterval(t);
-      var board = state.boards[0];
-      ui.draw = {
-        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false, promoSlow: slow,
-        result: { grade: g, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
-          remaining: 12, source: 'demo', demo: true }
-      };
-      renderDrawModal();
+      if (qaStart(g, slow)) clearInterval(t);
     }, 100);
   })();
 
