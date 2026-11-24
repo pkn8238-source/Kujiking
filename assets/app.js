@@ -119,10 +119,22 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.0.0';
+  var COVER_VER = '4.0.1';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
+  }
+  /* 판 상품 폴더의 세트 라인업 배너 — 등록된 값이 없으면 등급 이미지 경로에서 추론 */
+  function lineupSrcOf(board) {
+    if (!board) return '';
+    var direct = board.lineupImage || '';
+    if (direct) return direct;
+    var imgs = (board.tiers || []).map(function (t) { return t && t.image; }).filter(Boolean);
+    for (var i = 0; i < imgs.length; i++) {
+      var m = /^(?:\.\/)?(assets\/products\/[A-Za-z0-9_-]+)\//.exec(imgs[i]);
+      if (m) return m[1] + '/lineup.jpg';
+    }
+    return '';
   }
   var ICONS = {
     ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4V7z"/><path d="M14 7v10"/>',
@@ -460,6 +472,7 @@
       ],
       lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
       lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
+      lineupImage: 'assets/products/dragonball-saiyan/lineup.jpg',
       lastOneDesc: '약 21cm · 근두운에 오른 부자(父子) 피규어',
       manual: {
         summary: '손오공 일가의 카메하메하 장면을 MASTERLISE로 입체화한 이치방쿠지입니다. A~E상은 대형 피규어, F~J상은 마그넷·파우치·아크릴·고무·타월 소품으로 구성됩니다.',
@@ -535,6 +548,7 @@
       ],
       lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
       lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
+      lineupImage: 'assets/products/hunter-chimera-ant/lineup.jpg',
       lastOneDesc: '약 100cm · 성장한 곤의 초대형 피규어',
       manual: {
         summary: '키메라 앤트 편을 테마로 한 재판매 세트입니다. A~F상이 전부 MASTERLISE 피규어이고, 라스트원상은 약 1m 크기의 성장한 곤입니다.',
@@ -618,6 +632,7 @@
       ],
       lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
       lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
+      lineupImage: 'assets/products/jojo-rivals/lineup.jpg',
       lastOneDesc: '약 15cm · 7부 스틸 볼 런의 디에고',
       manual: {
         summary: '시리즈 역대 숙적들이 MASTERLISE로 모인 세트입니다. A~F상은 18~26cm 피규어, G상은 스탠드의 화살, H~L상은 로고 피규어·참·고무·포스터·스티커입니다.',
@@ -692,6 +707,7 @@
       ],
       lastOneLabel: '라스트원상 · 마오마오 피규어',
       lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
+      lineupImage: 'assets/products/apothecary-secret/lineup.jpg',
       lastOneDesc: '약 18cm · 꽃이 핀 받침대 위의 마오마오',
       manual: {
         summary: '극장판 약사의 혼잣말 첫 이치방쿠지입니다. 신브랜드 Dioramiquemaster의 마오마오·진시 피규어와 극장판 의상 일러스트 굿즈로 구성됩니다.',
@@ -762,6 +778,7 @@
       ],
       lastOneLabel: '라스트원상 · 함께 포근포근♪ 목욕 후 쿠션',
       lastOneImage: 'assets/products/chiikawa/last_one.jpg',
+      lineupImage: 'assets/products/chiikawa/lineup.jpg',
       lastOneDesc: '약 60cm · 치이카와·하치와레·우사기가 그려진 대형 쿠션',
       manual: {
         summary: '목욕탕(센토)을 테마로 한 치이카와 이치방쿠지입니다. A~D상이 전부 소품 수납 기능이 있는 피규어이고, E~H상은 목욕 후 글라스·러버 참·문구·패브릭입니다.',
@@ -832,6 +849,7 @@
       ],
       lastOneLabel: '라스트원상 · 도마 MASTERLISE 라스트원 ver.',
       lastOneImage: 'assets/products/kimetsu/last_one.jpg',
+      lineupImage: 'assets/products/kimetsu/lineup.jpg',
       lastOneDesc: '약 27cm · 두 개의 부채를 든 특별 사양',
       manual: {
         summary: '상현의 2 도마와 충주·카나오가 MASTERLISE로 모인 세트입니다. A~C상이 대형 피규어, D상은 테치테치 2체 세트, E~H상은 시트·참·카드·배지입니다.',
@@ -908,6 +926,7 @@
       ],
       lastOneLabel: '라스트원상 · 고조 사토루 MASTERLISE',
       lastOneImage: 'assets/products/jujutsu/last_one.jpg',
+      lineupImage: 'assets/products/jujutsu/lineup.jpg',
       lastOneDesc: '약 17cm · "뭐 웃고 있는 거예요" … "별로♡" 장면',
       manual: {
         summary: 'TV 애니 5주년을 마무리하는 최종 세트입니다. A·B상이 이타도리·옷코츠 MASTERLISE 피규어이고, C~G상은 시리즈별 오리지널 일러스트 빅 아크릴, H~J상은 배지·포스터·러버 참입니다.',
@@ -983,6 +1002,7 @@
       ],
       lastOneLabel: '라스트원상 · 미도리야 이즈쿠 -10th ANNIVERSARY- MASTERLISE',
       lastOneImage: 'assets/products/myhero/last_one.jpg',
+      lineupImage: 'assets/products/myhero/lineup.jpg',
       lastOneDesc: '약 21cm · 애니 10주년 로고를 이미지한 기념 피규어',
       manual: {
         summary: '애니 10주년을 기념해 "최고의 히어로가 되기까지의 이야기"를 따라가는 세트입니다. A~F상이 전부 피규어이고, G~I상은 아크릴 스탠드·유에이 아이템·문구입니다.',
@@ -3163,6 +3183,11 @@
         '</span>' +
       '</button>';
 
+    var lineupSrc = lineupSrcOf(board);
+    var lineupBlock = lineupSrc
+        ? '<figure class="prize-lineup"><img src="' + h(coverSrc(lineupSrc)) + '" alt="' + h(board.title) + ' 전체 구성 피규어 라인업" width="1600" height="760" loading="lazy" decoding="async" onerror="var f=this.closest(&quot;figure&quot;);if(f){f.style.display=&quot;none&quot;}"></figure>'
+        : '';
+
     el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
         '<span class="step-no">1</span>' +
         '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
@@ -3171,6 +3196,7 @@
             : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
           '실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
         '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
+      lineupBlock +
       '<div class="prize-gallery' + (board.tiers.length > 6 ? ' is-dense' : '') + '">' + cards + lo + '</div>' +
       '<div class="prize-table-wrap">' +
         '<div class="table-scroll"><table class="data-table prob-table"><thead><tr><th>등급</th><th>상품</th><th>수량</th><th>확률</th><th>잔여</th></tr></thead><tbody>' +
