@@ -2556,18 +2556,11 @@
     }
     function refreshToggle(flash) {
       var btn = document.getElementById('peelSound');
-      var top = document.getElementById('soundTest');
       var off = isMuted();
       if (btn) {
         btn.textContent = off ? '🔇 소리 꺼짐' : (flash ? '🔊 효과음 재생!' : '🔊 소리 켜짐');
         btn.setAttribute('aria-pressed', off ? 'false' : 'true');
         btn.title = off ? '개봉 효과음 켜기 (누르면 테스트음이 재생됩니다)' : '개봉 효과음 끄기';
-      }
-      if (top) {
-        top.textContent = off ? '🔇' : '🔊';
-        top.setAttribute('aria-pressed', off ? 'false' : 'true');
-        top.title = off ? '효과음 켜기' : '효과음 테스트 재생';
-        top.setAttribute('aria-label', off ? '효과음 켜기' : '효과음 테스트 재생');
       }
       if (flashTimer) { clearTimeout(flashTimer); flashTimer = 0; }
       if (flash && !off && btn) {
@@ -5265,13 +5258,6 @@
           kujiSound.toggle();
           kujiSound.refreshToggle(true);
           if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.test(false); }
-          break;
-        }
-        case 'test-sound': {
-          if (kujiSound.isMuted()) kujiSound.setMuted(false);
-          kujiSound.unlock();
-          kujiSound.test(true);
-          kujiSound.refreshToggle(true);
           break;
         }
         case 'draw-coupon': {
