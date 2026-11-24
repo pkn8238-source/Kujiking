@@ -2294,7 +2294,17 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .yt-live-word .yt-live-prefix{display:none}
   .yt-live-mark,.yt-live-mark svg{width:17px;height:17px}
 }
+/* 좁은 화면에서 헤더가 넘치지 않도록 유튜브 라이브 버튼과 사용자 칩을 함께 줄인다 */
 @media (max-width:420px){
+  .header-actions{gap:7px}
+  .yt-live-btn{padding:7px 10px;gap:5px}
+  .yt-live-word{font-size:12px}
+  .user-chip{gap:6px;padding:5px 9px 5px 6px}
+  .user-chip-meta{display:none}
+  .user-chip-body b{max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav-toggle{width:40px;height:40px}
+}
+@media (max-width:345px){
   .yt-live-word{display:none}
   .yt-live-btn{padding:7px 9px;gap:0}
 }
