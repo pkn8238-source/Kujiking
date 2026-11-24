@@ -2362,3 +2362,97 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .user-chip{padding:5px 6px}
   .brand-word{font-size:18px}
 }
+
+/* =========================================================
+   v3.7.6 — 고객센터(카카오톡 1:1 오픈채팅) · 배송비·합배송 안내
+   ========================================================= */
+.kakao-pill{
+  display:inline-flex;align-items:center;gap:8px;flex-shrink:0;white-space:nowrap;
+  padding:9px 16px 9px 12px;border:2px solid var(--ink);border-radius:999px;
+  background:linear-gradient(180deg,#ffe967 0%,#ffc81e 100%);color:#3b2118;
+  font-weight:900;font-size:13.5px;letter-spacing:-.01em;box-shadow:0 3px 0 var(--ink);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.kakao-pill:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--ink);background:linear-gradient(180deg,#fff08f 0%,#ffd23d 100%)}
+.kakao-pill:active{transform:translateY(1px);box-shadow:0 2px 0 var(--ink)}
+.kakao-pill:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.kakao-mark{display:grid;place-items:center;width:20px;height:20px;flex:none;color:#3b2118}
+.kakao-mark svg{width:20px;height:20px;display:block}
+.kakao-mark-lg,.kakao-mark-lg svg{width:34px;height:34px}
+.kakao-pill.is-soon{background:linear-gradient(180deg,#fff3c4 0%,#ffe27a 100%)}
+.kakao-pill-sm{padding:7px 13px 7px 10px;font-size:12.5px;gap:6px;box-shadow:0 2px 0 var(--ink)}
+.kakao-pill-sm .kakao-mark,.kakao-pill-sm .kakao-mark svg{width:16px;height:16px}
+.kakao-pill-block{display:flex;justify-content:center;width:100%}
+
+/* 푸터 · 배송비 안내 + 고객센터 버튼 */
+.footer-service{
+  display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;
+  margin-top:30px;padding:15px 18px;border:2px solid rgba(255,255,255,.16);border-radius:16px;
+  background:rgba(255,255,255,.05);
+}
+.footer-ship{display:flex;align-items:center;gap:10px;flex:1 1 320px;min-width:0}
+.footer-ship-tag{flex:none;padding:4px 10px;border-radius:999px;background:var(--yellow);color:var(--ink);font-size:11.5px;font-weight:900;letter-spacing:-.01em}
+.footer-ship p{font-size:12.5px;font-weight:700;line-height:1.55;color:rgba(255,255,255,.86)}
+
+/* 배송비 안내 박스 (내 보관함 · 배송 신청 창) */
+.ship-note{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:14px 16px;border:2px solid var(--line-strong);border-radius:14px;background:var(--cream);
+}
+.ship-note-icon{display:grid;place-items:center;width:34px;height:34px;flex:none;color:var(--ink);
+  border:2px solid var(--ink);border-radius:10px;background:var(--yellow);box-shadow:0 2px 0 var(--ink)}
+.ship-note-icon .ico{width:18px;height:18px}
+.ship-note-body{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:2px}
+.ship-note-body b{font-size:12px;font-weight:900;color:var(--ink)}
+.ship-note-body p{font-size:12.5px;font-weight:700;line-height:1.55;color:var(--ink-soft)}
+.ship-note .kakao-pill{margin-left:auto}
+.ship-note-primary{background:#fff;border-color:var(--yellow-deep)}
+.ship-note-primary .ship-note-icon{background:var(--ink);color:var(--yellow);border-color:var(--ink)}
+.ship-note-modal{margin:2px 0 14px;border-style:dashed}
+.ship-note-panel{margin-bottom:0}
+@media (max-width:560px){
+  .footer-service{padding:14px}
+  .footer-ship{flex:1 1 100%}
+  .footer-service .kakao-pill{width:100%;justify-content:center}
+  .ship-note .kakao-pill{margin-left:0;width:100%;justify-content:center}
+}
+
+/* 뽑기 이용 안내 카드 안의 배송비 줄 */
+.ship-line{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:14px;padding-top:12px;border-top:1px dashed var(--line-strong);
+}
+.ship-line-copy{display:flex;flex-direction:column;gap:2px;flex:1 1 240px;min-width:0}
+.ship-line-copy b{font-size:12px;font-weight:900;color:var(--ink)}
+.ship-line-copy span{font-size:12.5px;font-weight:700;line-height:1.55;color:var(--ink-soft)}
+
+/* 보드 사이드 '이용 안내' 안 배송비 */
+.aside-ship{display:flex;flex-direction:column;gap:3px;margin:0 0 12px;padding:10px 12px;
+  border:1px solid var(--line-strong);border-radius:12px;background:var(--cream)}
+.aside-ship b{font-size:11.5px;font-weight:900;color:var(--ink-soft)}
+.aside-ship span{font-size:11.5px;font-weight:700;line-height:1.5;color:var(--muted)}
+.aside-help .kakao-pill-block{margin-bottom:8px}
+
+/* 오픈채팅 준비 중 안내 모달 */
+.kakao-soon{text-align:center;padding:6px 2px 0}
+.kakao-soon-mark{display:inline-grid;place-items:center;width:60px;height:60px;margin:0 auto 12px;color:#3b2118;
+  border:2px solid var(--ink);border-radius:18px;background:linear-gradient(180deg,#ffe967 0%,#ffc81e 100%);
+  box-shadow:0 3px 0 var(--ink)}
+.kakao-soon .modal-sub{max-width:340px;margin:0 auto}
+
+/* 관리자 · 고객센터/배송비 설정 카드 */
+.cs-form{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.cs-form .field{max-width:620px}
+.cs-form .field-hint{font-style:normal;line-height:1.5;font-weight:700;color:var(--muted)}
+.cs-live-preview{display:none;flex-direction:column;gap:5px;font-size:12.5px;font-weight:700;line-height:1.6;color:var(--muted);
+  background:var(--cream);border:2px dashed var(--line-strong);border-radius:12px;padding:10px 13px;word-break:break-word}
+.cs-live-preview:not(:empty){display:flex}
+.cs-live-preview b{color:var(--red-deep)}
+.cs-live-preview a{color:var(--red-deep);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.cs-sql{margin-top:18px;border-top:2px dashed var(--line-strong);padding-top:14px}
+.cs-sql summary{cursor:pointer;font-size:12.5px;font-weight:900;color:var(--ink-soft);list-style:none}
+.cs-sql summary::-webkit-details-marker{display:none}
+.cs-sql summary::before{content:"＋";display:inline-block;width:16px;color:var(--red-deep);font-weight:900}
+.cs-sql[open] summary::before{content:"－"}
+.cs-sql pre{margin:10px 0;padding:12px 14px;overflow-x:auto;background:#1d1815;color:#ffe9b8;border-radius:12px;font-size:12px;line-height:1.6;white-space:pre}
+.cs-sql .muted{margin-top:8px}

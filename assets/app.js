@@ -352,7 +352,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true },
+      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: '', shippingFeeNotice: '' },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
@@ -909,7 +909,7 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true }, s.settings || {});
+    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: '', shippingFeeNotice: '' }, s.settings || {});
     s.users = s.users || [];
     s.coupons = s.coupons || [];
     s.draws = s.draws || [];
@@ -1124,7 +1124,7 @@
       }
       state.boards = boards;
 
-      var setRes = await sb.from('app_settings').select('key,value').in('key', ['demo_code', 'youtube_live_url', 'youtube_live_enabled']);
+      var setRes = await sb.from('app_settings').select('key,value').in('key', ['demo_code', 'youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice']);
       if (!setRes.error && setRes.data) {
         var settingsMap = {};
         setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
@@ -1133,6 +1133,8 @@
         if (typeof settingsMap.youtube_live_enabled === 'string') {
           state.settings.youtubeLiveEnabled = !/^(false|0|off|no)$/i.test(settingsMap.youtube_live_enabled.trim());
         }
+        if (typeof settingsMap.kakao_openchat_url === 'string') state.settings.kakaoOpenchatUrl = settingsMap.kakao_openchat_url;
+        if (typeof settingsMap.shipping_fee_notice === 'string') state.settings.shippingFeeNotice = settingsMap.shipping_fee_notice;
       }
 
       if (myId) {
@@ -2005,6 +2007,149 @@
     updateYoutubePreview();
   }
 
+  /* ---------- 고객센터 · 배송비 ---------- */
+  var SHIP_NOTICE_DEFAULT = '기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)';
+  var KAKAO_SOON = '현재 1:1 오픈채팅을 연결 중입니다! 잠시만 기다려 주세요.';
+
+  function shippingNotice() {
+    var s = String(state.settings.shippingFeeNotice == null ? '' : state.settings.shippingFeeNotice).replace(/\s+/g, ' ').trim();
+    return s || SHIP_NOTICE_DEFAULT;
+  }
+
+  /* 입력값을 새 창으로 열 주소로 바꿈다. http(s) 주소가 아니면 빈 값. */
+  function kakaoTarget(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    var url;
+    try { url = new URL(s); } catch (e) { return ''; }
+    if (!/^https?:$/.test(url.protocol)) return '';
+    var host = url.hostname.toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host)) return '';
+    return url.href;
+  }
+
+  function kakaoOpenchatUrl() {
+    return kakaoTarget(state.settings.kakaoOpenchatUrl);
+  }
+
+  function kakaoMarkHTML(cls) {
+    return '<span class="kakao-mark' + (cls ? ' ' + cls : '') + '" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.9c-5.3 0-9.6 3.4-9.6 7.6 0 2.7 1.8 5.1 4.4 6.4l-1 3.3c-.1.4.3.7.6.5l4-2.5c.5.1 1 .1 1.6.1 5.3 0 9.6-3.4 9.6-7.6S17.3 2.9 12 2.9z" fill="currentColor"/></svg></span>';
+  }
+
+  function kakaoPillHTML(cls) {
+    return '<button class="kakao-pill' + (cls ? ' ' + cls : '') + '" type="button" data-action="open-kakao">' +
+      kakaoMarkHTML() +
+    '<span class="kakao-pill-word">1:1 오픈채팅 문의</span></button>';
+  }
+
+  function openKakaoInquiry(raw) {
+    var target = kakaoTarget(raw) || kakaoOpenchatUrl();
+    if (target) {
+      openInNewTab(target);
+      return true;
+    }
+    openModal('<div class="kakao-soon">' +
+      '<span class="kakao-soon-mark" aria-hidden="true">' + kakaoMarkHTML('kakao-mark-lg') + '</span>' +
+      '<h2 class="modal-title" id="modalTitle">1:1 오픈채팅 문의</h2>' +
+      '<p class="modal-sub">' + h(KAKAO_SOON) + '</p>' +
+      '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">확인</button></div>' +
+      '</div>');
+    return false;
+  }
+
+  /* 방문자 화면(푸터·이용 안내·보관함·배송 신청)의 배송비 문구를 지금 설정값으로 맞춘다. */
+  function renderShippingCopy() {
+    var text = shippingNotice();
+    $$('[data-ship-notice]').forEach(function (el) {
+      if (el.textContent !== text) el.textContent = text;
+    });
+    var on = !!kakaoOpenchatUrl();
+    $$('[data-action="open-kakao"]').forEach(function (el) {
+      el.classList.toggle('is-soon', !on);
+      el.setAttribute('title', on ? '카카오톡 1:1 오픈채팅 열기 (새 창)' : '1:1 오픈채팅 연결 준비 중');
+    });
+  }
+
+  function shipNoticeBoxHTML(cls) {
+    return '<div class="ship-note' + (cls ? ' ' + cls : '') + '">' +
+      '<span class="ship-note-icon" aria-hidden="true">' + icon('truck') + '</span>' +
+      '<div class="ship-note-body">' +
+        '<b>배송비 · 합배송 안내</b>' +
+        '<p data-ship-notice>' + h(shippingNotice()) + '</p>' +
+      '</div>' +
+      kakaoPillHTML('kakao-pill-sm') +
+    '</div>';
+  }
+
+  function csSettingsSql(kakao, notice) {
+    var k = String(kakao || '').replace(/'/g, "''");
+    var n = String(notice || '').replace(/'/g, "''");
+    return "insert into public.app_settings (key, value) values\n" +
+      "  ('kakao_openchat_url', '" + k + "'),\n" +
+      "  ('shipping_fee_notice', '" + n + "')\n" +
+      "on conflict (key) do update set value = excluded.value;";
+  }
+
+  async function saveCsSettings(kakao, notice) {
+    var url = String(kakao || '').trim();
+    var note = String(notice || '').replace(/\s+/g, ' ').trim();
+    if (Backend.mode === 'local') {
+      state.settings.kakaoOpenchatUrl = url;
+      state.settings.shippingFeeNotice = note;
+      persist();
+      return 'local';
+    }
+    var res = await Backend.sb.from('app_settings').upsert([
+      { key: 'kakao_openchat_url', value: url },
+      { key: 'shipping_fee_notice', value: note }
+    ], { onConflict: 'key' });
+    if (res.error) throw res.error;
+    state.settings.kakaoOpenchatUrl = url;
+    state.settings.shippingFeeNotice = note;
+    return 'server';
+  }
+
+  function csTypedValues() {
+    var form = $('form[data-form="save-cs"]');
+    var ki = form ? form.querySelector('input[name="kakao"]') : null;
+    var ni = form ? form.querySelector('textarea[name="shipping"]') : null;
+    return {
+      kakao: ki ? ki.value.trim() : String(state.settings.kakaoOpenchatUrl || ''),
+      notice: ni ? ni.value.replace(/\s+/g, ' ').trim() : String(state.settings.shippingFeeNotice || '')
+    };
+  }
+
+  function renderCsSettings() {
+    var form = $('form[data-form="save-cs"]');
+    if (form) {
+      var ki = form.querySelector('input[name="kakao"]');
+      var ni = form.querySelector('textarea[name="shipping"]');
+      if (ki && document.activeElement !== ki) ki.value = state.settings.kakaoOpenchatUrl || '';
+      if (ni && document.activeElement !== ni) ni.value = state.settings.shippingFeeNotice || '';
+    }
+    var badge = $('#csStateBadge');
+    if (badge) {
+      var on = !!kakaoOpenchatUrl();
+      badge.className = 'badge ' + (on ? 'badge-live' : 'badge-closed');
+      badge.textContent = on ? '오픈채팅 연결됨' : '연결 전 · 준비 중 안내';
+      badge.hidden = false;
+    }
+    var prev = $('#csPreview');
+    if (prev) {
+      var typed = csTypedValues();
+      var noteText = typed.notice || SHIP_NOTICE_DEFAULT;
+      var target = kakaoTarget(typed.kakao);
+      prev.innerHTML = '<span>방문자에게 보이는 배송비 안내 → <b>' + h(noteText) + '</b></span>' +
+        (typed.kakao
+          ? (target ? '<span>문의 버튼 → <a href="' + h(target) + '" target="_blank" rel="noopener">' + h(target) + '</a></span>'
+                    : '<span>주소를 확인해 주세요. 예: <code>https://open.kakao.com/o/xxxxxxxx</code></span>')
+          : '<span>문의 버튼 → 지금은 “' + h(KAKAO_SOON) + '” 안내가 보입니다.</span>');
+    }
+    var code = $('#csSqlCode');
+    if (code) code.textContent = csSettingsSql(state.settings.kakaoOpenchatUrl || '', state.settings.shippingFeeNotice || '');
+  }
+
   function renderHeader() {
     var live = Backend.mode === 'supabase';
     document.body.classList.toggle('is-live', live);
@@ -2064,6 +2209,8 @@
           '</div>';
       }
     }
+
+    renderShippingCopy();
   }
 
   function boardCardHTML(board) {
@@ -2551,6 +2698,10 @@
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
+      '<div class="ship-line">' +
+        '<div class="ship-line-copy"><b>배송비 · 합배송</b><span data-ship-notice>' + h(shippingNotice()) + '</span></div>' +
+        kakaoPillHTML('kakao-pill-sm') +
+      '</div>' +
       '<p class="fine">봉인 해시(SHA-256): <code>' + h(String(board.seedHash || '').slice(0, 40)) + '…</code><br>' +
       '결과는 판이 열리기 전 봉인되었으며, <a href="#/fairness/' + h(board.id) + '" class="inline-link">공정성 검증</a>에서 직접 확인할 수 있습니다.</p>';
   }
@@ -4218,14 +4369,15 @@
   function renderMyInventory() {
     var el = $('#myInventory');
     if (!el) return;
+    var head = shipNoticeBoxHTML('ship-note-panel');
     var items = (state.myDraws || []).filter(function (d) { return d.itemStatus !== '포인트지급'; });
     if (!items.length) {
-      el.innerHTML = '<div class="card empty"><span class="empty-icon">' + icon('box') + '</span>' +
+      el.innerHTML = head + '<div class="card empty"><span class="empty-icon">' + icon('box') + '</span>' +
         '<p>보관 중인 상품이 없어요.<br>뽑기판에서 당첨되면 이곳에 담깁니다.</p>' +
         '<a class="btn btn-primary" href="#/board">뽑기판 열기</a></div>';
       return;
     }
-    el.innerHTML = items.map(function (d) {
+    el.innerHTML = head + items.map(function (d) {
       var board = getBoard(d.boardId);
       var tier = board ? tierOf(board, d.grade) : null;
       var dl = (state.myDeliveries || []).filter(function (x) { return x.drawId === d.id; })[0];
@@ -4395,9 +4547,13 @@
       '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 하위 등급은 굿즈 포인트로 대체 지급될 수 있습니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
       '<h3>5. 상품 수령</h3>' +
       '<p>당첨 상품은 내 보관함에서 배송 신청한 주소로 발송됩니다. 주소 오류로 인한 반송은 재발송 비용이 발생할 수 있습니다.</p>' +
-      '<h3>6. 미성년자 이용</h3>' +
+      '<h3>6. 배송비 · 합배송</h3>' +
+      '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
+      '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 1:1 오픈채팅으로 받고 있습니다.</p>' +
+      kakaoPillHTML('kakao-pill-sm') +
+      '<h3>7. 미성년자 이용</h3>' +
       '<p>미성년자는 법정대리인의 동의를 받은 후 이용할 수 있습니다. 만 14세 미만은 이용할 수 없습니다.</p>' +
-      '<h3>7. 결과 검증</h3>' +
+      '<h3>8. 결과 검증</h3>' +
       '<p>판 종료 후 공개되는 시드와 이 페이지의 검증 도구로 누구나 결과를 다시 계산해 볼 수 있습니다. 계산 규칙은 아래와 같습니다.</p>' +
       '<p style="font-family:var(--font-mono);font-size:11.5px;background:#fff;border:1px solid var(--line-strong);border-radius:8px;padding:10px;margin-top:6px">' +
       'for n in 1..N: h(n) = SHA-256(seed + ":" + n)<br>' +
@@ -4909,6 +5065,7 @@
     var demoInput = $('form[data-form="change-demo"] input[name="demo"]');
     if (demoInput && !demoInput.value) demoInput.value = state.settings.demoCode;
     renderYoutubeSettings();
+    renderCsSettings();
   }
 
   /* ---------- 관리자 동작 ---------- */
@@ -4967,6 +5124,7 @@
         '<label class="field"><span>우편번호 (선택)</span><input name="postcode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 05510"></label>' +
         '<label class="field"><span>주소</span><input name="address" type="text" maxlength="120" required placeholder="도로명 주소 + 상세 주소"></label>' +
         '<label class="field"><span>배송 요청사항 (선택)</span><input name="memo" type="text" maxlength="80" placeholder="예: 문 앞에 놓아주세요"></label>' +
+        shipNoticeBoxHTML('ship-note-modal') +
         '<p class="form-error" data-role="delivery-error" role="alert"></p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
@@ -5386,6 +5544,26 @@
           break;
         case 'open-code-modal': openCodeModal(); break;
         case 'open-youtube-live': openYoutubeLive(); break;
+        case 'open-kakao': openKakaoInquiry(); break;
+        case 'test-kakao': {
+          var csForm = $('form[data-form="save-cs"]');
+          var csInput = csForm ? csForm.querySelector('input[name="kakao"]') : null;
+          var csTyped = csInput ? csInput.value.trim() : '';
+          if (csTyped && !kakaoTarget(csTyped)) { toast('주소를 확인해 주세요. 예: https://open.kakao.com/o/xxxxxxxx', 'err'); break; }
+          if (!csTyped && !kakaoOpenchatUrl()) { toast('먼저 카카오톡 오픈채팅 주소를 입력해 주세요', 'err'); break; }
+          openKakaoInquiry(csTyped);
+          break;
+        }
+        case 'copy-cs-sql': {
+          var csSqlForm = $('form[data-form="save-cs"]');
+          var csSqlInput = csSqlForm ? csSqlForm.querySelector('input[name="kakao"]') : null;
+          var csSqlNote = csSqlForm ? csSqlForm.querySelector('textarea[name="shipping"]') : null;
+          copyText(csSettingsSql(
+            csSqlInput ? csSqlInput.value.trim() : (state.settings.kakaoOpenchatUrl || ''),
+            csSqlNote ? csSqlNote.value.replace(/\s+/g, ' ').trim() : (state.settings.shippingFeeNotice || '')
+          ), 'SQL을 복사했어요');
+          break;
+        }
         case 'test-youtube-live': {
           var ytInput = $('form[data-form="save-youtube"] input[name="url"]');
           var ytTyped = ytInput ? ytInput.value.trim() : '';
@@ -5662,8 +5840,39 @@
         return;
       }
 
-      if (type === 'board-form') { saveBoardForm(form); return; }
+      if (type === 'save-cs') {
+        var csErr = $('#csError');
+        if (csErr) csErr.textContent = '';
+        var csUrl = fieldValue(form, 'kakao').trim();
+        var csNotice = fieldValue(form, 'shipping').replace(/\s+/g, ' ').trim();
+        if (csUrl && !kakaoTarget(csUrl)) {
+          if (csErr) csErr.textContent = '오픈채팅 주소를 확인해 주세요. 예: https://open.kakao.com/o/xxxxxxxx';
+          return;
+        }
+        if (csNotice.length > 160) {
+          if (csErr) csErr.textContent = '배송비 안내는 160자 이내로 적어 주세요.';
+          return;
+        }
+        var csSaveBtn = form.querySelector('button[type="submit"]');
+        if (csSaveBtn) { csSaveBtn.setAttribute('aria-disabled', 'true'); csSaveBtn.textContent = '저장 중…'; }
+        saveCsSettings(csUrl, csNotice).then(function (where) {
+          if (csSaveBtn) { csSaveBtn.removeAttribute('aria-disabled'); csSaveBtn.textContent = '저장'; }
+          renderHeader();
+          renderCsSettings();
+          if (ui.view === 'my') renderMy();
+          if (ui.view === 'board') renderView();
+          if (ui.view === 'fairness') renderView();
+          toast(where === 'server' ? '고객센터·배송비 설정을 저장했어요 · 모든 방문자에게 바로 적용됩니다' : '고객센터·배송비 설정을 저장했어요', 'ok');
+        }).catch(function (e8) {
+          if (csSaveBtn) { csSaveBtn.removeAttribute('aria-disabled'); csSaveBtn.textContent = '저장'; }
+          if (csErr) csErr.textContent = '서버에 저장하지 못했어요: ' + errMsg(e8) + ' 아래 SQL을 Supabase SQL Editor에서 실행해 주세요.';
+          var csSqlBox = $('#csSql');
+          if (csSqlBox) { csSqlBox.open = true; renderCsSettings(); }
+        });
+        return;
+      }
 
+      if (type === 'board-form') { saveBoardForm(form); return; }
       if (type === 'claim') {
         var cerr = form.querySelector('[data-role="claim-error"]');
         var boardId = fieldValue(form, 'boardId');
@@ -5779,6 +5988,7 @@
 
     document.addEventListener('input', function (e) {
       if (e.target.closest('form[data-form="save-youtube"]')) updateYoutubePreview();
+      if (e.target.closest('form[data-form="save-cs"]')) renderCsSettings();
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
       if (e.target.getAttribute('data-role') === 'tier-image') {
         var prev = e.target.closest('.tier-extra') && e.target.closest('.tier-extra').querySelector('[data-role="tier-thumb"]');

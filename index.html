@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="assets/styles.css?v=3.7.5">
+<link rel="stylesheet" href="assets/styles.css?v=3.7.6">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -262,6 +262,11 @@
               <li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청할 수 있어요.</li>
               <li>실물에 당첨되지 않은 번호는 P상(굿즈 포인트 1,200P)으로 바로 적립됩니다.</li>
             </ul>
+            <p class="aside-ship"><b>배송비 · 합배송</b><span data-ship-notice>기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)</span></p>
+            <button class="kakao-pill kakao-pill-sm kakao-pill-block" type="button" data-action="open-kakao">
+              <span class="kakao-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.9c-5.3 0-9.6 3.4-9.6 7.6 0 2.7 1.8 5.1 4.4 6.4l-1 3.3c-.1.4.3.7.6.5l4-2.5c.5.1 1 .1 1.6.1 5.3 0 9.6-3.4 9.6-7.6S17.3 2.9 12 2.9z" fill="currentColor"/></svg></span>
+              <span class="kakao-pill-word">1:1 오픈채팅 문의</span>
+            </button>
             <button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 미리 넣기</button>
           </div>
         </aside>
@@ -702,6 +707,38 @@
             </details>
           </div>
 
+          <div class="card admin-card" id="csCard">
+            <div class="admin-card-head">
+              <h2>고객센터 · 배송비 설정</h2>
+              <span class="badge" id="csStateBadge" hidden>오픈채팅 연결됨</span>
+            </div>
+            <p class="muted">카카오톡 1:1 오픈채팅 주소와 배송비·합배송 안내 문구를 정합니다. 저장하면 앱을 다시 올리지 않아도 푸터·이용 안내·내 보관함·배송 신청 창에 바로 적용돼요.</p>
+            <form class="cs-form" data-form="save-cs" novalidate>
+              <label class="field">
+                <span>카카오톡 1:1 오픈채팅 주소</span>
+                <input name="kakao" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://open.kakao.com/o/xxxxxxxx">
+                <em class="field-hint">비워 두면 방문자가 문의 버튼을 눌렀을 때 “현재 1:1 오픈채팅을 연결 중입니다!” 안내가 보입니다.</em>
+              </label>
+              <label class="field">
+                <span>배송비 · 합배송 안내 문구</span>
+                <textarea name="shipping" rows="2" maxlength="160" placeholder="기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)"></textarea>
+                <em class="field-hint">비워 두면 기본 문구가 나가요. 줄바꿈 없이 한 줄로 보입니다.</em>
+              </label>
+              <div class="cs-live-preview" id="csPreview"></div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit">저장</button>
+                <button class="btn btn-outline" type="button" data-action="test-kakao">오픈채팅 열어보기</button>
+              </div>
+              <p class="form-error" id="csError" role="alert"></p>
+            </form>
+            <details class="cs-sql" id="csSql">
+              <summary>SQL로 직접 저장하기 (서버 권한 오류가 날 때)</summary>
+              <p class="muted small">관리자 로그인이 아닌 상태에서는 저장이 막힐 수 있어요. 그때는 Supabase SQL Editor 에 아래를 붙여넣고 Run 하면 됩니다.</p>
+              <pre id="csSqlCode"></pre>
+              <button class="btn btn-outline btn-sm" type="button" data-action="copy-cs-sql">SQL 복사</button>
+            </details>
+          </div>
+
           <div class="card admin-card">
             <div class="admin-card-head"><h2>PIN 변경</h2></div>
             <form class="grid-form" data-form="change-pin" novalidate>
@@ -764,6 +801,16 @@
       </div>
     </div>
   </div>
+  <div class="container footer-service">
+    <div class="footer-ship">
+      <span class="footer-ship-tag">배송비 · 합배송</span>
+      <p data-ship-notice>기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)</p>
+    </div>
+    <button class="kakao-pill" id="footerKakaoBtn" type="button" data-action="open-kakao">
+      <span class="kakao-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.9c-5.3 0-9.6 3.4-9.6 7.6 0 2.7 1.8 5.1 4.4 6.4l-1 3.3c-.1.4.3.7.6.5l4-2.5c.5.1 1 .1 1.6.1 5.3 0 9.6-3.4 9.6-7.6S17.3 2.9 12 2.9z" fill="currentColor"/></svg></span>
+      <span class="kakao-pill-word">1:1 오픈채팅 문의</span>
+    </button>
+  </div>
   <div class="container footer-legal">
     <p>
       쿠지킹 (KUJIKING) · 대표자 및 사업자 정보 등록 준비 중 · 서울특별시 강동구<br>
@@ -785,6 +832,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=3.7.5" defer></script>
+<script src="assets/app.js?v=3.7.6" defer></script>
 </body>
 </html>

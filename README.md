@@ -235,3 +235,25 @@ git add -A && git commit -m "쿠지킹 v2" && git push origin main
   하나를 SQL Editor 에 붙여넣으면 함수 교체 + 4판 재시드(가격 12,000원, 실물 각 1개, P상)가 한 번에 됩니다.
   생성 스크립트는 `supabase/build_point_kkwang.py`.
 - 데모 모드는 `STATE_VERSION 5` 로 올려 기존 브라우저 데이터도 새 구성으로 다시 심습니다.
+
+## 10. 고객센터 · 배송비/합배송 안내 (v3.7.6 · 2026-11-24)
+
+방문자가 배송 규칙과 문의 창구를 **결제·배송 신청 직전 화면에서** 바로 볼 수 있게 했습니다.
+
+- **배송비 · 합배송 안내 문구** — 기본값
+  `기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)`
+  - 노출 위치: 푸터(한 줄 요약 + 고객센터 버튼), 뽑기판 **이용 안내** 카드와 사이드 안내, **공정성 검증 → 확률 · 이용 안내 6항**,
+    **내 보관함**(목록 맨 위), **배송 신청 모달**(주소 입력 아래).
+  - Supabase `app_settings` 의 `shipping_fee_notice` 값으로 바꿀 수 있고, 비우면 기본 문구가 나갑니다.
+- **카카오톡 1:1 오픈채팅 문의** — 노란색 말풍선 문의 버튼을 푸터·이용 안내·보관함·배송 신청 모달에 배치.
+  - `app_settings.kakao_openchat_url` 이 있으면 새 창(`target=_blank`, `rel=noopener`)으로 엽니다.
+  - 아직 없으면 "현재 1:1 오픈채팅을 연결 중입니다! 잠시만 기다려 주세요." 안내 모달이 뜹니다.
+- **관리자 > 설정 · 연결 > 고객센터 · 배송비 설정** 카드에서 두 값을 바로 저장합니다(유튜브 라이브 카드와 같은 방식,
+  저장이 막히면 같은 카드의 SQL 안내를 Supabase SQL Editor 에서 실행). 미리보기와 `오픈채팅 열어보기` 테스트 버튼이 있습니다.
+
+```sql
+insert into public.app_settings (key, value) values
+  ('kakao_openchat_url', 'https://open.kakao.com/o/xxxxxxxx'),
+  ('shipping_fee_notice', '기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)')
+on conflict (key) do update set value = excluded.value;
+```
