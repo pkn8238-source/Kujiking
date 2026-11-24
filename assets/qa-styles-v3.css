@@ -2343,3 +2343,9 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .yt-live-sql[open] summary::before{content:"－"}
 .yt-live-sql pre{margin:10px 0;padding:12px 14px;overflow-x:auto;background:#1d1815;color:#ffe9b8;border-radius:12px;font-size:12px;line-height:1.6;white-space:pre}
 .yt-live-sql .muted{margin-top:8px}
+
+/* 태블릿 폭(761~980px)에서는 메뉴와 겹치지 않도록 '유튜브' 접두어를 줄인다 */
+@media (min-width:761px) and (max-width:980px){
+  .header-inner{gap:16px}
+  .yt-live-word .yt-live-prefix{display:none}
+}
