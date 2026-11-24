@@ -2995,3 +2995,30 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 @media (prefers-reduced-motion: reduce){
   .board-card.is-lowstock,.lowstock-flag,.pill-lowstock{animation:none}
 }
+
+/* =========================================================
+   v3.9.7 — 품절 판 흑백 처리 + 목록 맨 뒤로 (SOLD OUT 스탬프)
+   ========================================================= */
+.board-card.is-soldout .board-card-cover,
+.board-card.is-closed .board-card-cover{filter:grayscale(1) opacity(.72)}
+.board-card.is-soldout .board-card-body > *,
+.board-card.is-closed .board-card-body > *{filter:grayscale(1) opacity(.72)}
+.board-card.is-soldout .board-card-body > .soldout-stamp,
+.board-card.is-closed .board-card-body > .soldout-stamp{filter:none;opacity:1}
+.board-card.is-soldout:hover,
+.board-card.is-closed:hover{transform:none;box-shadow:var(--shadow-lg)}
+.board-card.is-soldout .progress-fill,
+.board-card.is-closed .progress-fill{background:var(--ink)}
+.soldout-stamp{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  margin:-2px 0 2px;padding:8px 10px;border-radius:11px;
+  border:2px solid var(--ink);background:var(--ink);color:#fff;
+  font-size:12.5px;font-weight:900;letter-spacing:.04em;line-height:1;
+  box-shadow:0 3px 0 rgba(23,18,14,.45);
+}
+.soldout-stamp span{font-size:8.5px;font-weight:900;letter-spacing:.26em;opacity:.72;padding-top:1px}
+.soldout-stamp.is-closed-stamp{background:#6b625a}
+@media (max-width:760px){
+  .soldout-stamp{font-size:11px;padding:6px 8px;border-width:1.5px;box-shadow:0 2px 0 rgba(23,18,14,.45);border-radius:9px}
+  .soldout-stamp span{font-size:7.5px}
+}

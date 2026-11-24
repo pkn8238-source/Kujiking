@@ -768,6 +768,8 @@
     return board.tiers.reduce(function (s, t) { return s + Number(t.count || 0); }, 0);
   }
   function isRevealed(board) { return remaining(board) === 0 || board.status === 'closed'; }
+  /* 품절·종료 판 — 홈 목록에서 맨 뒤로 밀고 흑백 처리한다 */
+  function isFinishedBoard(board) { return remaining(board) === 0 || board.status !== 'open'; }
   function getBoard(id) {
     for (var i = 0; i < state.boards.length; i++) if (state.boards[i].id === id) return state.boards[i];
     return null;
@@ -2406,6 +2408,7 @@
     var left = remaining(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var soldout = left === 0;
+    var closed = board.status !== 'open';
     var low = isLowStock(board);
     var statusBadge = soldout
       ? '<span class="badge badge-closed cover-status">전량 소진</span>'
@@ -2419,7 +2422,7 @@
         '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
         '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>';
     return '' +
-      '<article class="board-card' + (low ? ' is-lowstock' : '') + '">' +
+      '<article class="board-card' + (low ? ' is-lowstock' : '') + (soldout ? ' is-soldout' : '') + (closed ? ' is-closed' : '') + '">' +
         '<a class="board-card-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
           coverInner +
           '<span class="badge cover-tag">' + h(board.category || '자체 스페셜') + '</span>' +
@@ -2427,6 +2430,8 @@
           '<span class="cover-price">1장 ' + won(board.price) + ' · ' + fmt(board.tickets) + '장</span>' +
         '</a>' +
         '<div class="board-card-body">' +
+          (soldout ? '<span class="soldout-stamp">품절<span>SOLD OUT</span></span>' : '') +
+          (!soldout && closed ? '<span class="soldout-stamp is-closed-stamp">판 종료<span>CLOSED</span></span>' : '') +
           (low ? '<span class="lowstock-flag">🔥 품절임박 · ' + fmt(left) + '장 남음</span>' : '') +
           '<div class="board-card-top">' +
             '<span class="band-tag band-' + priceBand(board.price) + '">' + priceBandLabel(board.price) + '</span>' +
@@ -2532,7 +2537,10 @@
       });
     } else if (sort === 'new') list.sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
     else list.sort(function (a, b) { return openedCount(b) - openedCount(a); });
-    return list;
+    /* v3.9.7 — 품절(잔여 0)·종료 판은 흑백으로 목록 맨 뒤에 밀어둔다 */
+    var live = [], done = [];
+    list.forEach(function (b) { (isFinishedBoard(b) ? done : live).push(b); });
+    return live.concat(done);
   }
 
   function renderLiveTicker() {
@@ -5085,13 +5093,13 @@
     '</div>';
   }
 
-  /* 승격 대기 — 화면을 누르면(promoSkip) 남은 간격을 짧게 줄인다 */
+  /* 승격 대기 — 화면을 누르면(promoSkip) 지금 기다리는 간격부터 바로 줄인다 */
   function promoWait(d, ms) {
-    var target = d.promoSkip ? Math.min(140, ms) : ms;
     var t = 0;
     return new Promise(function (resolve) {
       function tick() {
         if (!ui.draw || ui.draw !== d || d.step !== 'promote') { resolve(false); return; }
+        var target = d.promoSkip ? Math.min(140, ms) : ms;
         if (t >= target) { resolve(true); return; }
         t += 50;
         setTimeout(tick, 50);
@@ -5246,7 +5254,8 @@
       return finishPromotion(d);
     }
 
-    if (!(await promoWait(d, lv >= 3 ? 560 : 650)) || !alive()) return;
+    /* v3.9.7 — C상으로 한 번 더 곱씹는 텀 ("어? C상인가?") */
+    if (!(await promoWait(d, 1300)) || !alive()) return;
 
     /* 2막 — C → B 승격 */
     promoMood('b');
@@ -5254,7 +5263,8 @@
     promoFlash('zap');
     promoBolts(lv >= 3 ? 5 : 4);
     promoImpact('⚡', '승격! B상!', 'b');
-    if (!(await promoWait(d, lv >= 3 ? 300 : 380)) || !alive()) return;
+    /* v3.9.7 — B상 승격이 몸에 익을 때까지 버티는 텀 */
+    if (!(await promoWait(d, 1400)) || !alive()) return;
     promoBadge('B', '상', 'b');
     promoConfetti('promoFx1', 24, ['#ff8a3d', '#ff2d20', '#ffb703', '#fff3c4', '#ffffff'], { drop: 350, drift: 170, spread: .5 });
     promoConfetti('promoFx2', 16, ['#ffd166', '#ff7a1a', '#ff3b30', '#ffffff'], { drop: 400, drift: 200, spread: .55 });
@@ -5274,14 +5284,15 @@
     promoFlash('mega');
     promoBolts(10);
     promoImpact('🔥', fin.unit === 'LAST' ? '대역전!! 라스트원!' : '대역전!! A상!', 'a');
-    if (!(await promoWait(d, 340)) || !alive()) return;
+    /* v3.9.7 — 대역전 임팩트는 짧게 끊고, 결과 카드 전에 길게 잡아둔다 */
+    if (!(await promoWait(d, 350)) || !alive()) return;
     promoClearFx();
     promoBadge(fin.letter, fin.unit, 'a');
     promoConfetti('promoFx1', 30, ['#ffd51e', '#f5b800', '#ff3b30', '#12a87a', '#3d7bfd', '#a855f7', '#ffffff'], { drop: 380, drift: 190, spread: .55 });
     promoConfetti('promoFx2', 26, ['#ffe9a8', '#ffffff', '#ff7ac8', '#8ee3ff', '#ffd51e'], { drop: 430, drift: 220, spread: .6 });
     promoStars(30);
     kujiSound.fanfare(3);
-    if (!(await promoWait(d, 1550)) || !alive()) return;
+    if (!(await promoWait(d, 1700)) || !alive()) return;
     return finishPromotion(d);
   }
 
