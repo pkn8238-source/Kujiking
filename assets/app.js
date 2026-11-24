@@ -90,6 +90,7 @@
     authTab: 'login',
     memberQuery: '',
     grantUserId: null,
+    revoke: null,
     adminBusy: false,
     ready: false
   };
@@ -421,6 +422,7 @@
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
       adminMembers: [], adminClaims: [], adminDeliveries: [],
+      adminLoaded: false, adminError: null,
       updatedAt: nowISO()
     };
   }
@@ -1555,7 +1557,17 @@
         return;
       }
       var sb = this.sb;
+      state.adminLoaded = false;
+      state.adminError = null;
       var mRes = await sb.rpc('admin_members', { p_search: ui.memberQuery || '' });
+      /* 서버 함수(admin_members)가 없거나 실패해도 목록이 0명으로 보이지 않도록 테이블 직접 조회로 대체합니다.
+         (profiles·coupons 모두 is_admin() RLS 로 관리자는 전체를 읽을 수 있습니다) */
+      if (mRes.error) {
+        console.warn('[admin] admin_members RPC 실패 → 테이블 직접 조회로 대체', mRes.error);
+        mRes = await this.loadAdminMembersFromTables();
+      }
+      state.adminError = mRes.error ? errMsg(mRes.error) : null;
+      state.adminLoaded = true;
       state.adminMembers = (mRes.data || []).map(function (m) {
         return { id: m.id, nickname: m.nickname, email: m.email, phone: m.phone, points: m.points, isAdmin: m.is_admin, createdAt: m.created_at, couponCount: m.coupons, drawCount: m.draws };
       });
@@ -1583,6 +1595,37 @@
           return { code: c.code, boardId: c.board_id, createdAt: c.created_at, usedAt: c.used_at, usedN: c.used_n, usedBy: null, demo: false };
         });
       }
+      state.adminLoaded = true;
+    },
+
+    /* admin_members RPC 없이 회원 목록을 직접 만든다 (관리자 RLS 로 전체 조회). */
+    async loadAdminMembersFromTables() {
+      var sb = this.sb;
+      var pRes = await sb.from('profiles')
+        .select('id,nickname,email,phone,points,is_admin,created_at')
+        .order('created_at', { ascending: false }).limit(500);
+      if (pRes.error) return { data: null, error: pRes.error };
+      var cRes = await sb.from('coupons').select('user_id').is('used_at', null).limit(5000);
+      if (cRes.error) return { data: null, error: cRes.error };
+      var dRes = await sb.from('draws').select('user_id').limit(5000);
+      var coupons = {}, draws = {};
+      (cRes.data || []).forEach(function (r) { coupons[r.user_id] = (coupons[r.user_id] || 0) + 1; });
+      ((dRes && dRes.data) || []).forEach(function (r) { draws[r.user_id] = (draws[r.user_id] || 0) + 1; });
+      var q = (ui.memberQuery || '').toLowerCase();
+      var digits = q.replace(/[^0-9]/g, '');
+      var rows = (pRes.data || []).filter(function (p) {
+        if (!q) return true;
+        return (p.nickname || '').toLowerCase().indexOf(q) !== -1 ||
+          (p.email || '').toLowerCase().indexOf(q) !== -1 ||
+          (digits !== '' && String(p.phone || '').replace(/[^0-9]/g, '').indexOf(digits) !== -1);
+      }).map(function (p) {
+        return {
+          id: p.id, email: p.email, nickname: p.nickname, phone: p.phone, points: p.points,
+          is_admin: p.is_admin, created_at: p.created_at,
+          coupons: coupons[p.id] || 0, draws: draws[p.id] || 0
+        };
+      });
+      return { data: rows, error: null };
     },
 
     /* ---------- 인증 ---------- */
@@ -1786,6 +1829,50 @@
       });
       if (res.error) throw res.error;
       await this.loadAdmin();
+    },
+
+    /* 관리자: 회원의 미사용 쿠폰 목록 (쿠폰 회수 모달) — 최근 지급분부터 */
+    async fetchUserCoupons(userId) {
+      if (this.mode === 'local') {
+        return state.coupons.filter(function (c) { return c.userId === userId && !c.usedAt; })
+          .sort(function (a, b) { return new Date(b.grantedAt) - new Date(a.grantedAt); })
+          .map(function (c) {
+            return { id: c.id, boardId: c.boardId, kind: c.kind, label: c.label, note: c.note, grantedAt: c.grantedAt };
+          });
+      }
+      var res = await this.sb.from('coupons')
+        .select('id,board_id,kind,label,note,granted_at,used_at')
+        .eq('user_id', userId).is('used_at', null)
+        .order('granted_at', { ascending: false });
+      if (res.error) throw res.error;
+      return (res.data || []).map(function (c) {
+        return { id: c.id, boardId: c.board_id, kind: c.kind, label: c.label, note: c.note, grantedAt: c.granted_at };
+      });
+    },
+
+    /* 관리자: 미사용 쿠폰 회수(삭제). 그 사이 사용된 쿠폰은 조건(used_at is null)에서 다시 걸러진다. */
+    async revokeCoupons(userId, ids) {
+      var list = (ids || []).filter(Boolean);
+      if (!list.length) throw new Error('회수할 쿠폰을 선택해 주세요.');
+      if (this.mode === 'local') {
+        var kill = {};
+        list.forEach(function (id) { kill[id] = true; });
+        var before = state.coupons.length;
+        state.coupons = state.coupons.filter(function (c) {
+          return !(kill[c.id] && c.userId === userId && !c.usedAt);
+        });
+        var removed = before - state.coupons.length;
+        persist();
+        buildLocalViews();
+        return removed;
+      }
+      var res = await this.sb.from('coupons').delete()
+        .eq('user_id', userId).in('id', list).is('used_at', null)
+        .select('id');
+      if (res.error) throw res.error;
+      var n = Array.isArray(res.data) ? res.data.length : list.length;
+      await this.loadAdmin();
+      return n;
     },
 
     async shipDelivery(id, carrier, tracking) {
@@ -6342,14 +6429,22 @@
   }
 
   /* Supabase 모드에서는 관리자 데이터(회원·요청·배송·코드)를 한 번 받아옵니다. */
-  function ensureAdminData() {
+  function ensureAdminData(force) {
     if (Backend.mode !== 'supabase' || ui.adminBusy) return;
     ui.adminBusy = true;
+    if (force) {
+      state.adminLoaded = false;
+      state.adminError = null;
+    }
+    renderAdminTabs();
     Backend.loadAdmin().then(function () {
       ui.adminBusy = false;
       renderAdminTabs();
     }).catch(function (e) {
       ui.adminBusy = false;
+      state.adminLoaded = true;
+      state.adminError = errMsg(e);
+      renderAdminTabs();
       toast(errMsg(e), 'err');
     });
   }
@@ -6361,11 +6456,12 @@
     var pending = claims.filter(function (c) { return c.status === 'pending'; }).length;
     var couponsLeft = members.reduce(function (s, m) { return s + (m.couponCount || 0); }, 0);
     var deliveries = (state.adminDeliveries || []).filter(function (d) { return d.status !== '출고완료'; }).length;
+    var notLoaded = Backend.mode === 'supabase' && !state.adminLoaded;
     if (stats) {
-      stats.innerHTML = '<div class="astat"><span>회원</span><strong>' + fmt(members.length) + '명</strong></div>' +
-        '<div class="astat is-alert"><span>대기 중 구매확인</span><strong>' + fmt(pending) + '건</strong></div>' +
-        '<div class="astat"><span>미사용 쿠폰</span><strong>' + fmt(couponsLeft) + '장</strong></div>' +
-        '<div class="astat"><span>출고 대기</span><strong>' + fmt(deliveries) + '건</strong></div>';
+      stats.innerHTML = '<div class="astat"><span>회원</span><strong>' + (notLoaded ? '…' : fmt(members.length) + '명') + '</strong></div>' +
+        '<div class="astat is-alert"><span>대기 중 구매확인</span><strong>' + (notLoaded ? '…' : fmt(pending) + '건') + '</strong></div>' +
+        '<div class="astat"><span>미사용 쿠폰</span><strong>' + (notLoaded ? '…' : fmt(couponsLeft) + '장') + '</strong></div>' +
+        '<div class="astat"><span>출고 대기</span><strong>' + (notLoaded ? '…' : fmt(deliveries) + '건') + '</strong></div>';
     }
 
     var tbody = $('#claimsTable tbody');
@@ -6395,7 +6491,9 @@
               (c.status === 'pending'
                 ? '<button class="btn btn-primary btn-sm" data-action="claim-approve" data-id="' + h(c.id) + '">승인 · 지급</button> ' +
                   '<button class="btn btn-danger-ghost btn-sm" data-action="claim-reject" data-id="' + h(c.id) + '">반려</button>'
-                : '—') +
+                : (c.status === 'approved' && Number(c.granted || 0) > 0
+                    ? '<button class="btn btn-danger-ghost btn-sm" data-action="revoke-open-claim" data-id="' + h(c.id) + '">쿠폰 회수</button>'
+                    : '—')) +
             '</td>' +
           '</tr>';
         }).join('');
@@ -6412,7 +6510,28 @@
     var mb = $('#membersTable tbody');
     var mEmpty = $('#membersEmpty');
     var mTable = $('#membersTable');
+    if (mEmpty) mEmpty.innerHTML = '<p>조건에 맞는 회원이 없어요.</p>';
     if (mb) {
+      if (notLoaded) {
+        mb.innerHTML = '';
+        if (mTable) mTable.hidden = true;
+        if (mEmpty) {
+          mEmpty.hidden = false;
+          mEmpty.innerHTML = '<p>회원 목록을 불러오는 중이에요…</p>';
+        }
+        return;
+      }
+      if (state.adminError && !rows.length) {
+        mb.innerHTML = '';
+        if (mTable) mTable.hidden = true;
+        if (mEmpty) {
+          mEmpty.hidden = false;
+          mEmpty.innerHTML = '<p>회원 목록을 불러오지 못했어요.</p>' +
+            '<p class="small muted">' + h(state.adminError) + '</p>' +
+            '<button type="button" class="btn btn-outline btn-sm" data-action="admin-reload">다시 불러오기</button>';
+        }
+        return;
+      }
       if (!rows.length) {
         mb.innerHTML = '';
         if (mEmpty) mEmpty.hidden = false;
@@ -6428,7 +6547,11 @@
             '<td class="num">' + fmt(m.points || 0) + 'P</td>' +
             '<td class="num">' + fmt(m.drawCount || 0) + '회</td>' +
             '<td class="num">' + formatDate(m.createdAt) + '</td>' +
-            '<td style="text-align:right"><button class="btn btn-outline btn-sm" data-action="grant-open" data-id="' + h(m.id) + '">쿠폰 지급</button></td>' +
+            '<td style="text-align:right;white-space:nowrap"><button class="btn btn-outline btn-sm" data-action="grant-open" data-id="' + h(m.id) + '">쿠폰 지급</button>' +
+              (Number(m.couponCount || 0) > 0
+                ? ' <button class="btn btn-danger-ghost btn-sm" data-action="revoke-open" data-id="' + h(m.id) + '">쿠폰 회수</button>'
+                : '') +
+            '</td>' +
           '</tr>';
         }).join('');
       }
@@ -6676,6 +6799,153 @@
           '<button type="submit" class="btn btn-primary">지급하기</button>' +
         '</div>' +
       '</form>');
+  }
+
+  /* ---------- 쿠폰 회수 (미사용 쿠폰 삭제) ---------- */
+  function openRevokeModal(userId, presetQty, info) {
+    info = info || {};
+    var m = (state.adminMembers || []).filter(function (x) { return x.id === userId; })[0];
+    var nickname = (m && m.nickname) || info.nickname || '회원';
+    var contact = (m && (m.email || m.phone)) || info.email || '';
+    ui.revoke = { userId: userId, nickname: nickname, contact: contact, coupons: [], qty: 1 };
+    openModal('<h2 class="modal-title" id="modalTitle">쿠폰(뽑기권) 회수</h2>' +
+      '<p class="modal-sub">' + h(nickname) + ' 님의 미사용 쿠폰을 불러오는 중이에요…</p>' +
+      '<p class="revoke-loading">잠시만 기다려 주세요.</p>', { noAutofocus: true });
+    Backend.fetchUserCoupons(userId).then(function (list) {
+      if (!ui.revoke || ui.revoke.userId !== userId) return;
+      ui.revoke.coupons = list;
+      if (!list.length) { renderRevokeEmpty(); return; }
+      ui.revoke.qty = Math.max(1, Math.min(list.length, Number(presetQty) || 1));
+      renderRevokePicker();
+    }).catch(function (e) {
+      ui.revoke = null;
+      closeModal();
+      toast(errMsg(e), 'err');
+    });
+  }
+
+  function revokeScopeLabel(c) {
+    if (c.kind === 'universal' || !c.boardId) return '모든 판';
+    var board = getBoard(c.boardId);
+    return board ? board.title : '판 전용';
+  }
+
+  function revokeItemHTML(c, i, picked) {
+    var scope = revokeScopeLabel(c);
+    return '<li class="revoke-item' + (picked ? ' is-picked' : '') + '">' +
+      '<span class="revoke-no">' + (i + 1) + '</span>' +
+      '<span class="revoke-main">' +
+        '<b>' + h(c.label || scope) + '</b>' +
+        '<span class="muted small">' + h(scope) + ' · ' + formatDate(c.grantedAt) + ' 지급' +
+          (c.note ? ' · ' + h(c.note) : '') + '</span>' +
+      '</span>' +
+      '<span class="revoke-tag">' + (picked ? '회수' : '유지') + '</span>' +
+    '</li>';
+  }
+
+  function revokeSummaryText(qty, total) {
+    if (qty >= total) return '미사용 쿠폰 <b>' + fmt(total) + '장 전체</b>를 회수합니다.';
+    return '최근 지급분부터 <b>' + fmt(qty) + '장</b>을 회수하고, 나머지 ' + fmt(total - qty) + '장은 그대로 둡니다.';
+  }
+
+  function renderRevokeEmpty() {
+    var r = ui.revoke || {};
+    openModal('<h2 class="modal-title" id="modalTitle">쿠폰(뽑기권) 회수</h2>' +
+      '<p class="modal-sub">' + h(r.nickname || '회원') + ' 님은 지금 회수할 <b>미사용 쿠폰이 없어요</b>.</p>' +
+      '<p class="revoke-order">이미 사용했거나 보유하지 않은 쿠폰은 회수 목록에 나오지 않습니다.</p>' +
+      '<div class="modal-actions"><button type="button" class="btn btn-outline" data-action="close-modal">닫기</button></div>');
+  }
+
+  function renderRevokePicker() {
+    var r = ui.revoke;
+    if (!r || !r.coupons.length) return;
+    var total = r.coupons.length;
+    var qty = Math.max(1, Math.min(total, Math.round(Number(r.qty) || 1)));
+    r.qty = qty;
+    var presets = [1, 2, 3, 5, 10].filter(function (n) { return n < total; });
+    var quick = total < 2 ? '' : '<div class="qty-row" style="margin:10px 0 2px">' +
+      '<button type="button" class="btn ' + (qty === total ? 'btn-dark' : 'btn-outline') + ' btn-sm" data-action="revoke-preset" data-qty="' + total + '">전체 ' + fmt(total) + '장</button>' +
+      presets.map(function (n) {
+        return '<button type="button" class="btn ' + (qty === n ? 'btn-dark' : 'btn-outline') + ' btn-sm" data-action="revoke-preset" data-qty="' + n + '">' + n + '장</button>';
+      }).join('') + '</div>';
+    openModal('<h2 class="modal-title" id="modalTitle">' + h(r.nickname) + ' 님 쿠폰 회수</h2>' +
+      '<p class="modal-sub">미사용 쿠폰 <b>' + fmt(total) + '장</b> · 최근에 지급한 쿠폰부터 회수합니다.' +
+        (r.contact ? '<br><span class="muted small">' + h(r.contact) + '</span>' : '') + '</p>' +
+      '<label class="field" style="max-width:220px"><span>회수 수량 (1 ~ ' + fmt(total) + '장)</span>' +
+        '<input id="revokeQty" type="number" min="1" max="' + total + '" step="1" value="' + qty + '" inputmode="numeric"></label>' +
+      quick +
+      '<p class="revoke-order" id="revokeSummary">' + revokeSummaryText(qty, total) + '</p>' +
+      '<ul class="revoke-list">' + r.coupons.map(function (c, i) { return revokeItemHTML(c, i, i < qty); }).join('') + '</ul>' +
+      '<p class="revoke-warn">회수한 쿠폰은 즉시 삭제되며 되돌릴 수 없어요. 다음 단계에서 한 번 더 확인합니다.</p>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
+        '<button type="button" class="btn btn-danger" data-action="revoke-next">미사용 쿠폰 ' + fmt(qty) + '장 회수</button>' +
+      '</div>', { noAutofocus: true, resetScroll: true });
+  }
+
+  function refreshRevokePicks(value) {
+    var r = ui.revoke;
+    if (!r || !r.coupons.length) return;
+    var total = r.coupons.length;
+    var qty = Math.max(1, Math.min(total, Math.round(Number(value) || 1)));
+    r.qty = qty;
+    var box = $('#revokeQty');
+    if (box) {
+      var raw = String(value == null ? '' : value).trim();
+      if (raw !== '' && (Number(raw) > total || Number(raw) < 1)) box.value = qty;
+    }
+    $$('.revoke-item').forEach(function (li, i) {
+      var picked = i < qty;
+      li.classList.toggle('is-picked', picked);
+      var tag = li.querySelector('.revoke-tag');
+      if (tag) tag.textContent = picked ? '회수' : '유지';
+    });
+    var sum = $('#revokeSummary');
+    if (sum) sum.innerHTML = revokeSummaryText(qty, total);
+    var next = $('[data-action="revoke-next"]');
+    if (next) next.textContent = '미사용 쿠폰 ' + fmt(qty) + '장 회수';
+    $$('[data-action="revoke-preset"]').forEach(function (b) {
+      var n = Number(b.getAttribute('data-qty')) || 1;
+      b.classList.toggle('btn-dark', n === qty);
+      b.classList.toggle('btn-outline', n !== qty);
+    });
+  }
+
+  function renderRevokeConfirm() {
+    var r = ui.revoke;
+    if (!r || !r.coupons.length) return;
+    var qty = Math.max(1, Math.min(r.coupons.length, Math.round(Number(r.qty) || 1)));
+    r.qty = qty;
+    var picked = r.coupons.slice(0, qty);
+    openModal('<h2 class="modal-title" id="modalTitle">쿠폰 회수 확인</h2>' +
+      '<p class="modal-sub">' + h(r.nickname) + ' 님의 미사용 쿠폰 <b>' + fmt(qty) + '장</b>을 삭제합니다.</p>' +
+      '<ul class="revoke-list is-confirm">' + picked.map(function (c, i) { return revokeItemHTML(c, i, true); }).join('') + '</ul>' +
+      '<p class="revoke-warn">삭제한 쿠폰은 복구할 수 없어요. 다시 지급하려면 [쿠폰 지급]을 사용해 주세요.</p>' +
+      '<div class="modal-actions">' +
+        '<button type="button" class="btn btn-outline" data-action="revoke-back">← 다시 고르기</button>' +
+        '<button type="button" class="btn btn-danger" data-action="revoke-confirm">회수 확정</button>' +
+      '</div>', { noAutofocus: true, resetScroll: true });
+  }
+
+  function runRevoke() {
+    var r = ui.revoke;
+    if (!r || !r.coupons.length) return;
+    var qty = Math.max(1, Math.min(r.coupons.length, Math.round(Number(r.qty) || 1)));
+    var ids = r.coupons.slice(0, qty).map(function (c) { return c.id; });
+    var name = r.nickname || '회원';
+    var btn = $('[data-action="revoke-confirm"]');
+    if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '회수 중…'; }
+    Backend.revokeCoupons(r.userId, ids).then(function (n) {
+      ui.revoke = null;
+      closeModal();
+      renderAdmin();
+      if (!n) { toast('회수된 쿠폰이 없어요 — 이미 사용된 쿠폰일 수 있습니다.', 'err'); return; }
+      toast(name + '님 미사용 쿠폰 ' + fmt(n) + '장 회수 완료', 'ok');
+      if (n < qty) toast('나머지 ' + fmt(qty - n) + '장은 이미 사용되어 회수하지 못했어요.', 'err');
+    }).catch(function (e) {
+      if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '회수 확정'; }
+      toast(errMsg(e), 'err');
+    });
   }
 
   function openClaimModal(claimId) {
@@ -7272,6 +7542,19 @@
         case 'convert-points': convertPointsFlow(id); break;
 
         case 'grant-open': openGrantModal(id); break;
+        case 'admin-reload': ensureAdminData(true); break;
+        case 'revoke-open': openRevokeModal(id, 0); break;
+        case 'revoke-open-claim': {
+          var rc = (state.adminClaims || []).filter(function (x) { return x.id === id; })[0];
+          if (rc) openRevokeModal(rc.userId, Number(rc.granted) || 0, { nickname: rc.nickname, email: '' });
+          break;
+        }
+        case 'revoke-preset':
+          if (ui.revoke) { ui.revoke.qty = Number(el.getAttribute('data-qty')) || 1; renderRevokePicker(); }
+          break;
+        case 'revoke-next': renderRevokeConfirm(); break;
+        case 'revoke-back': renderRevokePicker(); break;
+        case 'revoke-confirm': runRevoke(); break;
         case 'claim-approve': openClaimModal(id); break;
         case 'claim-reject': rejectClaim(id); break;
 
@@ -7666,6 +7949,7 @@
       }
       if (e.target.name === 'cover' && e.target.closest('form[data-form="board-form"]')) updateCoverPreview(e.target.closest('form'));
       if (e.target.id === 'codeSearch') renderCodesTable();
+      if (e.target.id === 'revokeQty') refreshRevokePicks(e.target.value);
       if (e.target.id === 'memberSearch') {
         ui.memberQuery = e.target.value;
         clearTimeout(ui._memberTimer);
@@ -7694,6 +7978,7 @@
       if (e.target.id === 'winnersBoardFilter') { ui.winnersBoardId = e.target.value; renderWinners(); }
       if (e.target.id === 'boardSort') { ui.filters.sort = e.target.value; renderHome(); }
       if (e.target.id === 'codeFilter') renderCodesTable();
+      if (e.target.id === 'revokeQty' && ui.revoke) e.target.value = ui.revoke.qty;
       if (e.target.id === 'claimBoardSelect') autoClaimAmount();
       if (e.target.matches && e.target.matches('[data-role="cover-preset"]')) {
         var cform = e.target.closest('form');
