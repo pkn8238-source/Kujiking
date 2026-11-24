@@ -2600,7 +2600,7 @@
   }
 
   /* =========================================================
-     무작위 연뽑 (v3.9.2) — 5 · 10 · 15 · 20장
+     무작위 연뽑 (v3.9.3) — 5 · 10 · 15 · 20장
      번호를 고르지 않고 남은 번호 중 무작위로 N개를 골라
      한 장씩 차례로 뽑은 뒤 결과를 한 화면에 요약한다.
      ========================================================= */
@@ -2871,24 +2871,25 @@
     if (!d) return;
     var board = getBoard(d.boardId);
     if (!board) return;
-    var dark = d.step === 'seal' || d.step === 'promote' || (d.step === 'result' && !d.batch && isEpicGrade(d.result && d.result.grade));
+    var dark = d.step === 'seal' || d.step === 'promote' || (d.step === 'result' && !d.batch && isEpicGrade(d.result && d.result.grade)) || (d.step === 'spotlight' && isEpicGrade(d.result && d.result.grade));
     var html;
     if (d.step === 'source') html = d.batch ? multiSourceHTML(board, d) : drawSourceHTML(board, d);
     else if (d.step === 'drawing') html = multiProgressHTML(board, d);
     else if (d.step === 'reveal') html = multiRevealHTML(board, d);
+    else if (d.step === 'spotlight') html = drawResultHTML(board, d);
     else if (d.step === 'peel') html = drawPeelHTML(board, d);
     else if (d.step === 'seal') html = drawSealHTML(board, d);
     else if (d.step === 'promote') html = drawPromoteHTML(board, d);
     else html = d.batch ? batchResultHTML(board, d) : drawResultHTML(board, d);
     openModal(html, {
       keepFocus: d.step === 'result',
-      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing' || d.step === 'reveal',
+      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing' || d.step === 'reveal' || d.step === 'spotlight',
       dark: dark,
       dragLock: d.step === 'peel' || d.step === 'seal',
-      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote' || d.step === 'drawing'
+      resetScroll: d.step === 'result' || d.step === 'spotlight' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote' || d.step === 'drawing'
     });
     /* B상 · A상 · 라스트원은 결과가 터질 때 모달 전체가 흔들린다 */
-    if (d.step === 'result' && modalShell && !d.batch) {
+    if ((d.step === 'result' || d.step === 'spotlight') && modalShell && !d.batch) {
       var hitLv = gradeLevel(d.result && d.result.grade);
       if (hitLv >= 2) {
         modalShell.style.setProperty('--quake', hitLv >= 3 ? '1.75' : '1');
@@ -3139,7 +3140,11 @@
     var lastWin = rs.filter(function (r) { return r.isLast; })[0];
     var list = phys.slice().sort(function (a, b) { return gradeLevel(b.grade) - gradeLevel(a.grade); }).map(function (r) {
       var t = tierOf(board, r.grade) || {};
-      return '<li><span class="mrv-sp" style="--bc:' + mrBc(r.grade) + '">' + h(mrGradeText(r.grade)) + '</span>' +
+      var img = r.tierImage || t.image || '';
+      return '<li><span class="mrv-sthumb" style="--bc:' + mrBc(r.grade) + '">' +
+          (img ? '<img src="' + h(img) + '" alt="" loading="lazy">' : '<b>' + h(String(r.grade).toUpperCase() === 'LAST' ? 'L' : r.grade) + '</b>') +
+        '</span>' +
+        '<span class="mrv-sp" style="--bc:' + mrBc(r.grade) + '">' + h(mrGradeText(r.grade)) + '</span>' +
         '<span class="mrv-sl">' + h(r.tierLabel || t.label || '') + '</span>' +
         '<span class="mrv-sn2">#' + r.n + '</span></li>';
     }).join('');
@@ -3154,6 +3159,26 @@
       '<p class="mrv-sum-note">' + (me()
         ? '당첨 상품은 내 보관함에 담겼어요. 배송 신청은 내 보관함에서 할 수 있어요.'
         : '로그인하면 당첨 상품이 보관함에 담기고 배송 신청까지 됩니다.') + '</p>' +
+    '</div>';
+  }
+
+  /* 방금 연 티켓을 상품 사진·이름과 함께 보여 주는 띠 (스몰 카드에서도 당첨 상품이 바로 보이게) */
+  function multiRevealLastHTML(board, d) {
+    var idx = d.lastOpenIdx;
+    var r = (idx != null && idx >= 0) ? (d.results || [])[idx] : null;
+    if (!r || !(d.revealed && d.revealed[idx])) return '';
+    var t = tierOf(board, r.grade) || {};
+    var label = r.tierLabel || t.label || '';
+    var img = r.tierImage || t.image || '';
+    var point = isPointPrize(r);
+    return '<div class="mrv-last" style="--bc:' + mrBc(r.grade) + '">' +
+      (point || !img
+        ? '<span class="mrv-last-thumb is-txt"><b>' + h(String(r.grade).toUpperCase() === 'LAST' ? 'L' : r.grade) + '</b></span>'
+        : '<span class="mrv-last-thumb"><img src="' + h(img) + '" alt="' + h(label) + '"></span>') +
+      '<span class="mrv-last-body">' +
+        '<span class="mrv-last-top">방금 개봉 · #' + r.n + ' · <b>' + h(mrGradeText(r.grade)) + '</b></span>' +
+        '<span class="mrv-last-name">' + h(point ? ('굿즈 포인트 +' + fmt(Number(r.points) || 0) + 'P') : label) + '</span>' +
+      '</span>' +
     '</div>';
   }
 
@@ -3197,6 +3222,7 @@
         '<button class="btn btn-gold btn-sm mrv-all" type="button" data-action="reveal-all"' + (allOpen ? ' disabled' : '') + '>✨ 한꺼번에 모두 열기</button>' +
       '</div>' +
       '<div class="mdp-bar" aria-hidden="true"><i id="mdpBarFill" style="width:' + Math.round(opened / Math.max(1, rs.length) * 100) + '%"></i></div>' +
+      multiRevealLastHTML(board, d) +
       '<div class="mrv-grid" id="mrvGrid">' + cards + '</div>' +
       (allOpen ? multiRevealSummaryHTML(board, d) : '') +
       (missing ? '<p class="batch-warn">⚠ ' + missing + '장은 다른 분이 먼저 뽑아 진행하지 못했어요.</p>' : '') +
@@ -3206,6 +3232,17 @@
         '<button class="btn btn-dark" type="button" data-action="close-modal">확인</button>' +
       '</div>' +
     '</div>';
+  }
+
+  /* 방금 연 티켓 띠를 다시 그린다 (전체 리렌더 없이) */
+  function refreshLastStrip(board, d) {
+    var html = multiRevealLastHTML(board, d);
+    var cur = document.querySelector('.mrv-last');
+    if (cur) { cur.outerHTML = html || '<div class="mrv-last" hidden></div>'; return; }
+    if (!html) return;
+    var bar = document.querySelector('#mdpBarFill');
+    var host = bar ? bar.closest('.mdp-bar') : null;
+    if (host) host.insertAdjacentHTML('afterend', html);
   }
 
   function refreshRevealHud(d) {
@@ -3233,12 +3270,14 @@
     var card = document.querySelector('.mrv-card[data-idx="' + idx + '"]');
     var back = card ? card.querySelector('.mrv-back') : null;
     d.revealed[idx] = true;
+    d.lastOpenIdx = idx;
     if (back) back.outerHTML = multiRevealFace(board, r);
     if (card) {
       void card.offsetWidth;          /* 초기 스타일을 먼저 계산해야 샤악 개봉 전환이 돈다 */
       card.classList.add('is-open', 'is-fresh');
     }
     kujiSound.snap(0);
+    refreshLastStrip(board, d);
     if (refreshRevealHud(d)) {
       setTimeout(function () {
         if (ui.draw === d && d.step === 'reveal') renderDrawModal();
@@ -3291,9 +3330,11 @@
     pending.forEach(function (i) {
       if (i === bestIdx) return;
       d.revealed[i] = true;
+      d.lastOpenIdx = i;
       d.revealDelay[i] = Math.min(560, k * 55);
       k++;
     });
+    if (bestIdx >= 0 && k === 0) d.lastOpenIdx = null;
     kujiSound.unlock();
     kujiSound.snap(0);
     renderDrawModal();
@@ -5021,23 +5062,20 @@
     if (!ui.draw || ui.draw !== d || d.step !== 'promote') return;
     promoRun = null;
     d.revealing = false;
-    /* 연뽑 그리드에서 넘어온 승격: 결과 화면 대신 그 카드로 돌아가 봉인을 열어 준다 */
+    /* 연뽑 그리드에서 넘어온 승격: 클라이맥스 뒤에 당첨 상품(피규어 사진·상품명)을 확실히 보여 준다 */
     if (d.batch && d.promoReturn === 'reveal') {
       var gi = d.promoIdx;
       if (!d.revealed) d.revealed = {};
-      if (gi != null && gi >= 0) { d.revealed[gi] = true; d.glowIdx = gi; }
-      var gRes = d.result;
+      if (gi != null && gi >= 0) { d.revealed[gi] = true; d.glowIdx = gi; d.lastOpenIdx = gi; }
+      if (d.result) d.n = d.result.n;
       d.promoReturn = null;
       d.promoIdx = -1;
       d.promoStarted = false;
       d.charging = false;
-      d.step = 'reveal';
-      d.result = null;
-      d.best = null;
-      d.n = null;
+      d.spotlight = true;
+      d.step = 'spotlight';
       renderDrawModal();
       renderAll();
-      toast('뽑기 완료! ' + (gRes ? (String(gRes.grade).toUpperCase() === 'LAST' ? '라스트원' : gRes.grade + '상') : ''), 'ok');
       return;
     }
     d.step = 'result';
@@ -5321,8 +5359,9 @@
       '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
       '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : (r.source === 'points' ? ' · 굿즈 포인트 사용' : '')) + '</p>' +
       '<div class="modal-actions">' +
+        (d.spotlight ? '<button class="btn btn-gold" data-action="reveal-back">티켓 더 열기</button>' : '') +
         (me() && r.itemStatus === '보관중' ? '<button class="btn btn-outline" data-action="go-my">내 보관함 보기</button>' : '') +
-        '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
+        (d.spotlight ? '' : '<button class="btn btn-dark" data-action="close-modal">확인</button>') +
       '</div>';
 
     return '<div class="result-wrap' + (epic ? ' is-epic lv' + lv : '') + '">' + html + '</div>';
@@ -6674,6 +6713,18 @@
           break;
         }
         case 'reveal-all': revealAllCards(); break;
+        case 'reveal-back': {
+          var rbd = ui.draw;
+          if (!rbd || !rbd.batch) break;
+          rbd.spotlight = false;
+          rbd.result = null;
+          rbd.best = null;
+          rbd.n = null;
+          rbd.step = 'reveal';
+          renderDrawModal();
+          renderAll();
+          break;
+        }
         case 'reveal-summary': {
           var rsd = ui.draw;
           if (!rsd || !rsd.batch) break;
