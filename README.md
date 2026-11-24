@@ -257,3 +257,36 @@ insert into public.app_settings (key, value) values
   ('shipping_fee_notice', '기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)')
 on conflict (key) do update set value = excluded.value;
 ```
+
+## 11. 가입 이메일 제한 · 관리자 판매 초기화 (v3.7.8 · 2026-11-24)
+
+- **회원가입은 `@naver.com` · `@gmail.com` 만 허용**합니다(스팸 가입 방지).
+  - 회원가입 모달의 이메일 칸 아래에 안내 문구가 있고, 다른 도메인을 넣으면 즉시 빨갛게 바뀝니다.
+  - 제출하면 `네이버(@naver.com) 또는 지메일(@gmail.com) 이메일로만 회원가입할 수 있습니다.` 로 막힙니다.
+  - **이미 가입한 다른 도메인 계정의 로그인은 막지 않습니다** (가입에만 적용).
+- **관리자 > 판 관리 > `🔄 판매 초기화`** — 판 하나의 판매 기록만 0건으로 되돌립니다.
+  - 확인창: `정말 이 판의 모든 판매 기록(티켓·보관함·배송요청)을 0건으로 초기화할까요?`
+  - 지우는 것: 그 판의 `tickets` 판매 상태, `draws`(보관함), `deliveries`(배송 요청) → `boards.status = 'open'`
+  - 남기는 것: 시드·봉인 해시·등급 배치, 회원 계정, 쿠폰, 구매확인 요청, 교환 코드
+  - 서버 모드에서는 RPC `admin_reset_board(p_board_id)` 를 씁니다. 아직 설치 전이면 관리자 권한으로 직접 처리한 뒤
+    설치용 SQL 안내창을 띄웁니다. 붙여넣을 파일: `supabase/schema.sql`(8-1절) 또는 `kujiking_admin_reset_rpc.txt`
+
+```sql
+-- 한 번만 실행 (다시 실행해도 안전)
+create or replace function public.admin_reset_board(p_board_id uuid)
+returns jsonb language plpgsql security definer set search_path = public, extensions
+as $$
+declare v_sold integer;
+begin
+  if not public.is_admin() then raise exception '관리자만 사용할 수 있습니다.'; end if;
+  select count(*) into v_sold from public.tickets where board_id = p_board_id and status = 'sold';
+  delete from public.deliveries where board_id = p_board_id;
+  delete from public.draws      where board_id = p_board_id;
+  update public.tickets set status = 'available', buyer_id = null, buyer_name = null, grade = null, drawn_at = null
+   where board_id = p_board_id;
+  update public.boards set status = 'open' where id = p_board_id;
+  return jsonb_build_object('board_id', p_board_id, 'reset', v_sold);
+end;
+$$;
+grant execute on function public.admin_reset_board(uuid) to authenticated;
+```

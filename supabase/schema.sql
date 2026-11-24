@@ -820,6 +820,36 @@ alter table public.boards drop constraint if exists boards_title_key;
 create unique index if not exists boards_title_uniq on public.boards (title);
 
 -- ---------------------------------------------------------
+-- 8-1. 판매 기록 초기화 (관리자) — 티켓·보관함(draws)·배송요청을 0건으로
+--      시드·등급 배치는 그대로 두므로 구매자가 봉인 해시로 검증할 수 있다.
+-- ---------------------------------------------------------
+create or replace function public.admin_reset_board(p_board_id uuid)
+returns jsonb
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  v_sold integer;
+begin
+  if not public.is_admin() then raise exception '관리자만 사용할 수 있습니다.'; end if;
+
+  select count(*) into v_sold
+  from public.tickets
+  where board_id = p_board_id and status = 'sold';
+
+  delete from public.deliveries where board_id = p_board_id;
+  delete from public.draws      where board_id = p_board_id;
+  update public.tickets
+     set status = 'available', buyer_id = null, buyer_name = null, grade = null, drawn_at = null
+   where board_id = p_board_id;
+  update public.boards set status = 'open' where id = p_board_id;
+
+  return jsonb_build_object('board_id', p_board_id, 'reset', v_sold);
+end;
+$$;
+
+grant execute on function public.admin_reset_board(uuid) to authenticated;
+
+-- ---------------------------------------------------------
 -- 9. 실시간(Realtime) 발행
 -- ---------------------------------------------------------
 do $$

@@ -18,6 +18,43 @@
   var STATE_VERSION = 5;   // v5: 실물 등급 각 1개 + P상(굿즈 포인트 1,200P) 구성으로 재시드
   var MAX_TICKETS = 500;
 
+  /* ---------- 회원가입 이메일 제한 ----------
+     스팸 가입 방지를 위해 네이버·지메일 주소만 가입을 받는다.
+     이미 가입한 다른 도메인 계정도 로그인은 그대로 된다(가입에만 적용). */
+  var SIGNUP_EMAIL_DOMAINS = ['naver.com', 'gmail.com'];
+  var SIGNUP_EMAIL_NOTE = '스팸 가입 방지를 위해 @naver.com 또는 @gmail.com 이메일만 가입할 수 있습니다.';
+  var SIGNUP_EMAIL_ERROR = '네이버(@naver.com) 또는 지메일(@gmail.com) 이메일로만 회원가입할 수 있습니다.';
+
+  /* ---------- 판매 초기화 서버 함수 (Supabase SQL Editor 에 한 번 설치) ---------- */
+  var RESET_BOARD_SQL = [
+    '-- 쿠지킹: 한 판의 판매 기록(티켓·보관함·배송요청)을 0건으로 초기화 (관리자 전용)',
+    'create or replace function public.admin_reset_board(p_board_id uuid)',
+    'returns jsonb',
+    'language plpgsql security definer set search_path = public, extensions',
+    'as $$',
+    'declare',
+    '  v_sold integer;',
+    'begin',
+    '  if not public.is_admin() then',
+    "    raise exception '관리자만 사용할 수 있습니다.';",
+    '  end if;',
+    '',
+    "  select count(*) into v_sold from public.tickets where board_id = p_board_id and status = 'sold';",
+    '',
+    '  delete from public.deliveries where board_id = p_board_id;',
+    '  delete from public.draws      where board_id = p_board_id;',
+    '  update public.tickets',
+    "     set status = 'available', buyer_id = null, buyer_name = null, grade = null, drawn_at = null",
+    '   where board_id = p_board_id;',
+    "  update public.boards set status = 'open' where id = p_board_id;",
+    '',
+    "  return jsonb_build_object('board_id', p_board_id, 'reset', v_sold);",
+    'end;',
+    '$$;',
+    '',
+    'grant execute on function public.admin_reset_board(uuid) to authenticated;'
+  ].join('\n');
+
   var CATEGORIES = ['드래곤볼', '헌터×헌터', '죠죠의 기묘한 모험', '약사의 혼잣말', '원피스', '귀멸의 칼날', '산리오', '치이카와', '자체 스페셜'];
   var PRICE_BANDS = [
     { id: 'all', label: '전체 금액' },
@@ -65,6 +102,15 @@
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
+  }
+  /* 네이버·지메일만 가입 허용 (로그인에는 쓰지 않는다) */
+  function emailDomainOf(email) {
+    var v = String(email == null ? '' : email).trim().toLowerCase();
+    var at = v.lastIndexOf('@');
+    return at === -1 ? '' : v.slice(at + 1).trim();
+  }
+  function isAllowedSignupEmail(email) {
+    return SIGNUP_EMAIL_DOMAINS.indexOf(emailDomainOf(email)) !== -1;
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
@@ -1211,6 +1257,8 @@
 
     /* ---------- 인증 ---------- */
     async signUp(d) {
+      /* 가입 도메인 제한은 화면과 서버 호출 양쪽에서 한 번 더 막는다 */
+      if (!isAllowedSignupEmail(d && d.email)) throw new Error(SIGNUP_EMAIL_ERROR);
       if (this.mode === 'local') {
         var dup = state.users.some(function (u) { return u.email.toLowerCase() === d.email.toLowerCase(); });
         if (dup) throw new Error('이미 가입된 이메일입니다. 로그인해 주세요.');
@@ -1508,21 +1556,42 @@
       await this.refreshData();
     },
 
+    /* 판매 기록 초기화 — 티켓·보관함(draws)·배송요청을 0건으로, 판은 다시 판매 중으로 */
     async resetBoard(id) {
       if (this.mode === 'local') {
         var b = getBoard(id);
-        if (!b) return;
+        if (!b) return { mode: 'local', reset: 0 };
+        var sold = openedCount(b);
         b.opens = [];
+        b.status = 'open';
         state.draws = state.draws.filter(function (d) { return d.boardId !== id; });
+        state.deliveries = state.deliveries.filter(function (d) { return d.boardId !== id; });
         persist();
-        return;
+        buildLocalViews();
+        return { mode: 'local', reset: sold };
       }
-      var res = await this.sb.from('tickets')
-        .update({ status: 'available', buyer_id: null, buyer_name: null, grade: null, drawn_at: null })
-        .eq('board_id', id);
-      if (res.error) throw res.error;
-      await this.sb.from('draws').delete().eq('board_id', id);
+      var res = await this.sb.rpc('admin_reset_board', { p_board_id: id });
+      if (res.error) {
+        var detail = String(res.error.code || '') + ' ' + String(res.error.message || '');
+        if (/PGRST202|Could not find the function|schema cache|does not exist/i.test(detail)) {
+          /* 서버 함수가 아직 설치되지 않았으면: 관리자 권한(RLS)으로 같은 일을 직접 처리하고 설치 안내를 띄운다 */
+          var d1 = await this.sb.from('deliveries').delete().eq('board_id', id);
+          if (d1.error) throw d1.error;
+          var d2 = await this.sb.from('draws').delete().eq('board_id', id);
+          if (d2.error) throw d2.error;
+          var t1 = await this.sb.from('tickets')
+            .update({ status: 'available', buyer_id: null, buyer_name: null, grade: null, drawn_at: null })
+            .eq('board_id', id);
+          if (t1.error) throw t1.error;
+          var b1 = await this.sb.from('boards').update({ status: 'open' }).eq('id', id);
+          if (b1.error) throw b1.error;
+          await this.refreshData();
+          return { mode: 'direct', rpcMissing: true };
+        }
+        throw new Error(res.error.message || '판 초기화에 실패했어요.');
+      }
       await this.refreshData();
+      return { mode: 'rpc', rpcMissing: false, reset: res.data && res.data.reset };
     },
 
     async generateCodes(boardId, count) {
@@ -4872,7 +4941,7 @@
         '</div>' +
         '<div class="admin-board-actions">' +
           '<button class="btn btn-outline btn-sm" data-action="edit-board" data-id="' + h(b.id) + '">수정</button>' +
-          '<button class="btn btn-outline btn-sm" data-action="reset-board" data-id="' + h(b.id) + '">판 초기화</button>' +
+          '<button class="btn btn-outline btn-sm" data-action="reset-board" data-id="' + h(b.id) + '">🔄 판매 초기화</button>' +
           '<button class="btn btn-danger-ghost btn-sm" data-action="delete-board" data-id="' + h(b.id) + '">삭제</button>' +
         '</div>' +
       '</div>';
@@ -5397,7 +5466,9 @@
         : '<h2 class="modal-title" id="modalTitle">쿠지킹 회원가입</h2>' +
           '<p class="modal-sub">배송·주문 확인을 위해 닉네임과 연락처를 받습니다. 닉네임은 판매 내역에 마스킹되어 표시돼요.</p>' +
           '<form data-form="signup" novalidate>' +
-            '<label class="field"><span>이메일</span><input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>' +
+            '<label class="field"><span>이메일</span><input name="email" type="email" autocomplete="email" required placeholder="you@naver.com">' +
+              '<span class="field-hint" data-role="signup-email-note">' + h(SIGNUP_EMAIL_NOTE) + '</span>' +
+            '</label>' +
             '<div class="form-grid two">' +
               '<label class="field"><span>비밀번호</span><input name="password" type="password" autocomplete="new-password" required placeholder="6자 이상"></label>' +
               '<label class="field"><span>비밀번호 확인</span><input name="password2" type="password" autocomplete="new-password" required></label>' +
@@ -5427,6 +5498,7 @@
 
     var fail = function (m) { if (errEl) errEl.textContent = m; };
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return fail('이메일 형식을 확인해 주세요.');
+    if (!isAllowedSignupEmail(email)) return fail(SIGNUP_EMAIL_ERROR);
     if (pw.length < 6) return fail('비밀번호는 6자 이상으로 정해 주세요.');
     if (pw !== pw2) return fail('비밀번호 확인이 일치하지 않습니다.');
     if (nickname.length < 2) return fail('닉네임은 2자 이상 입력해 주세요.');
@@ -5648,6 +5720,7 @@
           break;
         }
         case 'copy-code': copyText(el.getAttribute('data-code'), '코드를 복사했어요'); break;
+        case 'copy-reset-sql': copyText(RESET_BOARD_SQL, 'SQL을 복사했어요. Supabase SQL Editor 에 붙여넣고 Run 해 주세요.'); break;
         case 'copy-gen-all': if (ui.lastGen) copyText(ui.lastGen.codes.join('\n'), fmt(ui.lastGen.codes.length) + '개 코드를 복사했어요'); break;
         case 'copy-gen-sms':
           if (ui.lastGen) copyText(ui.lastGen.codes.map(function (c) {
@@ -5990,6 +6063,14 @@
     });
 
     document.addEventListener('input', function (e) {
+      if (e.target.closest('form[data-form="signup"]') && e.target.name === 'email') {
+        var noteEl = e.target.closest('form').querySelector('[data-role="signup-email-note"]');
+        if (noteEl) {
+          var bad = e.target.value.indexOf('@') !== -1 && !isAllowedSignupEmail(e.target.value);
+          noteEl.classList.toggle('is-bad', bad);
+          noteEl.textContent = bad ? SIGNUP_EMAIL_ERROR : SIGNUP_EMAIL_NOTE;
+        }
+      }
       if (e.target.closest('form[data-form="save-youtube"]')) updateYoutubePreview();
       if (e.target.closest('form[data-form="save-cs"]')) updateCsPreview();
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
@@ -6128,20 +6209,42 @@
   async function resetBoardFlow(id) {
     var b = getBoard(id);
     if (!b) return;
+    var sold = openedCount(b);
     var ok = await confirmDialog({
-      title: '판을 초기화할까요?',
-      message: '<b>' + h(b.title) + '</b>의 판매 내역 ' + fmt(openedCount(b)) + '건이 지워집니다. 코드와 시드는 그대로 유지됩니다.',
-      confirmLabel: '초기화',
+      title: '🔄 판매 초기화',
+      message: '<b>' + h(b.title) + '</b><br><br>정말 이 판의 모든 판매 기록(티켓·보관함·배송요청)을 0건으로 초기화할까요?' +
+        '<br><span class="muted small">지금 판매 ' + fmt(sold) + '/' + fmt(b.tickets) + '장 · 등급 배치와 시드는 그대로 남습니다.</span>',
+      confirmLabel: '판매 초기화',
       danger: true
     });
     if (!ok) return;
     try {
-      await Backend.resetBoard(id);
+      var res = await Backend.resetBoard(id);
       mapCache.clear();
+      buildLocalViews();
       renderAll();
       renderAdmin();
-      toast('판을 초기화했어요', 'ok');
+      toast('판매 기록을 0건으로 초기화했어요', 'ok');
+      if (res && res.rpcMissing) showResetSqlFallback();
     } catch (e) { toast(errMsg(e), 'err'); }
+  }
+
+  /* 서버 함수 admin_reset_board 가 아직 없을 때: 한 번만 설치하면 되는 SQL 안내 */
+  function showResetSqlFallback() {
+    var cfg = Backend.config || {};
+    var ref = supabaseProjectRef(cfg.SUPABASE_URL);
+    var sqlUrl = ref ? 'https://supabase.com/dashboard/project/' + ref + '/sql/new' : 'https://supabase.com/dashboard';
+    openModal(
+      '<h2 class="modal-title" id="modalTitle">초기화는 완료했어요</h2>' +
+      '<p class="modal-sub">관리자 권한으로 <b>이미 0건으로 초기화</b>했습니다. 앞으로도 버튼 한 번으로 안전하게 처리되도록, Supabase SQL Editor 에 아래 함수를 한 번만 설치해 주세요.</p>' +
+      '<pre class="reset-sql">' + h(RESET_BOARD_SQL) + '</pre>' +
+      '<div class="btn-row tight">' +
+        '<button class="btn btn-primary btn-sm" data-action="copy-reset-sql">SQL 복사</button>' +
+        '<a class="btn btn-outline btn-sm" href="' + sqlUrl + '" target="_blank" rel="noopener">SQL Editor 열기</a>' +
+        '<a class="btn btn-outline btn-sm" href="https://github.com/pkn8238-source/Kujiking/blob/main/supabase/schema.sql" target="_blank" rel="noopener">schema.sql 보기</a>' +
+      '</div>',
+      { wide: true }
+    );
   }
 
   async function deleteBoardFlow(id) {
