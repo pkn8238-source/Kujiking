@@ -4116,6 +4116,19 @@
     }
 
     /* ================= 바깥으로 내보내는 재생 API ================= */
+    /* 찢기 진행률이 한 칸(약 11%) 넘어갈 때마다 짧은 진동 — 종이 '드드득' 찢는 리듬.
+       진동 모터가 뭉개지지 않게 78ms 간격으로 제한하고, 소리와 같은 지점에서 울린다. */
+    var ripStep = -1, ripAt = 0;
+    function ripBuzz(a) {
+      if (isMuted()) return;
+      var step = Math.floor(a * 9);
+      if (step === ripStep) return;
+      var now = Date.now();
+      if (now - ripAt < 78) return;
+      ripStep = step;
+      ripAt = now;
+      buzz([12]);
+    }
     function tear(amount) {
       if (isMuted()) return;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
@@ -4123,6 +4136,7 @@
       if (now - lastTick < 50) return;
       lastTick = now;
       elPlay('tear', 0.7 + a * 0.3);
+      ripBuzz(a);
     }
     function snap(level) {
       if (isMuted()) return;
