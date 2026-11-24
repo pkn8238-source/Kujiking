@@ -21,7 +21,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
-<link rel="stylesheet" href="assets/styles.css?v=3.7.3">
+<link rel="stylesheet" href="assets/styles.css?v=3.7.4">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -51,6 +51,10 @@
       <a href="#/admin" data-nav="admin">관리자</a>
     </nav>
     <div class="header-actions">
+      <button class="yt-live-btn" id="ytLiveBtn" type="button" data-action="open-youtube-live" hidden aria-label="유튜브 라이브 방송 보기">
+        <span class="yt-live-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="1.6" y="4.6" width="20.8" height="14.8" rx="4.4" fill="currentColor"/><path d="M10.2 8.9l5.6 3.1-5.6 3.1z" fill="#fff"/></svg></span>
+        <span class="yt-live-word"><span class="yt-live-prefix">유튜브 </span>라이브</span>
+      </button>
       <button class="user-chip guest" id="authBtn" data-action="open-auth">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.6 3.8-5.4 7.5-5.4S18.7 16.4 19.5 20"/></svg>
         <span class="user-chip-label">로그인 / 회원가입</span>
@@ -666,6 +670,38 @@
         <div class="admin-tab-panel" data-admin-panel="settings">
           <div class="card admin-card" id="backendCard"></div>
 
+          <div class="card admin-card" id="ytLiveCard">
+            <div class="admin-card-head">
+              <h2>유튜브 라이브 연결</h2>
+              <span class="badge badge-live" id="ytLiveStateBadge" hidden>상단 버튼 표시 중</span>
+            </div>
+            <p class="muted">유튜브 채널 주소나 <code>@핸들</code>을 넣으면 상단의 <b>라이브</b> 버튼이 그 채널의 라이브 화면(<code>/live</code>)으로 연결됩니다. 저장하면 앱을 다시 올리지 않아도 모든 방문자에게 바로 적용돼요.</p>
+            <form class="yt-live-form" data-form="save-youtube" novalidate>
+              <label class="field">
+                <span>유튜브 채널 · 라이브 주소</span>
+                <input name="url" type="text" inputmode="url" autocomplete="off" spellcheck="false" placeholder="@kujiking 또는 https://www.youtube.com/@kujiking/live">
+                <em class="field-hint">@핸들만 넣어도 <code>https://www.youtube.com/@핸들/live</code> 로 자동 변환됩니다. 영상 주소(watch?v=)는 그대로 열립니다.</em>
+              </label>
+              <label class="switch-row">
+                <input type="checkbox" name="enabled" value="1">
+                <span class="switch-track" aria-hidden="true"></span>
+                <span class="switch-text">상단에 <b>라이브</b> 버튼 표시</span>
+              </label>
+              <div class="yt-live-preview" id="ytLivePreview"></div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit">저장</button>
+                <button class="btn btn-outline" type="button" data-action="test-youtube-live">새 창에서 열어보기</button>
+              </div>
+              <p class="form-error" id="ytLiveError" role="alert"></p>
+            </form>
+            <details class="yt-live-sql" id="ytLiveSql">
+              <summary>SQL로 직접 저장하기 (서버 권한 오류가 날 때)</summary>
+              <p class="muted small">관리자 로그인이 아닌 상태에서는 저장이 막힐 수 있어요. 그때는 Supabase SQL Editor 에 아래를 붙여넣고 Run 하면 됩니다.</p>
+              <pre id="ytLiveSqlCode"></pre>
+              <button class="btn btn-outline btn-sm" type="button" data-action="copy-youtube-sql">SQL 복사</button>
+            </details>
+          </div>
+
           <div class="card admin-card">
             <div class="admin-card-head"><h2>PIN 변경</h2></div>
             <form class="grid-form" data-form="change-pin" novalidate>
@@ -749,6 +785,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=3.7.3" defer></script>
+<script src="assets/app.js?v=3.7.4" defer></script>
 </body>
 </html>

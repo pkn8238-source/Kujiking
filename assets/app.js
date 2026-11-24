@@ -352,7 +352,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령' },
+      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
@@ -909,7 +909,7 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령' }, s.settings || {});
+    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지통령', youtubeLiveUrl: '', youtubeLiveEnabled: true }, s.settings || {});
     s.users = s.users || [];
     s.coupons = s.coupons || [];
     s.draws = s.draws || [];
@@ -1124,8 +1124,16 @@
       }
       state.boards = boards;
 
-      var setRes = await sb.from('app_settings').select('value').eq('key', 'demo_code').maybeSingle();
-      if (!setRes.error && setRes.data && setRes.data.value) state.settings.demoCode = setRes.data.value;
+      var setRes = await sb.from('app_settings').select('key,value').in('key', ['demo_code', 'youtube_live_url', 'youtube_live_enabled']);
+      if (!setRes.error && setRes.data) {
+        var settingsMap = {};
+        setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
+        if (settingsMap.demo_code) state.settings.demoCode = settingsMap.demo_code;
+        if (typeof settingsMap.youtube_live_url === 'string') state.settings.youtubeLiveUrl = settingsMap.youtube_live_url;
+        if (typeof settingsMap.youtube_live_enabled === 'string') {
+          state.settings.youtubeLiveEnabled = !/^(false|0|off|no)$/i.test(settingsMap.youtube_live_enabled.trim());
+        }
+      }
 
       if (myId) {
         var profRes = await sb.from('profiles').select('*').eq('id', myId).single();
@@ -1866,6 +1874,137 @@
       .sort(function (a, b) { return (a.boardId ? 0 : 1) - (b.boardId ? 0 : 1); });
   }
 
+  /* ---------- 유튜브 라이브 ---------- */
+  var YT_LIVE_SOON = '현재 라이브 방송 준비 중입니다! 관리자 설정에서 유튜브 주소를 연결할 수 있어요.';
+
+  /* 입력값을 방문자에게 열어 줄 주소로 바꾼다. @핸들이나 채널 주소는 /live 로 붙는다. */
+  function youtubeLiveTarget(raw) {
+    var s = String(raw == null ? '' : raw).trim().replace(/\/+$/, '');
+    if (!s) return '';
+    /* @핸들, 또는 점·슬래시 없는 채널명 */
+    if (/^@[A-Za-z0-9._-]{2,60}$/.test(s)) return 'https://www.youtube.com/' + s + '/live';
+    if (!/[\/\s]/.test(s) && !/\.[a-z]{2,}$/i.test(s) && /^[A-Za-z0-9._-]{2,60}$/.test(s)) {
+      return 'https://www.youtube.com/@' + s + '/live';
+    }
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    var url;
+    try { url = new URL(s); } catch (e) { return ''; }
+    var host = url.hostname.toLowerCase().replace(/^www\./, '');
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host)) return '';
+    if (!/(^|\.)youtube\.com$/.test(host)) return url.href;
+    var path = url.pathname.replace(/\/+$/, '');
+    if (!path) return 'https://www.youtube.com/';
+    if (url.searchParams.get('v') || url.searchParams.get('list')) return url.href;
+    if (/^\/(live|watch|shorts|embed|playlist)\//i.test(path)) return url.href;
+    if (/\/(live|videos|streams|shorts|watch|playlist|embed|results|hashtag)$/i.test(path)) return url.href;
+    return url.protocol + '//' + url.host + path + '/live';
+  }
+
+  function youtubeLiveEnabled() {
+    return state.settings.youtubeLiveEnabled !== false;
+  }
+
+  function youtubeLiveUrl() {
+    return youtubeLiveTarget(state.settings.youtubeLiveUrl);
+  }
+
+  function youtubeLiveSql(raw, enabled) {
+    var value = String(raw || '').replace(/'/g, "''");
+    return "insert into public.app_settings (key, value) values\n" +
+      "  ('youtube_live_url', '" + value + "'),\n" +
+      "  ('youtube_live_enabled', '" + (enabled ? 'true' : 'false') + "')\n" +
+      "on conflict (key) do update set value = excluded.value;";
+  }
+
+  function openInNewTab(url) {
+    if (!url) return false;
+    try {
+      var a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      return true;
+    } catch (e) {
+      var win = window.open(url, '_blank', 'noopener');
+      if (win) { try { win.opener = null; } catch (e2) {} }
+      return !!win;
+    }
+  }
+
+  function openYoutubeLive() {
+    var target = youtubeLiveUrl();
+    if (target) {
+      openInNewTab(target);
+      return true;
+    }
+    openModal('<div class="yt-soon">' +
+      '<span class="yt-soon-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="1.6" y="4.6" width="20.8" height="14.8" rx="4.4" fill="currentColor"/><path d="M10.2 8.9l5.6 3.1-5.6 3.1z" fill="#fff"/></svg></span>' +
+      '<h2 class="modal-title" id="modalTitle">유튜브 라이브</h2>' +
+      '<p class="modal-sub">' + h(YT_LIVE_SOON) + '</p>' +
+      '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">확인</button></div>' +
+      '</div>');
+    return false;
+  }
+
+  async function saveYoutubeLive(raw, enabled) {
+    var url = String(raw || '').trim();
+    if (Backend.mode === 'local') {
+      state.settings.youtubeLiveUrl = url;
+      state.settings.youtubeLiveEnabled = !!enabled;
+      persist();
+      return 'local';
+    }
+    var res = await Backend.sb.from('app_settings').upsert([
+      { key: 'youtube_live_url', value: url },
+      { key: 'youtube_live_enabled', value: enabled ? 'true' : 'false' }
+    ], { onConflict: 'key' });
+    if (res.error) throw res.error;
+    state.settings.youtubeLiveUrl = url;
+    state.settings.youtubeLiveEnabled = !!enabled;
+    return 'server';
+  }
+
+  function updateYoutubePreview() {
+    var box = $('#ytLivePreview');
+    if (!box) return;
+    var input = $('form[data-form="save-youtube"] input[name="url"]');
+    var raw = input ? input.value.trim() : String(state.settings.youtubeLiveUrl || '');
+    if (!raw) {
+      box.innerHTML = '아직 주소를 넣지 않았어요. 방문자가 <b>라이브</b> 버튼을 누르면 “라이브 방송 준비 중” 안내가 보입니다.';
+      return;
+    }
+    var target = youtubeLiveTarget(raw);
+    if (!target) {
+      box.innerHTML = '주소를 확인해 주세요. 예: <code>@kujiking</code> 또는 <code>https://www.youtube.com/@kujiking/live</code>';
+      return;
+    }
+    box.innerHTML = '방문자에게는 이 주소가 열립니다 → <a href="' + h(target) + '" target="_blank" rel="noopener">' + h(target) + '</a>';
+  }
+
+  function renderYoutubeSettings() {
+    var form = $('form[data-form="save-youtube"]');
+    if (form) {
+      var input = form.querySelector('input[name="url"]');
+      var check = form.querySelector('input[name="enabled"]');
+      if (input && document.activeElement !== input) input.value = state.settings.youtubeLiveUrl || '';
+      if (check) check.checked = youtubeLiveEnabled();
+    }
+    var badge = $('#ytLiveStateBadge');
+    if (badge) {
+      var on = youtubeLiveEnabled();
+      badge.className = 'badge ' + (on ? 'badge-live' : 'badge-closed');
+      badge.textContent = on ? '상단 버튼 표시 중' : '상단 버튼 숨김';
+      badge.hidden = false;
+    }
+    var code = $('#ytLiveSqlCode');
+    if (code) code.textContent = youtubeLiveSql(state.settings.youtubeLiveUrl || '', youtubeLiveEnabled());
+    updateYoutubePreview();
+  }
+
   function renderHeader() {
     var live = Backend.mode === 'supabase';
     document.body.classList.toggle('is-live', live);
@@ -1873,6 +2012,18 @@
     var al = $('.announce-live');
     if (ad) ad.hidden = live;
     if (al) al.hidden = !live;
+
+    var ytBtn = $('#ytLiveBtn');
+    if (ytBtn) {
+      var ytOn = youtubeLiveEnabled();
+      ytBtn.hidden = !ytOn;
+      if (ytOn) {
+        var ytReady = !!youtubeLiveUrl();
+        ytBtn.classList.toggle('is-soon', !ytReady);
+        ytBtn.setAttribute('aria-label', ytReady ? '유튜브 라이브 방송 보기 (새 창)' : '유튜브 라이브 · 방송 준비 중');
+        ytBtn.setAttribute('title', ytReady ? '유튜브 라이브 방송 보기' : '라이브 방송 준비 중');
+      }
+    }
 
     var btn = $('#authBtn');
     var chip = $('#userChip');
@@ -2537,13 +2688,8 @@
     var ctx = null, master = null, noiseBuf = null, running = false;
     var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
 
-    /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 소리가 나도록 오디오 세션을 'playback' 으로 */
-    function markPlayback() {
-      try {
-        var s = window.navigator && window.navigator.audioSession;
-        if (s && s.type !== 'playback') s.type = 'playback';
-      } catch (e) {}
-    }
+    /* iOS 사파리에서 아이폰 무음 스위치를 무시하게 만드는 audioSession='playback' 은
+       쓰지 않는다. 무음 모드에서는 사이트도 조용해야 하므로 세션 타입을 건드리지 않는다. */
     function isMuted() {
       if (muted === null) {
         try { muted = window.localStorage.getItem('kujiking.sound') === 'off'; } catch (e) { muted = false; }
@@ -2811,7 +2957,8 @@
       });
     }
     /* 첫 제스처에서 모든 <audio> 요소를 무음(muted)으로 한 번 재생해 잠금을 푼다.
-       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다. */
+       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다.
+       이때 소리가 새지 않도록 muted 와 volume 0 을 함께 건다. */
     function prime() {
       if (primed) return;
       var list = [], k, i;
@@ -2830,6 +2977,7 @@
       list.forEach(function (el) {
         try {
           el.muted = true;
+          try { el.volume = 0; } catch (ev) {}
           try { el.pause(); } catch (e) {}
           try { el.currentTime = 0; } catch (e) {}
           var p = el.play();
@@ -2892,7 +3040,6 @@
 
     /* ================= 웹오디오 폴백(3.4배 부스트) ================= */
     function makeCtx() {
-      markPlayback();
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
       if (!ctx) {
@@ -2926,7 +3073,6 @@
       setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 480);
     }
     function unlock() {
-      markPlayback();
       wakeCtx();
       prime();
     }
@@ -3132,15 +3278,13 @@
       if (withFanfare) setTimeout(function () { if (!isMuted()) elPlay('fanC', 1); }, 430);
     }
 
-    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께) */
+    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께)
+       단, 방문 직후 화면 아무 곳이나 누를 때 소리가 나면 안 되므로 문서 전체가 아니라
+       실제 뽑기·찢기 동작이 시작되는 지점(enterPeel · peelSnap · sealSnap)에서만 부른다. */
     try {
-      ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(function (ev) {
-        document.addEventListener(ev, unlock, { capture: true, passive: true });
-      });
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) { markPlayback(); if (ctx && ctx.state === 'running') running = true; }
+        if (!document.hidden && ctx && ctx.state === 'running') running = true;
       }, { passive: true });
-      markPlayback();
     } catch (e) {}
 
     /* 시작할 때 한 번 합성 → blob URL 생성 → <audio> 요소 준비 */
@@ -3231,6 +3375,8 @@
   function enterPeel(opts) {
     var d = ui.draw;
     if (!d) return;
+    /* 실제 뽑기 동작이 시작되는 사용자 제스처에서만 효과음 잠금을 푼다 */
+    kujiSound.unlock();
     opts = opts || {};
     ui.draw = {
       boardId: d.boardId, n: d.n, step: 'peel',
@@ -3482,6 +3628,7 @@
   async function peelSnap() {
     var d = ui.draw;
     if (!d || d.step !== 'peel' || d.revealing) return;
+    kujiSound.unlock();
     d.revealing = true;
     var card = $('#peelCard'), flap = $('#peelFlap');
     if (card) {
@@ -3729,6 +3876,7 @@
   async function sealSnap() {
     var d = ui.draw;
     if (!d || d.step !== 'seal' || d.revealing) return;
+    kujiSound.unlock();
     d.revealing = true;
     if (sealDrag && sealDrag.raf) { cancelAnimationFrame(sealDrag.raf); sealDrag.raf = 0; }
     var box = $('#sealBox');
@@ -4760,6 +4908,7 @@
     }
     var demoInput = $('form[data-form="change-demo"] input[name="demo"]');
     if (demoInput && !demoInput.value) demoInput.value = state.settings.demoCode;
+    renderYoutubeSettings();
   }
 
   /* ---------- 관리자 동작 ---------- */
@@ -5236,6 +5385,21 @@
           else renderMy();
           break;
         case 'open-code-modal': openCodeModal(); break;
+        case 'open-youtube-live': openYoutubeLive(); break;
+        case 'test-youtube-live': {
+          var ytInput = $('form[data-form="save-youtube"] input[name="url"]');
+          var ytTyped = ytInput ? ytInput.value.trim() : '';
+          var ytTarget = youtubeLiveTarget(ytTyped) || youtubeLiveUrl();
+          if (!ytTarget) { toast('먼저 유튜브 주소를 입력해 주세요', 'err'); break; }
+          openInNewTab(ytTarget);
+          break;
+        }
+        case 'copy-youtube-sql': {
+          var ytSqlInput = $('form[data-form="save-youtube"] input[name="url"]');
+          var ytSqlCheck = $('form[data-form="save-youtube"] input[name="enabled"]');
+          copyText(youtubeLiveSql(ytSqlInput ? ytSqlInput.value.trim() : (state.settings.youtubeLiveUrl || ''), ytSqlCheck ? ytSqlCheck.checked : youtubeLiveEnabled()), 'SQL을 복사했어요');
+          break;
+        }
         case 'fill-demo-code': {
           var input = $('#drawCodeInput') || $('#quickCodeInput');
           if (input) { input.value = state.settings.demoCode; input.focus(); }
@@ -5472,6 +5636,32 @@
         return;
       }
 
+      if (type === 'save-youtube') {
+        var ytErr = $('#ytLiveError');
+        if (ytErr) ytErr.textContent = '';
+        var ytUrl = fieldValue(form, 'url').trim();
+        var ytCheckbox = form.querySelector('input[name="enabled"]');
+        var ytEnabled = !!(ytCheckbox && ytCheckbox.checked);
+        if (ytUrl && !youtubeLiveTarget(ytUrl)) {
+          if (ytErr) ytErr.textContent = '주소를 확인해 주세요. 예: @kujiking 또는 https://www.youtube.com/@kujiking/live';
+          return;
+        }
+        var ytSaveBtn = form.querySelector('button[type="submit"]');
+        if (ytSaveBtn) { ytSaveBtn.setAttribute('aria-disabled', 'true'); ytSaveBtn.textContent = '저장 중…'; }
+        saveYoutubeLive(ytUrl, ytEnabled).then(function (where) {
+          if (ytSaveBtn) { ytSaveBtn.removeAttribute('aria-disabled'); ytSaveBtn.textContent = '저장'; }
+          renderHeader();
+          renderYoutubeSettings();
+          toast(where === 'server' ? '유튜브 라이브 설정을 저장했어요 · 모든 방문자에게 바로 적용됩니다' : '유튜브 라이브 설정을 저장했어요', 'ok');
+        }).catch(function (e7) {
+          if (ytSaveBtn) { ytSaveBtn.removeAttribute('aria-disabled'); ytSaveBtn.textContent = '저장'; }
+          if (ytErr) ytErr.textContent = '서버에 저장하지 못했어요: ' + errMsg(e7) + ' 아래 SQL을 Supabase SQL Editor에서 실행해 주세요.';
+          var sqlBox = $('#ytLiveSql');
+          if (sqlBox) { sqlBox.open = true; renderYoutubeSettings(); }
+        });
+        return;
+      }
+
       if (type === 'board-form') { saveBoardForm(form); return; }
 
       if (type === 'claim') {
@@ -5588,6 +5778,7 @@
     });
 
     document.addEventListener('input', function (e) {
+      if (e.target.closest('form[data-form="save-youtube"]')) updateYoutubePreview();
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
       if (e.target.getAttribute('data-role') === 'tier-image') {
         var prev = e.target.closest('.tier-extra') && e.target.closest('.tier-extra').querySelector('[data-role="tier-thumb"]');

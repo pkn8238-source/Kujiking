@@ -2267,3 +2267,85 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 @media (prefers-reduced-motion:reduce){
   .pc-coin,.pc-spark,#userPoints.is-bump{animation:none}
 }
+
+/* =========================================================
+   v3.7.4 — 유튜브 라이브 버튼 · 관리자 연결 카드
+   ========================================================= */
+.yt-live-btn{
+  display:inline-flex;align-items:center;gap:7px;flex-shrink:0;white-space:nowrap;
+  padding:8px 14px 8px 11px;
+  border:2px solid var(--ink);border-radius:999px;
+  background:linear-gradient(180deg,#fff8e6 0%,#ffe7b8 100%);
+  box-shadow:0 3px 0 var(--ink);
+  font-weight:900;font-size:13px;letter-spacing:-.01em;color:var(--ink);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.yt-live-btn:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--ink);background:linear-gradient(180deg,#fff2d3 0%,#ffdc9a 100%)}
+.yt-live-btn:active{transform:translateY(1px);box-shadow:0 2px 0 var(--ink)}
+.yt-live-mark{display:grid;place-items:center;width:19px;height:19px;flex:none;color:var(--red);animation:ytLiveBeat 1.8s ease-in-out infinite}
+.yt-live-btn.is-soon .yt-live-mark{animation:none;opacity:.85}
+.yt-live-mark svg{width:19px;height:19px;display:block}
+.yt-live-word{line-height:1}
+.yt-live-word .yt-live-prefix{font-weight:800;color:var(--ink-soft)}
+@keyframes ytLiveBeat{0%,100%{opacity:1}50%{opacity:.55}}
+@media (max-width:760px){
+  .yt-live-btn{padding:7px 11px 7px 9px;gap:6px}
+  .yt-live-word{font-size:12.5px}
+  .yt-live-word .yt-live-prefix{display:none}
+  .yt-live-mark,.yt-live-mark svg{width:17px;height:17px}
+}
+/* 좁은 화면에서 헤더가 넘치지 않도록 유튜브 라이브 버튼과 사용자 칩을 함께 줄인다 */
+@media (max-width:420px){
+  .header-actions{gap:7px}
+  .yt-live-btn{padding:7px 10px;gap:5px}
+  .yt-live-word{font-size:12px}
+  .user-chip{gap:6px;padding:5px 9px 5px 6px}
+  .user-chip-meta{display:none}
+  .user-chip-body b{max-width:62px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .nav-toggle{width:40px;height:40px}
+}
+@media (max-width:345px){
+  .yt-live-word{display:none}
+  .yt-live-btn{padding:7px 9px;gap:0}
+}
+@media (prefers-reduced-motion:reduce){
+  .yt-live-mark{animation:none}
+}
+
+/* 준비 중 안내 모달 */
+.yt-soon{text-align:center;padding:6px 2px 0}
+.yt-soon-mark{display:inline-grid;place-items:center;width:52px;height:52px;margin:0 auto 12px;color:var(--red);
+  border:2px solid var(--ink);border-radius:16px;background:var(--cream);box-shadow:0 3px 0 var(--ink)}
+.yt-soon-mark svg{width:30px;height:30px}
+.yt-soon .modal-sub{max-width:340px;margin:0 auto}
+
+/* 관리자 · 유튜브 라이브 연결 카드 */
+.yt-live-form{display:flex;flex-direction:column;gap:14px;margin-top:14px}
+.yt-live-form .field{max-width:560px}
+.yt-live-form .field-hint{font-style:normal;line-height:1.5;font-weight:700;color:var(--muted)}
+.switch-row{display:inline-flex;align-items:center;gap:11px;cursor:pointer;font-size:13px;font-weight:800;color:var(--ink-soft);user-select:none}
+.switch-row input{position:absolute;opacity:0;width:1px;height:1px}
+.switch-track{position:relative;width:50px;height:28px;flex:none;border:2px solid var(--ink);border-radius:999px;background:#e8e2d8;transition:background .15s ease}
+.switch-track::after{content:"";position:absolute;top:50%;left:2px;width:22px;height:22px;border-radius:50%;background:#fff;border:2px solid var(--ink);transform:translateY(-50%);transition:transform .16s cubic-bezier(.3,1.4,.5,1)}
+.switch-row input:checked + .switch-track{background:var(--red)}
+.switch-row input:checked + .switch-track::after{transform:translate(22px,-50%)}
+.switch-row input:focus-visible + .switch-track{outline:3px solid var(--blue);outline-offset:2px}
+.switch-text b{color:var(--red-deep)}
+.yt-live-preview{display:none;font-size:12.5px;font-weight:700;line-height:1.55;color:var(--muted);
+  background:var(--cream);border:2px dashed var(--line-strong);border-radius:12px;padding:10px 13px;word-break:break-all}
+.yt-live-preview:not(:empty){display:block}
+.yt-live-preview a{color:var(--red-deep);text-decoration:underline;text-underline-offset:2px;word-break:break-all}
+.yt-live-preview b{color:var(--red-deep)}
+.yt-live-sql{margin-top:18px;border-top:2px dashed var(--line-strong);padding-top:14px}
+.yt-live-sql summary{cursor:pointer;font-size:12.5px;font-weight:900;color:var(--ink-soft);list-style:none}
+.yt-live-sql summary::-webkit-details-marker{display:none}
+.yt-live-sql summary::before{content:"＋";display:inline-block;width:16px;color:var(--red-deep);font-weight:900}
+.yt-live-sql[open] summary::before{content:"－"}
+.yt-live-sql pre{margin:10px 0;padding:12px 14px;overflow-x:auto;background:#1d1815;color:#ffe9b8;border-radius:12px;font-size:12px;line-height:1.6;white-space:pre}
+.yt-live-sql .muted{margin-top:8px}
+
+/* 태블릿 폭(761~980px)에서는 메뉴와 겹치지 않도록 '유튜브' 접두어를 줄인다 */
+@media (min-width:761px) and (max-width:980px){
+  .header-inner{gap:16px}
+  .yt-live-word .yt-live-prefix{display:none}
+}
