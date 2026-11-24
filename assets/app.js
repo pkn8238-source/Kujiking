@@ -2600,7 +2600,7 @@
   }
 
   /* =========================================================
-     무작위 연뽑 (v3.9.0) — 5 · 10 · 15 · 20장
+     무작위 연뽑 (v3.9.1) — 5 · 10 · 15 · 20장
      번호를 고르지 않고 남은 번호 중 무작위로 N개를 골라
      한 장씩 차례로 뽑은 뒤 결과를 한 화면에 요약한다.
      ========================================================= */
@@ -2875,13 +2875,14 @@
     var html;
     if (d.step === 'source') html = d.batch ? multiSourceHTML(board, d) : drawSourceHTML(board, d);
     else if (d.step === 'drawing') html = multiProgressHTML(board, d);
+    else if (d.step === 'reveal') html = multiRevealHTML(board, d);
     else if (d.step === 'peel') html = drawPeelHTML(board, d);
     else if (d.step === 'seal') html = drawSealHTML(board, d);
     else if (d.step === 'promote') html = drawPromoteHTML(board, d);
     else html = d.batch ? batchResultHTML(board, d) : drawResultHTML(board, d);
     openModal(html, {
       keepFocus: d.step === 'result',
-      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing',
+      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing' || d.step === 'reveal',
       dark: dark,
       dragLock: d.step === 'peel' || d.step === 'seal',
       resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote' || d.step === 'drawing'
@@ -3041,23 +3042,23 @@
   }
 
   /* ---------- 무작위 연뽑: 한 장씩 뽑는 진행 화면 ---------- */
+  /* 진행 중에는 등급·상품명·이미지를 절대 노출하지 않는다.
+     결과는 봉인된 티켓 그리드에서 직접 개봉할 때만 공개한다 (스포일러 방지). */
   function multiProgressRows(d) {
     var rows = '';
     for (var i = 0; i < d.count; i++) {
       var r = d.results[i];
       var no = d.numbers[i];
       if (r) {
-        var g = String(r.grade || '').toUpperCase();
-        var gk = g === 'LAST' ? 'last' : String(r.grade || '').toLowerCase();
         rows += '<li class="mdp-row is-done">' +
           '<span class="mdp-no">#' + pad2(r.n) + '</span>' +
-          '<span class="mdp-grade grade-' + h(gk) + '">' + h(g === 'LAST' ? 'LAST' : r.grade + '상') + '</span>' +
-          '<span class="mdp-label">' + h(r.tierLabel || '') + '</span>' +
+          '<span class="mdp-label">티켓 확보 완료 ✓</span>' +
         '</li>';
       } else if (i === d.results.length && !d.error) {
         rows += '<li class="mdp-row is-now">' +
+          '<span class="mdp-no">#' + pad2(no) + '</span>' +
           '<span class="mdp-spin" aria-hidden="true">🎲</span>' +
-          '<span class="mdp-wait">번호를 뽑는 중…</span>' +
+          '<span class="mdp-wait">티켓 확보 중…</span>' +
         '</li>';
       } else {
         rows += '<li class="mdp-row is-wait">' +
@@ -3074,7 +3075,7 @@
     return '<div class="mdp-stage">' +
       '<p class="mdp-kicker">MULTI DRAW · 무작위 ' + d.count + '연뽑</p>' +
       '<h2 class="modal-title" id="modalTitle" style="padding-right:0">번호를 뽑고 있어요</h2>' +
-      '<p class="modal-sub">남은 번호 중 무작위로 고른 번호를 한 장씩 개봉합니다. 잠시만 기다려 주세요.</p>' +
+      '<p class="modal-sub">남은 번호 중 무작위로 고른 번호를 봉인된 채로 모읍니다. 등급과 상품은 카드를 열 때 공개돼요.</p>' +
       '<div class="mdp-bar" aria-hidden="true"><i id="mdpBarFill" style="width:' + pct + '%"></i></div>' +
       '<p class="mdp-count"><b id="mdpDone">' + d.results.length + '</b> / ' + d.count + '장</p>' +
       '<ul class="mdp-list" id="mdpList">' + multiProgressRows(d) + '</ul>' +
@@ -3097,6 +3098,210 @@
       if (err) err.textContent = d.error;
       else if (list) list.insertAdjacentHTML('afterend', '<p class="mdp-err" id="mdpErr">' + h(d.error) + '</p>');
     }
+  }
+
+  /* ---------- 무작위 연뽑: 봉인 티켓 그리드 (한 장씩 직접 개봉) ----------
+     뽑기가 끝나면 결과를 바로 보여 주지 않고 N장의 '봉인 티켓'으로 깔아 둔다.
+     한 장을 누르면 그 카드만 샤악! 하고 뒤집혀 등급·상품이 공개되고,
+     C상 이상이면 C→B→A 승격 연출을 한 번 보여 준 뒤 그 카드로 돌아온다. */
+  function mrGradeText(g) {
+    return String(g || '').toUpperCase() === 'LAST' ? '라스트원' : (String(g || '') + '상');
+  }
+  function mrGradeKey(g) {
+    return String(g || '').toUpperCase() === 'LAST' ? 'last' : String(g || '').toLowerCase();
+  }
+  function mrBc(g) {
+    var k = mrGradeKey(g);
+    return k === 'last' ? 'var(--gold)' : 'var(--grade-' + k + ')';
+  }
+  function multiRevealOpened(d) {
+    var rs = d.results || [], k = 0;
+    for (var i = 0; i < rs.length; i++) if (d.revealed && d.revealed[i]) k++;
+    return k;
+  }
+
+  /* 카드 앞면 = 봉인(#번호 · ? · 띠링!) / 뒷면 = 공개면(등급 배지 · 상품명) */
+  function multiRevealFace(board, r) {
+    var t = tierOf(board, r.grade) || {};
+    var label = r.tierLabel || t.label || '';
+    var g = String(r.grade || '').toUpperCase();
+    return '<span class="mrv-face mrv-back" style="--bc:' + mrBc(r.grade) + '">' +
+      '<span class="mrv-bn">#' + r.n + '</span>' +
+      '<b class="mrv-bg">' + h(g === 'LAST' ? 'L' : g) + '<i>' + (g === 'LAST' ? 'LAST' : '상') + '</i></b>' +
+      '<span class="mrv-bp">' + h(label) + '</span>' +
+    '</span>';
+  }
+
+  function multiRevealSummaryHTML(board, d) {
+    var rs = d.results || [];
+    var phys = rs.filter(function (r) { return !isPointPrize(r); });
+    var pts = rs.filter(isPointPrize).reduce(function (s, r) { return s + (Number(r.points) || 0); }, 0);
+    var lastWin = rs.filter(function (r) { return r.isLast; })[0];
+    var list = phys.slice().sort(function (a, b) { return gradeLevel(b.grade) - gradeLevel(a.grade); }).map(function (r) {
+      var t = tierOf(board, r.grade) || {};
+      return '<li><span class="mrv-sp" style="--bc:' + mrBc(r.grade) + '">' + h(mrGradeText(r.grade)) + '</span>' +
+        '<span class="mrv-sl">' + h(r.tierLabel || t.label || '') + '</span>' +
+        '<span class="mrv-sn2">#' + r.n + '</span></li>';
+    }).join('');
+    return '<div class="mrv-sum">' +
+      '<p class="mrv-sum-title">🎉 ' + rs.length + '장 모두 개봉 완료!</p>' +
+      '<div class="mrv-sum-nums">' +
+        '<span>실물 <b>' + phys.length + '</b>개</span>' +
+        (pts > 0 ? '<span>총 적립 <b>+' + fmt(pts) + 'P</b></span>' : '') +
+        (lastWin ? '<span>👑 라스트원</span>' : '') +
+      '</div>' +
+      (list ? '<ul class="mrv-sum-list">' + list + '</ul>' : '') +
+      '<p class="mrv-sum-note">' + (me()
+        ? '당첨 상품은 내 보관함에 담겼어요. 배송 신청은 내 보관함에서 할 수 있어요.'
+        : '로그인하면 당첨 상품이 보관함에 담기고 배송 신청까지 됩니다.') + '</p>' +
+    '</div>';
+  }
+
+  function multiRevealHTML(board, d) {
+    var rs = d.results || [];
+    var total = d.count || rs.length;
+    var opened = multiRevealOpened(d);
+    var allOpen = rs.length > 0 && opened >= rs.length;
+    var missing = Math.max(0, total - rs.length);
+    var cards = '';
+    for (var i = 0; i < rs.length; i++) {
+      var r = rs[i];
+      var isOpen = !!(d.revealed && d.revealed[i]);
+      var delay = (d.revealDelay && d.revealDelay[i]) || 0;
+      var cls = 'mrv-card' + (isOpen ? ' is-open' : '') +
+        (isOpen && gradeLevel(r.grade) >= 1 ? ' is-epic' : '') +
+        (d.glowIdx === i ? ' is-glow' : '') +
+        (delay ? ' is-stagger' : '');
+      cards += '<button type="button" class="' + cls + '" data-action="reveal-card" data-idx="' + i + '"' +
+        ' aria-label="' + (isOpen ? (r.n + '번 ' + mrGradeText(r.grade) + ' · ' + h(r.tierLabel || '')) : (r.n + '번 티켓 개봉')) + '"' +
+        (delay ? ' style="--md:' + delay + 'ms"' : '') + '>' +
+        '<span class="mrv-flip">' +
+          '<span class="mrv-face mrv-front">' +
+            '<span class="mrv-sn">#' + pad2(r.n) + '</span>' +
+            '<span class="mrv-q">?</span>' +
+            '<span class="mrv-tap">띠링!</span>' +
+          '</span>' +
+          (isOpen ? multiRevealFace(board, r) : '<span class="mrv-face mrv-back"></span>') +
+        '</span>' +
+        '<span class="mrv-shazam" aria-hidden="true">샤악!</span>' +
+      '</button>';
+    }
+    return '<div class="mrv-stage">' +
+      '<p class="mdp-kicker">MULTI DRAW · 무작위 ' + total + '연뽑</p>' +
+      '<h2 class="modal-title" id="modalTitle">티켓 ' + rs.length + '장이 도착했어요</h2>' +
+      '<p class="modal-sub">' + (allOpen
+        ? '모두 개봉했어요. 아래에서 결과를 확인하세요.'
+        : '카드를 하나씩 눌러 개봉하세요. 찢는 순간 등급과 상품이 공개됩니다.') + '</p>' +
+      '<div class="mrv-top">' +
+        '<span class="mrv-prog"><b id="mrvOpened">' + opened + '</b> / ' + rs.length + '장 개봉</span>' +
+        '<button class="btn btn-gold btn-sm mrv-all" type="button" data-action="reveal-all"' + (allOpen ? ' disabled' : '') + '>✨ 한꺼번에 모두 열기</button>' +
+      '</div>' +
+      '<div class="mdp-bar" aria-hidden="true"><i id="mdpBarFill" style="width:' + Math.round(opened / Math.max(1, rs.length) * 100) + '%"></i></div>' +
+      '<div class="mrv-grid" id="mrvGrid">' + cards + '</div>' +
+      (allOpen ? multiRevealSummaryHTML(board, d) : '') +
+      (missing ? '<p class="batch-warn">⚠ ' + missing + '장은 다른 분이 먼저 뽑아 진행하지 못했어요.</p>' : '') +
+      (d.error ? '<p class="mdp-err">' + h(d.error) + '</p>' : '') +
+      '<div class="modal-actions">' +
+        '<button class="btn btn-outline" type="button" data-action="reveal-summary">결과 요약 보기</button>' +
+        '<button class="btn btn-dark" type="button" data-action="close-modal">확인</button>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function refreshRevealHud(d) {
+    var total = (d.results || []).length;
+    var opened = multiRevealOpened(d);
+    var cnt = $('#mrvOpened');
+    if (cnt) cnt.textContent = String(opened);
+    var bar = $('#mdpBarFill');
+    if (bar) bar.style.width = Math.round(opened / Math.max(1, total) * 100) + '%';
+    return total > 0 && opened >= total;
+  }
+
+  /* 한 장 개봉 — D~P상은 그 자리에서 뒤집기, C상 이상은 클라이맥스 연출로 */
+  function openRevealCard(idx) {
+    var d = ui.draw;
+    if (!d || d.step !== 'reveal' || !d.batch) return;
+    if (!d.revealed) d.revealed = {};
+    if (d.revealed[idx]) return;
+    var board = getBoard(d.boardId);
+    var r = (d.results || [])[idx];
+    if (!board || !r) return;
+    kujiSound.unlock();
+    if (isSealGrade(r.grade)) { startCardPromotion(idx); return; }
+
+    var card = document.querySelector('.mrv-card[data-idx="' + idx + '"]');
+    var back = card ? card.querySelector('.mrv-back') : null;
+    d.revealed[idx] = true;
+    if (back) back.outerHTML = multiRevealFace(board, r);
+    if (card) {
+      void card.offsetWidth;          /* 초기 스타일을 먼저 계산해야 샤악 개봉 전환이 돈다 */
+      card.classList.add('is-open', 'is-fresh');
+    }
+    kujiSound.snap(0);
+    if (refreshRevealHud(d)) {
+      setTimeout(function () {
+        if (ui.draw === d && d.step === 'reveal') renderDrawModal();
+      }, 640);
+    }
+  }
+
+  /* 상위상 카드 — 봉인이 스스로 빛나다가 승격 연출로 넘어간다 (등급은 연출 끝에 공개) */
+  function startCardPromotion(idx) {
+    var d = ui.draw;
+    if (!d || d.step !== 'reveal' || !d.batch || d.charging) return;
+    var r = (d.results || [])[idx];
+    if (!r) return;
+    d.charging = true;
+    d.promoIdx = idx;
+    d.promoReturn = 'reveal';
+    d.result = r;
+    d.best = r;
+    d.n = r.n;
+    var card = document.querySelector('.mrv-card[data-idx="' + idx + '"]');
+    if (card) card.classList.add('is-charging');
+    kujiSound.sealCharge();
+    setTimeout(function () {
+      d.charging = false;
+      if (!ui.draw || ui.draw !== d || d.step !== 'reveal') return;
+      d.step = 'promote';
+      d.revealing = false;
+      d.promoStarted = false;
+      d.promoSkip = false;
+      renderDrawModal();
+    }, 620);
+  }
+
+  /* 한꺼번에 모두 열기 — 남은 티켓을 연달아 열고, 상위상은 마지막에 클라이맥스로 */
+  async function revealAllCards() {
+    var d = ui.draw;
+    if (!d || d.step !== 'reveal' || !d.batch || d.charging) return;
+    if (!d.revealed) d.revealed = {};
+    var rs = d.results || [];
+    var pending = [];
+    for (var i = 0; i < rs.length; i++) if (!d.revealed[i]) pending.push(i);
+    if (!pending.length) return;
+    var bestIdx = -1;
+    pending.forEach(function (i) {
+      if (!isSealGrade(rs[i].grade)) return;
+      if (bestIdx < 0 || gradeLevel(rs[i].grade) > gradeLevel(rs[bestIdx].grade)) bestIdx = i;
+    });
+    d.revealDelay = {};
+    var k = 0;
+    pending.forEach(function (i) {
+      if (i === bestIdx) return;
+      d.revealed[i] = true;
+      d.revealDelay[i] = Math.min(560, k * 55);
+      k++;
+    });
+    kujiSound.unlock();
+    kujiSound.snap(0);
+    renderDrawModal();
+    d.revealDelay = null;
+    if (bestIdx < 0) return;
+    await waitMs(Math.min(720, 220 + k * 55));
+    if (!ui.draw || ui.draw !== d || d.step !== 'reveal') return;
+    startCardPromotion(bestIdx);
   }
 
   /* ---------- 무작위 연뽑: 결과 요약 ---------- */
@@ -4160,28 +4365,25 @@
       return;
     }
 
-    /* 봉인·승격 연출은 이번 연뽑에서 가장 높은 등급으로 보여 준다 */
-    var best = d.results[0];
-    d.results.forEach(function (r) { if (gradeLevel(r.grade) > gradeLevel(best.grade)) best = r; });
-    d.best = best;
-    d.bestN = best.n;
-    d.result = best;
-    d.n = best.n;
-
-    if (isSealGrade(best.grade)) {
-      d.step = 'seal';
-      d.revealing = false;
-      renderDrawModal();
-      renderAll();
-      kujiSound.sealCharge();
-      return;
-    }
-    d.step = 'result';
+    /* 결과는 바로 보여 주지 않는다 — 봉인된 티켓 그리드에서 직접 한 장씩 개봉한다 */
+    d.revealed = {};
+    d.revealDelay = null;
+    d.glowIdx = -1;
+    d.promoIdx = -1;
+    d.promoReturn = null;
+    d.promoStarted = false;
+    d.charging = false;
+    d.result = null;
+    d.best = null;
+    d.n = null;
+    d.step = 'reveal';
     d.revealing = false;
-    kujiSound.snap(0);          /* 전부 D~L·P상: 짧고 경쾌한 다중 개봉음 */
     renderDrawModal();
     renderAll();
-    toast(d.error ? (d.count + '연뽑 · ' + d.results.length + '장만 완료') : (d.count + '연뽑 완료!'), d.error ? 'err' : 'ok');
+    kujiSound.snap(0);          /* 티켓이 도착하는 짧고 경쾌한 소리 */
+    toast(d.error
+      ? (d.count + '연뽑 · ' + d.results.length + '장만 도착했어요')
+      : (d.results.length + '장 도착! 카드를 눌러 개봉하세요'), d.error ? 'err' : 'ok');
   }
 
   function peelColor(grade) {
@@ -4819,6 +5021,25 @@
     if (!ui.draw || ui.draw !== d || d.step !== 'promote') return;
     promoRun = null;
     d.revealing = false;
+    /* 연뽑 그리드에서 넘어온 승격: 결과 화면 대신 그 카드로 돌아가 봉인을 열어 준다 */
+    if (d.batch && d.promoReturn === 'reveal') {
+      var gi = d.promoIdx;
+      if (!d.revealed) d.revealed = {};
+      if (gi != null && gi >= 0) { d.revealed[gi] = true; d.glowIdx = gi; }
+      var gRes = d.result;
+      d.promoReturn = null;
+      d.promoIdx = -1;
+      d.promoStarted = false;
+      d.charging = false;
+      d.step = 'reveal';
+      d.result = null;
+      d.best = null;
+      d.n = null;
+      renderDrawModal();
+      renderAll();
+      toast('뽑기 완료! ' + (gRes ? (String(gRes.grade).toUpperCase() === 'LAST' ? '라스트원' : gRes.grade + '상') : ''), 'ok');
+      return;
+    }
     d.step = 'result';
     renderDrawModal();
     renderAll();
@@ -6447,6 +6668,27 @@
         }
         case 'pick-ticket': pickTicket(n); break;
         case 'multi-draw': openMultiDraw(Number(el.getAttribute('data-count')) || MULTI_COUNTS[0]); break;
+        case 'reveal-card': {
+          var rIdx = Number(el.getAttribute('data-idx'));
+          if (!isNaN(rIdx)) openRevealCard(rIdx);
+          break;
+        }
+        case 'reveal-all': revealAllCards(); break;
+        case 'reveal-summary': {
+          var rsd = ui.draw;
+          if (!rsd || !rsd.batch) break;
+          if (rsd.step === 'promote') { rsd.promoSkip = true; break; }
+          if (!rsd.revealed) rsd.revealed = {};
+          /* 건너뛰고 요약으로 — 열지 않은 티켓은 공개 처리하고 결과 정리 화면으로 */
+          (rsd.results || []).forEach(function (r, i) { if (!rsd.revealed[i]) rsd.revealed[i] = true; });
+          rsd.promoReturn = null;
+          rsd.promoIdx = -1;
+          rsd.glowIdx = -1;
+          rsd.step = 'result';
+          renderDrawModal();
+          renderAll();
+          break;
+        }
         case 'multi-coupon': {
           if (!ui.draw || !ui.draw.batch) break;
           var mBoard = getBoard(ui.draw.boardId);
