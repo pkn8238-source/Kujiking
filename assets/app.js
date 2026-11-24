@@ -4307,7 +4307,8 @@
 
   /* 승격 대기 — 화면을 누르면(promoSkip) 남은 간격을 짧게 줄인다 */
   function promoWait(d, ms) {
-    var target = d.promoSkip ? Math.min(140, ms) : ms;
+    var scale = d.promoSlow > 1 ? d.promoSlow : 1;
+    var target = d.promoSkip ? Math.min(140, ms) : Math.round(ms * scale);
     var t = 0;
     return new Promise(function (resolve) {
       function tick() {
@@ -6840,14 +6841,16 @@
   (function () {
     var m = /[?&]promo=(C|B|A|LAST)/i.exec(location.search);
     if (!m) return;
-    var g = m[1].toUpperCase(), tries = 0;
+    var g = m[1].toUpperCase(), tries = 0, slow = 1;
+    var sm = /[?&]slow=([0-9.]+)/.exec(location.search);
+    if (sm) slow = Math.max(1, Math.min(6, parseFloat(sm[1]) || 1));
     var t = setInterval(function () {
       if (++tries > 120) { clearInterval(t); return; }
       if (!ui.ready || !state.boards || !state.boards.length) return;
       clearInterval(t);
       var board = state.boards[0];
       ui.draw = {
-        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false,
+        boardId: board.id, n: 1, step: 'promote', demo: true, revealing: false, promoStarted: false, promoSlow: slow,
         result: { grade: g, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
           remaining: 12, source: 'demo', demo: true }
       };
