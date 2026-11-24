@@ -2683,7 +2683,8 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .mrv-bg{display:flex;align-items:baseline;gap:1px;font-family:var(--font-display);font-size:20px;
   font-weight:900;line-height:1;color:var(--bc,var(--ink))}
 .mrv-bg i{font-style:normal;font-size:9px;letter-spacing:0}
-.mrv-bp{font-size:8.5px;font-weight:700;line-height:1.22;color:#5a5048;word-break:keep-all;
+.mrv-bp{width:100%;max-width:100%;text-align:center;font-size:8.5px;font-weight:700;line-height:1.22;
+  color:#5a5048;word-break:keep-all;overflow-wrap:break-word;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .mrv-card.is-epic .mrv-back{box-shadow:0 3px 0 var(--ink),0 0 0 3px rgba(255,209,30,.95),0 0 20px rgba(255,180,0,.55)}
 .mrv-card.is-glow .mrv-back{animation:mrvGlow 1.6s ease-in-out infinite alternate}
