@@ -2459,6 +2459,7 @@
     renderCouponCard(board);
     renderBoardStatus(board);
     renderTicketGrid(board);
+    renderMultiDraw(board);
     renderSalesPanel(board);
     renderPrizesPanel(board);
     renderBoardManual(board);
@@ -2596,6 +2597,76 @@
     if (summary) summary.textContent = fmt(board.tickets) + '장 중 ' + fmt(remaining(board)) + '장 남음 · 판매 ' + fmt(openedCount(board)) + '장';
     var sc = $('#salesCount');
     if (sc) sc.textContent = fmt(openedCount(board));
+  }
+
+  /* =========================================================
+     무작위 연뽑 (v3.9.0) — 5 · 10 · 15 · 20장
+     번호를 고르지 않고 남은 번호 중 무작위로 N개를 골라
+     한 장씩 차례로 뽑은 뒤 결과를 한 화면에 요약한다.
+     ========================================================= */
+  var MULTI_COUNTS = [5, 10, 15, 20];
+
+  function multiState(board) {
+    var user = me();
+    var price = Math.max(0, Number(board.price) || 0);
+    return {
+      left: remaining(board),
+      price: price,
+      mine: user ? couponsFor(board) : [],
+      have: user ? Number(user.points || 0) : 0,
+      user: user
+    };
+  }
+
+  function renderMultiDraw(board) {
+    var el = $('#multiDraw');
+    if (!el) return;
+    var ms = multiState(board);
+    if (board.status !== 'open' || ms.left <= 0) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+
+    var buttons = MULTI_COUNTS.map(function (n) {
+      var short = ms.left < n;
+      var canCoupon = ms.mine.length >= n;
+      var canPoints = ms.price > 0 && ms.have >= ms.price * n;
+      var state = short ? ('잔여 ' + fmt(ms.left) + '장')
+        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : (canPoints ? ('포인트 ' + fmt(ms.price * n) + 'P') : '체험 코드'));
+      return '<button class="md-btn' + (short ? ' is-off' : '') + '" type="button" data-action="multi-draw" data-count="' + n + '"' +
+        (short ? ' disabled aria-disabled="true"' : '') + '>' +
+        '<span class="md-n">' + n + '<em>연뽑</em></span>' +
+        '<span class="md-price">' + won(ms.price * n) + '</span>' +
+        '<span class="md-state">' + h(state) + '</span>' +
+      '</button>';
+    }).join('');
+
+    /* 5장도 남지 않았을 때: 남은 번호를 한 번에 뽑는 마지막 버튼 */
+    var restBtn = (ms.left < MULTI_COUNTS[0])
+      ? '<button class="md-btn md-rest" type="button" data-action="multi-draw" data-count="' + ms.left + '">' +
+          '<span class="md-n">' + ms.left + '<em>연뽑</em></span>' +
+          '<span class="md-price">' + won(ms.price * ms.left) + '</span>' +
+          '<span class="md-state">잔여 전체</span>' +
+        '</button>'
+      : '';
+
+    el.innerHTML = '<div class="md-head">' +
+        '<span class="md-dice" aria-hidden="true">🎲</span>' +
+        '<div class="md-copy"><b>무작위 연뽑</b>' +
+          '<p>번호를 고르지 않고 <b>남은 번호 중에서 무작위로</b> 뽑아요. 결과는 한 장씩 차례로 나옵니다.</p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="md-row">' + buttons + restBtn + '</div>' +
+      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 1장 전용이라 연뽑에는 체험 코드를 써 주세요.</p>';
+  }
+
+  function openMultiDraw(count) {
+    var board = getBoard(ui.boardId);
+    if (!board) return;
+    if (board.status !== 'open') { toast('종료된 판이에요', 'err'); return; }
+    var left = remaining(board);
+    if (left <= 0) { toast('이 판은 전량 소진되었어요', 'err'); return; }
+    var n = Math.min(Math.max(1, Number(count) || MULTI_COUNTS[0]), left);
+    ui.draw = { boardId: board.id, batch: true, count: n, step: 'source', busy: false, results: [], numbers: [], error: '' };
+    renderDrawModal();
   }
 
   function renderSalesPanel(board) {
@@ -2800,22 +2871,23 @@
     if (!d) return;
     var board = getBoard(d.boardId);
     if (!board) return;
-    var dark = d.step === 'seal' || d.step === 'promote' || (d.step === 'result' && isEpicGrade(d.result && d.result.grade));
+    var dark = d.step === 'seal' || d.step === 'promote' || (d.step === 'result' && !d.batch && isEpicGrade(d.result && d.result.grade));
     var html;
-    if (d.step === 'source') html = drawSourceHTML(board, d);
+    if (d.step === 'source') html = d.batch ? multiSourceHTML(board, d) : drawSourceHTML(board, d);
+    else if (d.step === 'drawing') html = multiProgressHTML(board, d);
     else if (d.step === 'peel') html = drawPeelHTML(board, d);
     else if (d.step === 'seal') html = drawSealHTML(board, d);
     else if (d.step === 'promote') html = drawPromoteHTML(board, d);
-    else html = drawResultHTML(board, d);
+    else html = d.batch ? batchResultHTML(board, d) : drawResultHTML(board, d);
     openModal(html, {
       keepFocus: d.step === 'result',
-      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote',
+      noAutofocus: d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing',
       dark: dark,
       dragLock: d.step === 'peel' || d.step === 'seal',
-      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote'
+      resetScroll: d.step === 'result' || d.step === 'seal' || d.step === 'peel' || d.step === 'promote' || d.step === 'drawing'
     });
     /* B상 · A상 · 라스트원은 결과가 터질 때 모달 전체가 흔들린다 */
-    if (d.step === 'result' && modalShell) {
+    if (d.step === 'result' && modalShell && !d.batch) {
       var hitLv = gradeLevel(d.result && d.result.grade);
       if (hitLv >= 2) {
         modalShell.style.setProperty('--quake', hitLv >= 3 ? '1.75' : '1');
@@ -2825,7 +2897,7 @@
       }
     }
     if (d.step === 'source') {
-      var input = $('#drawCodeInput');
+      var input = d.batch ? $('#multiCodeInput') : $('#drawCodeInput');
       if (input && ui.pendingCode) input.value = ui.pendingCode;
     } else if (d.step === 'peel') {
       bindPeel();
@@ -2902,6 +2974,211 @@
     '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요.</p>';
 
     return html;
+  }
+
+  /* ---------- 무작위 연뽑: 결제 수단 선택 ---------- */
+  function multiSourceHTML(board, d) {
+    var ms = multiState(board);
+    var n = d.count;
+    var need = ms.price * n;
+    var canCoupon = ms.mine.length >= n;
+    var canPoints = ms.price > 0 && ms.have >= need;
+    var html = '<h2 class="modal-title" id="modalTitle">무작위 ' + n + '연뽑</h2>' +
+      '<p class="modal-sub">' + h(board.title) + ' · 1장 ' + won(ms.price) + ' · <b>' + n + '장 ' + won(need) + '</b></p>' +
+      '<div class="md-how"><span class="md-how-dice" aria-hidden="true">🎲</span>' +
+        '<p>남은 번호 <b>' + fmt(ms.left) + '장</b> 중 무작위로 <b>' + n + '개</b> 번호를 골라 한 장씩 차례로 개봉합니다. 결과는 마지막에 한 번에 정리해 드려요.</p></div>';
+
+    /* 보유 뽑기권 */
+    html += '<div class="pay-option' + (canCoupon ? ' is-primary' : '') + '">' +
+      '<div class="pay-head"><span class="pay-badge">보유 뽑기권</span><b>' + fmt(ms.mine.length) + '장 보유</b></div>' +
+      '<p class="pay-desc">' + (canCoupon
+        ? '이 판에 쓸 수 있는 뽑기권 <b>' + n + '장</b>을 차례로 사용합니다.'
+        : '<b class="pay-gap">' + fmt(Math.max(0, n - ms.mine.length)) + '장</b> 부족해요. (필요 ' + n + '장 · 보유 ' + fmt(ms.mine.length) + '장)') + '</p>' +
+      (canCoupon
+        ? '<button class="btn btn-primary btn-block" data-action="multi-coupon">쿠폰 ' + n + '장으로 뽑기</button>'
+        : (ms.user
+          ? '<button class="btn btn-outline btn-block btn-sm" data-action="go-claim">구매확인 요청하기</button>'
+          : '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>')) +
+    '</div>';
+
+    /* 굿즈 포인트 */
+    if (ms.user) {
+      html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
+        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(need) + 'P · 보유: ' + fmt(ms.have) + 'P)</em></b></div>' +
+        '<p class="pay-desc">' + (canPoints
+          ? '<b>' + n + '장</b>을 뽑으면 <b>' + fmt(need) + 'P</b>가 차감됩니다.'
+          : '<b class="pay-gap">' + fmt(Math.max(0, need - ms.have)) + 'P</b> 부족해요. 내 보관함에서 당첨 상품을 포인트로 바꾸면 바로 뽑을 수 있어요.') + '</p>' +
+        (canPoints
+          ? '<button class="btn btn-gold btn-block" data-action="multi-points">포인트로 ' + n + '장 뽑기 (' + fmt(need) + 'P)</button>'
+          : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>') +
+      '</div>';
+    } else {
+      html += '<div class="pay-option is-points is-off">' +
+        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(need) + 'P)</em></b></div>' +
+        '<p class="pay-desc">로그인하면 보유 포인트로 <b>' + n + '장</b>을 한 번에 뽑을 수 있어요.</p>' +
+        '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>' +
+      '</div>';
+    }
+
+    /* 교환 코드 — 1회용 코드는 1장 전용, 체험 코드는 연뽑 가능 */
+    html += '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+      '<form class="code-form" data-form="multi-code" novalidate>' +
+        '<label class="sr-only" for="multiCodeInput">교환 코드</label>' +
+        '<input id="multiCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
+        '<p class="field-error" data-role="code-error" role="alert"></p>' +
+        '<button class="btn btn-outline" type="submit">코드로 ' + n + '장 뽑기</button>' +
+      '</form>' +
+      '<p class="md-code-note">교환 코드는 <b>1장 전용</b>이에요. ' + n + '장 연뽑은 <b>보유 쿠폰 · 포인트 · 체험 코드</b>로 할 수 있어요.</p>' +
+      '<div class="demo-box">' +
+        '<p><strong>체험용 무료 코드</strong>' + h(state.settings.demoCode) + ' — 체험 코드는 연뽑에도 쓸 수 있어요.</p>' +
+        '<button class="btn btn-outline btn-sm" type="button" data-action="fill-demo-code">' + h(state.settings.demoCode) + ' 넣기</button>' +
+      '</div>' +
+      '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요. 뽑을 번호는 무작위로 정해지며 뽑기 직전에 확정됩니다.</p>';
+
+    return html;
+  }
+
+  /* ---------- 무작위 연뽑: 한 장씩 뽑는 진행 화면 ---------- */
+  function multiProgressRows(d) {
+    var rows = '';
+    for (var i = 0; i < d.count; i++) {
+      var r = d.results[i];
+      var no = d.numbers[i];
+      if (r) {
+        var g = String(r.grade || '').toUpperCase();
+        var gk = g === 'LAST' ? 'last' : String(r.grade || '').toLowerCase();
+        rows += '<li class="mdp-row is-done">' +
+          '<span class="mdp-no">#' + pad2(r.n) + '</span>' +
+          '<span class="mdp-grade grade-' + h(gk) + '">' + h(g === 'LAST' ? 'LAST' : r.grade + '상') + '</span>' +
+          '<span class="mdp-label">' + h(r.tierLabel || '') + '</span>' +
+        '</li>';
+      } else if (i === d.results.length && !d.error) {
+        rows += '<li class="mdp-row is-now">' +
+          '<span class="mdp-spin" aria-hidden="true">🎲</span>' +
+          '<span class="mdp-wait">번호를 뽑는 중…</span>' +
+        '</li>';
+      } else {
+        rows += '<li class="mdp-row is-wait">' +
+          '<span class="mdp-no">#' + pad2(no) + '</span>' +
+          '<span class="mdp-wait">대기</span>' +
+        '</li>';
+      }
+    }
+    return rows;
+  }
+
+  function multiProgressHTML(board, d) {
+    var pct = d.count ? Math.round(d.results.length / d.count * 100) : 0;
+    return '<div class="mdp-stage">' +
+      '<p class="mdp-kicker">MULTI DRAW · 무작위 ' + d.count + '연뽑</p>' +
+      '<h2 class="modal-title" id="modalTitle" style="padding-right:0">번호를 뽑고 있어요</h2>' +
+      '<p class="modal-sub">남은 번호 중 무작위로 고른 번호를 한 장씩 개봉합니다. 잠시만 기다려 주세요.</p>' +
+      '<div class="mdp-bar" aria-hidden="true"><i id="mdpBarFill" style="width:' + pct + '%"></i></div>' +
+      '<p class="mdp-count"><b id="mdpDone">' + d.results.length + '</b> / ' + d.count + '장</p>' +
+      '<ul class="mdp-list" id="mdpList">' + multiProgressRows(d) + '</ul>' +
+      (d.error ? '<p class="mdp-err" id="mdpErr">' + h(d.error) + '</p>' : '') +
+    '</div>';
+  }
+
+  /* 진행 화면은 모달을 다시 그리지 않고 목록만 갱신한다 (스크롤·초점이 튀지 않게) */
+  function updateMultiProgress() {
+    var d = ui.draw;
+    if (!d || d.step !== 'drawing') return;
+    var list = $('#mdpList');
+    if (list) list.innerHTML = multiProgressRows(d);
+    var done = $('#mdpDone');
+    if (done) done.textContent = String(d.results.length);
+    var bar = $('#mdpBarFill');
+    if (bar) bar.style.width = Math.round(d.results.length / Math.max(1, d.count) * 100) + '%';
+    if (d.error) {
+      var err = $('#mdpErr');
+      if (err) err.textContent = d.error;
+      else if (list) list.insertAdjacentHTML('afterend', '<p class="mdp-err" id="mdpErr">' + h(d.error) + '</p>');
+    }
+  }
+
+  /* ---------- 무작위 연뽑: 결과 요약 ---------- */
+  function batchResultHTML(board, d) {
+    var rows = (d.results || []).slice();
+    var physical = rows.filter(function (r) { return !isPointPrize(r); });
+    var pointRows = rows.filter(isPointPrize);
+    var ptsTotal = pointRows.reduce(function (s, r) { return s + (Number(r.points) || 0); }, 0);
+    var lastWin = rows.filter(function (r) { return r.isLast; })[0];
+    var missing = Math.max(0, (d.count || rows.length) - rows.length);
+    var pay = d.pay || {};
+    var price = Math.max(0, Number(board.price) || 0);
+    var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt(price * rows.length) + 'P')
+      : (pay.code ? '체험 코드' : ('뽑기권 ' + rows.length + '장'));
+
+    /* 최고 등급 실물 */
+    var bestPhys = physical[0] || null;
+    physical.forEach(function (r) { if (gradeLevel(r.grade) > gradeLevel(bestPhys.grade)) bestPhys = r; });
+    var bestLv = bestPhys ? gradeLevel(bestPhys.grade) : 0;
+    var heroImg = bestPhys ? (bestPhys.tierImage || (tierOf(board, bestPhys.grade) || {}).image || '') : '';
+    var heroLabel = bestPhys ? (bestPhys.tierLabel || (tierOf(board, bestPhys.grade) || {}).label || '') : '';
+    var heroGrade = bestPhys ? (String(bestPhys.grade).toUpperCase() === 'LAST' ? '라스트원' : bestPhys.grade + '상') : '';
+
+    var cards = rows.map(function (r, i) {
+      var g = String(r.grade || '').toUpperCase();
+      var gk = g === 'LAST' ? 'last' : String(r.grade || '').toLowerCase();
+      return '<li class="bcard grade-' + h(gk) + '" style="--i:' + i + '">' +
+        '<span class="bcard-n">#' + r.n + '</span>' +
+        '<span class="bcard-g">' + h(g === 'LAST' ? 'LAST' : r.grade + '상') + '</span>' +
+        (Number(r.points) > 0 ? '<span class="bcard-p">+' + fmt(r.points) + 'P</span>' : '') +
+      '</li>';
+    }).join('');
+
+    var others = physical.filter(function (r) { return r !== bestPhys; });
+    var otherHTML = others.length
+      ? '<ul class="batch-prizes">' + others.map(function (r) {
+          var t = tierOf(board, r.grade) || {};
+          var img = r.tierImage || t.image || '';
+          return '<li class="bp-row">' +
+            (img ? '<span class="bp-thumb"><img src="' + h(img) + '" alt="" loading="lazy"></span>' : '<span class="bp-thumb is-empty">' + h(r.grade) + '</span>') +
+            '<span class="bp-body"><b>' + h(r.grade + '상') + '</b><span>' + h(r.tierLabel || t.label || '') + '</span></span>' +
+            '<span class="bp-n">#' + r.n + '</span>' +
+          '</li>';
+        }).join('') + '</ul>'
+      : '';
+
+    var hero = bestPhys
+      ? '<div class="batch-best' + (bestLv >= 1 ? ' is-epic lv' + bestLv : '') + ' grade-' + h(String(bestPhys.grade || '').toLowerCase()) + '">' +
+          '<span class="bb-tag">' + (bestLv >= 1 ? '최고 등급' : '최고 상품') + '</span>' +
+          '<span class="bb-media">' +
+            (heroImg ? '<img src="' + h(heroImg) + '" alt="' + h(heroLabel) + '">' : '<b>' + h(String(bestPhys.grade).toUpperCase() === 'LAST' ? 'L' : bestPhys.grade) + '</b>') +
+          '</span>' +
+          '<span class="bb-body">' +
+            '<b class="bb-grade">' + h(heroGrade) + '</b>' +
+            '<span class="bb-label">' + h(heroLabel) + '</span>' +
+            '<span class="bb-hold">' + (me() ? '내 보관함에 담겼어요' : '로그인하면 보관함에 담기고 배송 신청까지 됩니다') + '</span>' +
+          '</span>' +
+        '</div>'
+      : '';
+
+    var ptsBox = ptsTotal > 0
+      ? '<div class="batch-pts">' +
+          '<span class="bp-badge">P상 ' + fmt(pointRows.length) + '장</span>' +
+          '<b>+' + fmt(ptsTotal) + 'P</b><span class="bp-sub">적립됐어요</span>' +
+        '</div>'
+      : '';
+
+    return '<div class="batch-wrap">' +
+      '<p class="batch-kicker">MULTI DRAW · 무작위 ' + (d.count || rows.length) + '연뽑</p>' +
+      '<h2 class="batch-title" id="modalTitle">' + (rows.length > 1 ? rows.length + '장 뽑기 완료!' : '1장 뽑기 완료!') + '</h2>' +
+      '<p class="batch-sub">' + h(board.title) + ' · ' + h(payLabel) + ' 사용</p>' +
+      hero + otherHTML + ptsBox +
+      (lastWin ? '<div class="batch-last">👑 <b>라스트원상</b> 획득! 판의 마지막 1장을 뽑았어요.</div>' : '') +
+      '<div class="batch-all"><span class="batch-all-head">뽑은 번호 ' + rows.length + '장</span>' +
+        '<ul class="batch-cards">' + cards + '</ul></div>' +
+      (missing ? '<p class="batch-warn">⚠ ' + missing + '장은 다른 분이 먼저 뽑아 진행하지 못했어요. 이미 뽑힌 ' + rows.length + '장의 결과는 그대로 보관함에 담겼습니다.</p>' : '') +
+      '<p class="remaining-line">남은 번호 <b>' + fmt(remaining(board)) + '</b>장' + (remaining(board) === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
+      '<div class="modal-actions">' +
+        (me() && physical.length ? '<button class="btn btn-outline" data-action="go-my">내 보관함 보기</button>' : '') +
+        '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
+      '</div>' +
+    '</div>';
   }
 
   /* ---------- 개봉 효과음: 실제 PCM WAV(<audio>) 재생 · 웹오디오는 폴백 ----------
@@ -3332,6 +3609,7 @@
       else waFanfare(key === 'fanA' ? 3 : key === 'fanB' ? 2 : key === 'fanC' ? 1 : 0);
     }
     function buzz(pattern) {
+      /* 안드로이드 크롬·삼성 인터넷만 지원. iOS 사파리는 애플 정책상 navigator.vibrate 가 없어 조용히 무시된다 */
       try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
     }
 
@@ -3604,7 +3882,7 @@
       if (isMuted()) return;
       var lv = Number(level) || 0;
       elPlay('snap', 1);
-      buzz(lv >= 2 ? [0, 26, 30, 18, 44, 36] : [0, 18, 26, 16]);
+      buzz(lv >= 2 ? [0, 22, 26, 16, 40, 30] : [18]);
     }
     function sealCharge() {
       if (isMuted()) return;
@@ -3612,7 +3890,7 @@
       if (now - lastSeal < 700) return;
       lastSeal = now;
       elPlay('seal', 1);
-      buzz([0, 40, 60, 32]);
+      buzz([35, 40, 60]);
     }
     /* 승격 연출 1막(등급 확인 첫 비트) / 1차·2차 승격 */
     function cBeat() {
@@ -3624,13 +3902,13 @@
       if (isMuted()) return;
       var s = Number(step) >= 2 ? 2 : 1;
       elPlay(s >= 2 ? 'promote2' : 'promote1', 1);
-      buzz(s >= 2 ? [0, 26, 34, 22, 46, 30, 70, 44] : [0, 22, 30, 18, 38, 26]);
+      buzz(s >= 2 ? [50, 40, 70, 40, 110] : [35, 40, 60]);
     }
     function fanfare(level) {
       if (isMuted()) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
       elPlay(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', 1);
-      buzz(lv >= 3 ? [0, 30, 30, 24, 24, 20, 60, 40] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : 12);
+      buzz(lv >= 3 ? [50, 40, 70, 40, 110] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : [18]);
     }
     /* 소리 켜기 버튼: 바로 들리는 테스트음 */
     function test(withFanfare) {
@@ -3786,6 +4064,124 @@
       toast(errMsg(e), 'err');
       try { await Backend.refreshData(); renderAll(); } catch (e2) {}
     }
+  }
+
+  /* ---------- 무작위 연뽑: 실행 ---------- */
+  /* 남은 번호 중에서 N개를 무작위로 고른다 (이미 팔린 번호 제외) */
+  function randomTicketNumbers(board, count) {
+    var sold = {};
+    (board.opens || []).forEach(function (o) { sold[o.n] = true; });
+    var pool = [];
+    for (var n = 1; n <= board.tickets; n++) if (!sold[n]) pool.push(n);
+    for (var i = pool.length - 1; i > 0; i--) {
+      var j = randInt(i + 1);
+      var t = pool[i]; pool[i] = pool[j]; pool[j] = t;
+    }
+    return pool.slice(0, Math.max(0, Math.min(count, pool.length)));
+  }
+
+  function startMultiDraw(pay) {
+    var d = ui.draw;
+    if (!d || !d.batch) return;
+    var board = getBoard(d.boardId);
+    if (!board) return;
+    kujiSound.unlock();
+    pay = pay || {};
+    d.pay = {
+      couponIds: pay.couponIds ? pay.couponIds.slice(0, d.count) : null,
+      code: pay.code || null,
+      usePoints: !!pay.usePoints,
+      demo: !!pay.demo
+    };
+    d.demo = !!pay.demo;
+    d.numbers = randomTicketNumbers(board, d.count);
+    d.count = d.numbers.length;           /* 남은 번호가 모자라면 그만큼만 */
+    d.results = [];
+    d.error = '';
+    d.step = 'drawing';
+    d.busy = true;
+    renderDrawModal();
+    if (!d.count) {
+      d.step = 'source';
+      renderDrawModal();
+      toast('남은 번호가 없어 뽑을 수 없어요', 'err');
+      return;
+    }
+    runMultiDraw();
+  }
+
+  /* 한 장씩 차례로 뽑는다. 중간에 실패하면 거기서 멈추고 성공한 결과는 그대로 남긴다 */
+  async function runMultiDraw() {
+    var d = ui.draw;
+    if (!d || d.step !== 'drawing') return;
+    var board = getBoard(d.boardId);
+    if (!board) return;
+    var pay = d.pay || {};
+    for (var i = d.results.length; i < d.numbers.length; i++) {
+      if (!ui.draw || ui.draw !== d || d.step !== 'drawing') return;  /* 창을 닫으면 중단 */
+      var no = d.numbers[i];
+      try {
+        var res = await Backend.draw({
+          boardId: board.id, n: no,
+          couponId: pay.couponIds ? (pay.couponIds[i] || null) : null,
+          code: pay.code || null,
+          usePoints: !!pay.usePoints
+        });
+        var tuned = tierOf(board, res.grade);
+        if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
+        res.n = no;
+        d.results.push(res);
+        syncPointsBalance(res);
+      } catch (e) {
+        d.error = errMsg(e);
+        break;
+      }
+      updateMultiProgress();
+      await waitMs(140);
+    }
+    d.busy = false;
+    await finishMultiDraw();
+  }
+
+  async function finishMultiDraw() {
+    var d = ui.draw;
+    if (!d || !d.batch) return;
+    try { await Backend.refreshData(); } catch (e) {}
+    renderAll();
+    /* 창이 닫혔거나 다른 화면으로 이동한 경우: 결과는 이미 서버·보관함에 기록됐다 */
+    if (!ui.draw || ui.draw !== d) {
+      if (d.results.length) toast('무작위 연뽑 완료 · ' + d.results.length + '장', 'ok');
+      return;
+    }
+    if (!d.results.length) {
+      d.step = 'source';
+      renderDrawModal();
+      toast(d.error || '뽑기에 실패했어요', 'err');
+      return;
+    }
+
+    /* 봉인·승격 연출은 이번 연뽑에서 가장 높은 등급으로 보여 준다 */
+    var best = d.results[0];
+    d.results.forEach(function (r) { if (gradeLevel(r.grade) > gradeLevel(best.grade)) best = r; });
+    d.best = best;
+    d.bestN = best.n;
+    d.result = best;
+    d.n = best.n;
+
+    if (isSealGrade(best.grade)) {
+      d.step = 'seal';
+      d.revealing = false;
+      renderDrawModal();
+      renderAll();
+      kujiSound.sealCharge();
+      return;
+    }
+    d.step = 'result';
+    d.revealing = false;
+    kujiSound.snap(0);          /* 전부 D~L·P상: 짧고 경쾌한 다중 개봉음 */
+    renderDrawModal();
+    renderAll();
+    toast(d.error ? (d.count + '연뽑 · ' + d.results.length + '장만 완료') : (d.count + '연뽑 완료!'), d.error ? 'err' : 'ok');
   }
 
   function peelColor(grade) {
@@ -4062,12 +4458,19 @@
   function drawSealHTML(board, d) {
     var no = ('00' + d.n).slice(-3);
     var sealLv = gradeLevel(d.result && d.result.grade) >= 3 ? 3 : 2;
+    var batchKicker = d.batch ? ((d.count || 1) + '장 중 상위상 감지') : '상위상 기운 감지';
+    var sealSub = d.batch
+      ? '이번 ' + (d.count || 1) + '장 중 <b>가장 높은 등급</b>이 황금 봉인 속에 있어요. 봉인을 찢어야 진짜 등급이 나옵니다.'
+      : '종이 속에서 <b>황금 봉인</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.';
+    var sealMeta = d.batch
+      ? h(board.title) + ' · #' + d.n + '번 포함 ' + (d.count || 1) + '장 · 봉인 개봉 전에는 등급이 공개되지 않아요'
+      : h(board.title) + ' · ' + d.n + '번 · 봉인 개봉 전에는 등급이 공개되지 않아요';
     return '<div class="seal-stage seal-lv' + sealLv + '" id="sealStage">' +
       '<div class="seal-banner">' +
-        '<p class="seal-kicker"><span class="seal-bolt">⚡</span> 상위상 기운 감지</p>' +
+        '<p class="seal-kicker"><span class="seal-bolt">⚡</span> ' + h(batchKicker) + '</p>' +
         '<h2 class="modal-title seal-title" id="modalTitle">C상 이상 확정!</h2>' +
       '</div>' +
-      '<p class="modal-sub">종이 속에서 <b>황금 봉인</b>이 나왔어요. 봉인을 찢어야 진짜 등급이 나옵니다.</p>' +
+      '<p class="modal-sub">' + sealSub + '</p>' +
       '<div class="seal-card" id="sealCard">' +
         '<div class="seal-halo" aria-hidden="true"></div>' +
         '<div class="seal-box" id="sealBox" role="button" tabindex="0" aria-label="황금 봉인을 아래로 찢어 열기">' +
@@ -4086,7 +4489,7 @@
         '<span class="seal-meter-text" id="sealMeterText">아래로 찢어서 봉인을 깨세요</span>' +
       '</div>' +
       '<button class="seal-fallback" type="button" data-action="seal-snap">드래그가 안 되면 바로 열기</button>' +
-      '<p class="result-meta">' + (d.demo ? '체험 모드 · ' : '') + h(board.title) + ' · ' + d.n + '번 · 봉인 개봉 전에는 등급이 공개되지 않아요</p>' +
+      '<p class="result-meta">' + (d.demo ? '체험 모드 · ' : '') + sealMeta + '</p>' +
     '</div>';
   }
 
@@ -4301,7 +4704,7 @@
         '<div class="promo-badge is-pop" id="promoBadge" data-mood="c"><b id="promoLetter">C</b><i id="promoUnit">상</i></div>' +
       '</div>' +
       '<p class="promo-impact" id="promoImpact" role="status" aria-live="polite"></p>' +
-      '<p class="promo-foot">화면을 누르면 빨리 볼 수 있어요 · ' + h(board.title) + ' ' + no + '번' + (d.demo ? ' · 체험 모드' : '') + '</p>' +
+      '<p class="promo-foot">화면을 누르면 빨리 볼 수 있어요 · ' + h(board.title) + ' ' + (d.batch ? ('무작위 ' + (d.count || 1) + '연뽑') : (no + '번')) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
   }
 
@@ -4334,6 +4737,7 @@
     if (u) u.textContent = unit;
     if (b) {
       b.setAttribute('data-mood', mood);
+      b.classList.toggle('is-last', String(unit || '').toUpperCase() === 'LAST');
       b.classList.remove('is-pop');
       void b.offsetWidth;
       b.classList.add('is-pop');
@@ -4379,10 +4783,11 @@
     }
   }
 
-  function promoImpact(text, mood) {
+  function promoImpact(icon, text, mood) {
     var el = document.getElementById('promoImpact');
     if (!el) return;
-    el.textContent = text;
+    el.innerHTML = (icon ? '<span class="pi-icon" aria-hidden="true">' + icon + '</span>' : '') +
+      '<span class="pi-txt">' + h(text) + '</span>';
     el.setAttribute('data-mood', mood);
     el.classList.remove('is-on');
     void el.offsetWidth;
@@ -4417,6 +4822,10 @@
     d.step = 'result';
     renderDrawModal();
     renderAll();
+    if (d.batch) {
+      toast(d.error ? (d.count + '연뽑 · ' + d.results.length + '장만 완료') : (d.count + '연뽑 완료!'), d.error ? 'err' : 'ok');
+      return;
+    }
     var g = String((d.result && d.result.grade) || '').toUpperCase();
     toast(d.result && d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + (g === 'LAST' ? '라스트원' : (d.result.grade + '상')), 'ok');
   }
@@ -4437,7 +4846,7 @@
 
     if (lv <= 1) {
       if (!(await promoWait(d, 240)) || !alive()) return;
-      promoImpact('✨ C상!', 'c');
+      promoImpact('✨', 'C상!', 'c');
       promoConfetti('promoFx1', 20, ['#a99cff', '#5b8bff', '#8ee3ff', '#ffffff'], { drop: 360, drift: 170, spread: .5 });
       kujiSound.fanfare(1);
       if (!(await promoWait(d, 1250)) || !alive()) return;
@@ -4451,7 +4860,7 @@
     kujiSound.promote(1);
     promoFlash('zap');
     promoBolts(lv >= 3 ? 5 : 4);
-    promoImpact('⚡ 승격! B상!', 'b');
+    promoImpact('⚡', '승격! B상!', 'b');
     if (!(await promoWait(d, lv >= 3 ? 300 : 380)) || !alive()) return;
     promoBadge('B', '상', 'b');
     promoConfetti('promoFx1', 24, ['#ff8a3d', '#ff2d20', '#ffb703', '#fff3c4', '#ffffff'], { drop: 350, drift: 170, spread: .5 });
@@ -4471,7 +4880,7 @@
     kujiSound.promote(2);
     promoFlash('mega');
     promoBolts(10);
-    promoImpact(fin.unit === 'LAST' ? '🔥 대역전!! 라스트원!' : '🔥 대역전!! A상!', 'a');
+    promoImpact('🔥', fin.unit === 'LAST' ? '대역전!! 라스트원!' : '대역전!! A상!', 'a');
     if (!(await promoWait(d, 340)) || !alive()) return;
     promoClearFx();
     promoBadge(fin.letter, fin.unit, 'a');
@@ -6026,7 +6435,7 @@
           break;
         }
         case 'fill-demo-code': {
-          var input = $('#drawCodeInput') || $('#quickCodeInput');
+          var input = $('#multiCodeInput') || $('#drawCodeInput') || $('#quickCodeInput');
           if (input) { input.value = state.settings.demoCode; input.focus(); }
           break;
         }
@@ -6037,6 +6446,20 @@
           break;
         }
         case 'pick-ticket': pickTicket(n); break;
+        case 'multi-draw': openMultiDraw(Number(el.getAttribute('data-count')) || MULTI_COUNTS[0]); break;
+        case 'multi-coupon': {
+          if (!ui.draw || !ui.draw.batch) break;
+          var mBoard = getBoard(ui.draw.boardId);
+          var mCoupons = mBoard ? couponsFor(mBoard) : [];
+          if (mCoupons.length < ui.draw.count) { toast('뽑기권이 부족해요 (필요 ' + ui.draw.count + '장)', 'err'); break; }
+          startMultiDraw({ couponIds: mCoupons.slice(0, ui.draw.count).map(function (c) { return c.id; }) });
+          break;
+        }
+        case 'multi-points': {
+          if (!ui.draw || !ui.draw.batch) break;
+          startMultiDraw({ usePoints: true });
+          break;
+        }
         case 'zoom-tier': showTierZoom(el.getAttribute('data-grade')); break;
         case 'zoom-last': showTierZoom('LAST'); break;
         case 'ticket-info': showTicketInfo(n); break;
@@ -6215,6 +6638,23 @@
           }
         }
         enterPeel({ code: raw, demo: isDemo });
+        return;
+      }
+
+      if (type === 'multi-code') {
+        var md = ui.draw;
+        if (!md || !md.batch) return;
+        var mBoard2 = getBoard(md.boardId);
+        if (!mBoard2) return;
+        var mErr = form.querySelector('[data-role="code-error"]');
+        var mRaw = fieldValue(form, 'code');
+        var mKey = normalizeCode(mRaw);
+        if (!mKey) { if (mErr) mErr.textContent = '교환 코드를 입력해 주세요.'; return; }
+        if (mKey !== normalizeCode(state.settings.demoCode)) {
+          if (mErr) mErr.textContent = '교환 코드는 1장 전용이에요. ' + md.count + '장 연뽑은 보유 쿠폰·포인트·체험 코드로 할 수 있어요.';
+          return;
+        }
+        startMultiDraw({ code: mRaw, demo: true });
         return;
       }
 
