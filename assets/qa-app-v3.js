@@ -2687,13 +2687,8 @@
     var ctx = null, master = null, noiseBuf = null, running = false;
     var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
 
-    /* iOS 17+ 사파리: 무음 스위치가 켜져 있어도 소리가 나도록 오디오 세션을 'playback' 으로 */
-    function markPlayback() {
-      try {
-        var s = window.navigator && window.navigator.audioSession;
-        if (s && s.type !== 'playback') s.type = 'playback';
-      } catch (e) {}
-    }
+    /* iOS 사파리에서 아이폰 무음 스위치를 무시하게 만드는 audioSession='playback' 은
+       쓰지 않는다. 무음 모드에서는 사이트도 조용해야 하므로 세션 타입을 건드리지 않는다. */
     function isMuted() {
       if (muted === null) {
         try { muted = window.localStorage.getItem('kujiking.sound') === 'off'; } catch (e) { muted = false; }
@@ -2961,7 +2956,8 @@
       });
     }
     /* 첫 제스처에서 모든 <audio> 요소를 무음(muted)으로 한 번 재생해 잠금을 푼다.
-       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다. */
+       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다.
+       이때 소리가 새지 않도록 muted 와 volume 0 을 함께 건다. */
     function prime() {
       if (primed) return;
       var list = [], k, i;
@@ -2980,6 +2976,7 @@
       list.forEach(function (el) {
         try {
           el.muted = true;
+          try { el.volume = 0; } catch (ev) {}
           try { el.pause(); } catch (e) {}
           try { el.currentTime = 0; } catch (e) {}
           var p = el.play();
@@ -3042,7 +3039,6 @@
 
     /* ================= 웹오디오 폴백(3.4배 부스트) ================= */
     function makeCtx() {
-      markPlayback();
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
       if (!ctx) {
@@ -3076,7 +3072,6 @@
       setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 480);
     }
     function unlock() {
-      markPlayback();
       wakeCtx();
       prime();
     }
@@ -3282,15 +3277,13 @@
       if (withFanfare) setTimeout(function () { if (!isMuted()) elPlay('fanC', 1); }, 430);
     }
 
-    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께) */
+    /* 첫 제스처에서 오디오 잠금 해제 (iOS 는 pointerdown 만으로 부족할 때가 있어 click·touchend 도 함께)
+       단, 방문 직후 화면 아무 곳이나 누를 때 소리가 나면 안 되므로 문서 전체가 아니라
+       실제 뽑기·찢기 동작이 시작되는 지점(enterPeel · peelSnap · sealSnap)에서만 부른다. */
     try {
-      ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'].forEach(function (ev) {
-        document.addEventListener(ev, unlock, { capture: true, passive: true });
-      });
       document.addEventListener('visibilitychange', function () {
-        if (!document.hidden) { markPlayback(); if (ctx && ctx.state === 'running') running = true; }
+        if (!document.hidden && ctx && ctx.state === 'running') running = true;
       }, { passive: true });
-      markPlayback();
     } catch (e) {}
 
     /* 시작할 때 한 번 합성 → blob URL 생성 → <audio> 요소 준비 */
@@ -3381,6 +3374,8 @@
   function enterPeel(opts) {
     var d = ui.draw;
     if (!d) return;
+    /* 실제 뽑기 동작이 시작되는 사용자 제스처에서만 효과음 잠금을 푼다 */
+    kujiSound.unlock();
     opts = opts || {};
     ui.draw = {
       boardId: d.boardId, n: d.n, step: 'peel',
@@ -3632,6 +3627,7 @@
   async function peelSnap() {
     var d = ui.draw;
     if (!d || d.step !== 'peel' || d.revealing) return;
+    kujiSound.unlock();
     d.revealing = true;
     var card = $('#peelCard'), flap = $('#peelFlap');
     if (card) {
@@ -3879,6 +3875,7 @@
   async function sealSnap() {
     var d = ui.draw;
     if (!d || d.step !== 'seal' || d.revealing) return;
+    kujiSound.unlock();
     d.revealing = true;
     if (sealDrag && sealDrag.raf) { cancelAnimationFrame(sealDrag.raf); sealDrag.raf = 0; }
     var box = $('#sealBox');
