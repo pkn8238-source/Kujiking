@@ -4307,8 +4307,7 @@
 
   /* 승격 대기 — 화면을 누르면(promoSkip) 남은 간격을 짧게 줄인다 */
   function promoWait(d, ms) {
-    var scale = d.promoSlow > 1 ? d.promoSlow : 1;
-    var target = d.promoSkip ? Math.min(140, ms) : Math.round(ms * scale);
+    var target = d.promoSkip ? Math.min(140, ms) : ms;
     var t = 0;
     return new Promise(function (resolve) {
       function tick() {
@@ -6836,41 +6835,6 @@
     renderAll();
     route();
   }
-
-  /* ── QA 전용 임시 훅 (검증 후 제거): ?promo=C|B|A|LAST · __promoReplay(grade, slow) ── */
-  (function () {
-    function qaData(grade, slow) {
-      return {
-        boardId: state.boards[0].id, n: 1, demo: true, revealing: false, promoStarted: false,
-        promoSlow: Math.max(1, Math.min(8, Number(slow) || 1)),
-        result: { grade: grade, tierLabel: 'QA 미리보기', tierDesc: '', points: 0, itemStatus: '보관중',
-          remaining: 12, source: 'demo', demo: true }
-      };
-    }
-    function qaStart(grade, slow) {
-      if (!ui.ready || !state.boards || !state.boards.length) return false;
-      ui.draw = Object.assign(qaData(grade, slow), { step: 'promote' });
-      renderDrawModal();
-      return true;
-    }
-    function qaSeal(grade, slow) {
-      if (!ui.ready || !state.boards || !state.boards.length) return false;
-      ui.draw = Object.assign(qaData(grade, slow), { step: 'seal', ready: true });
-      renderDrawModal();
-      return true;
-    }
-    window.__promoReplay = qaStart;
-    window.__promoSeal = qaSeal;
-    var m = /[?&]promo=(C|B|A|LAST)/i.exec(location.search);
-    if (!m) return;
-    var g = m[1].toUpperCase(), tries = 0, slow = 1;
-    var sm = /[?&]slow=([0-9.]+)/.exec(location.search);
-    if (sm) slow = Math.max(1, Math.min(8, parseFloat(sm[1]) || 1));
-    var t = setInterval(function () {
-      if (++tries > 120) { clearInterval(t); return; }
-      if (qaStart(g, slow)) clearInterval(t);
-    }, 100);
-  })();
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
