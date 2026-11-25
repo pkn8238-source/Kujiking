@@ -6519,6 +6519,17 @@
         syncPointsBalance(res);
       } catch (e) {
         d.error = errMsg(e);
+        if (cid && /이미 사용|사용할 수 없는 쿠폰/.test(d.error)) {
+          /* 이 뽑기권은 서버에서 이미 '사용'으로 남아 있던 것 — 되돌리면 같은 뽑기권이
+             계속 다시 나오므로 확정하고, 못 쓴 뒤쪽 뽑기권만 되돌린 뒤 목록을 새로 받는다 */
+          settleCouponsPending([cid]);
+          if (pay.couponIds) {
+            rollbackCouponsPending(pay.couponIds.slice(i + 1));
+            pay.couponIds = pay.couponIds.slice(0, i + 1);
+          }
+          try { await Backend.refreshData(); } catch (e5) {}
+          break;
+        }
         /* 못 쓴 쿠폰(현재·남은 것)은 다시 사용 가능으로 되돌린다 */
         rollbackCouponsPending(pay.couponIds ? pay.couponIds.slice(i) : []);
         break;
