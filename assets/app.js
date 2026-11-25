@@ -85,7 +85,9 @@
     winnersBoardId: 'all',
     draw: null,
     pendingCode: '',
+    pendingBulkCode: null,   /* N장 코드 — 로그인 뒤 자동 지급 대기 */
     lastGen: null,
+    genQty: 1,               /* 관리자: 코드 1개당 뽑기권 장수 */
     editingBoardId: null,
     authTab: 'login',
     memberQuery: '',
@@ -120,7 +122,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.4';
+  var COVER_VER = '4.2.5';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -1636,10 +1638,14 @@
         row.phone = d.profiles ? d.profiles.phone : '';
         return row;
       });
-      var codeRes = await sb.from('exchange_codes').select('code,board_id,created_at,used_at,used_n').order('created_at', { ascending: false }).limit(500);
+      var codeRes = await sb.from('exchange_codes').select('code,board_id,created_at,used_at,used_n,qty').order('created_at', { ascending: false }).limit(500);
+      /* qty 컬럼이 아직 없는 DB(마이그레이션 전)에서도 코드 목록이 사라지지 않도록 한 번 더 */
+      if (codeRes.error) {
+        codeRes = await sb.from('exchange_codes').select('code,board_id,created_at,used_at,used_n').order('created_at', { ascending: false }).limit(500);
+      }
       if (!codeRes.error) {
         state.codes = (codeRes.data || []).map(function (c) {
-          return { code: c.code, boardId: c.board_id, createdAt: c.created_at, usedAt: c.used_at, usedN: c.used_n, usedBy: null, demo: false };
+          return { code: c.code, boardId: c.board_id, createdAt: c.created_at, usedAt: c.used_at, usedN: c.used_n, qty: Number(c.qty) || 1, usedBy: null, demo: false };
         });
       }
       state.adminLoaded = true;
@@ -2135,24 +2141,91 @@
       return { mode: 'rpc', rpcMissing: false, reset: res.data && res.data.reset };
     },
 
-    async generateCodes(boardId, count) {
+    async generateCodes(boardId, count, qty) {
       var made = [];
+      var per = Math.max(1, Math.min(100, Number(qty) || 1));   /* 코드 1개당 뽑기권 장수 */
       if (this.mode === 'local') {
         for (var i = 0; i < count; i++) {
           var code, guard = 0;
           do { code = randomCode(); guard++; } while (guard < 60 && state.codes.some(function (c) { return c.code === code; }));
-          state.codes.unshift({ code: code, boardId: boardId || null, createdAt: nowISO(), usedAt: null, usedN: null, usedBy: null, demo: false });
+          state.codes.unshift({ code: code, boardId: boardId || null, createdAt: nowISO(), usedAt: null, usedN: null, qty: per, usedBy: null, demo: false });
           made.push(code);
         }
         persist();
         return made;
       }
       for (var k = 0; k < count; k++) made.push(randomCode());
-      var rows = made.map(function (c) { return { code: c, board_id: boardId || null }; });
+      var rows = made.map(function (c) { return { code: c, board_id: boardId || null, qty: per }; });
       var res = await this.sb.from('exchange_codes').insert(rows);
-      if (res.error) throw res.error;
+      if (res.error) {
+        var detail = String(res.error.code || '') + ' ' + String(res.error.message || '');
+        if (/qty/i.test(detail) && /column|schema|cache|does not exist/i.test(detail)) {
+          /* DB에 qty 컬럼이 아직 없을 때 — 1장은 예전처럼 발급하고 N장은 안내한다 */
+          if (per > 1) {
+            throw new Error('N장 코드는 DB 준비가 필요해요. 받으신 kujiking_multi_qty_code.txt 를 Supabase SQL Editor에서 한 번 실행해 주세요.');
+          }
+          res = await this.sb.from('exchange_codes').insert(made.map(function (c) { return { code: c, board_id: boardId || null }; }));
+          if (res.error) throw res.error;
+        } else {
+          throw res.error;
+        }
+      }
       await this.loadAdmin();
       return made;
+    },
+
+    /* ---------- 교환 코드 확인 · N장 일괄 지급 (v4.2.5) ---------- */
+    /* 코드를 소모하지 않고 '장수·대상 판·사용 여부'만 확인한다. */
+    async codeInfo(code) {
+      var key = normalizeCode(code);
+      if (!key) return { ok: false, reason: 'empty', qty: 1 };
+      if (this.mode === 'local') {
+        var rec = state.codes.filter(function (c) { return normalizeCode(c.code) === key; })[0];
+        if (!rec) return { ok: false, reason: 'not_found', qty: 1 };
+        if (rec.usedAt) return { ok: false, reason: 'used', usedAt: rec.usedAt, qty: Number(rec.qty) || 1 };
+        return { ok: true, qty: Number(rec.qty) || 1, boardId: rec.boardId || null };
+      }
+      var res = await this.sb.rpc('exchange_code_info', { p_code: key });
+      if (res.error) {
+        /* 서버 함수가 아직 없으면 예전 방식(서버가 코드를 직접 검사)으로 넘긴다 */
+        if (isMissingRpc(res.error)) return { ok: false, reason: 'no_rpc', qty: 1 };
+        throw new Error(res.error.message || '코드를 확인하지 못했어요.');
+      }
+      var d = res.data || {};
+      return {
+        ok: !!d.ok, reason: d.reason || '', qty: Number(d.qty) || 1,
+        boardId: d.board_id || null, usedAt: d.used_at || null
+      };
+    },
+
+    /* 코드 1회 소모 → 뽑기권 qty장 일괄 지급 (로그인 필요) */
+    async redeemCode(code, boardId) {
+      var key = normalizeCode(code);
+      if (!key) throw new Error('교환 코드를 입력해 주세요.');
+      if (this.mode === 'local') {
+        if (!state.me) throw new Error('로그인이 필요합니다.');
+        var rec = state.codes.filter(function (c) { return normalizeCode(c.code) === key; })[0];
+        if (!rec) throw new Error('등록되지 않은 코드예요. 코드를 다시 확인해 주세요.');
+        if (rec.usedAt) throw new Error('이미 사용된 코드예요.');
+        if (rec.boardId && boardId && rec.boardId !== boardId) throw new Error('이 코드는 다른 판 전용이에요.');
+        var per = Math.max(1, Math.min(100, Number(rec.qty) || 1));
+        rec.usedAt = nowISO();
+        rec.usedBy = state.me.id;
+        rec.usedN = null;
+        var granted = grantLocalCoupons(state.me.id, rec.boardId || null, per, '교환 코드 ' + rec.code + ' · ' + per + '장 일괄 지급');
+        persist();
+        buildLocalViews();
+        return { ok: true, qty: granted, boardId: rec.boardId || null };
+      }
+      var res = await this.sb.rpc('redeem_exchange_code', { p_code: key, p_board_id: boardId || null });
+      if (res.error) {
+        var detail = String(res.error.code || '') + ' ' + String(res.error.message || '');
+        if (/PGRST202|Could not find the function|schema cache/i.test(detail)) {
+          throw new Error('N장 코드 지급은 서버 준비가 필요해요. 받으신 kujiking_multi_qty_code.txt 를 Supabase SQL Editor에서 한 번 실행해 주세요.');
+        }
+        throw new Error(res.error.message || '코드를 등록하지 못했어요.');
+      }
+      return res.data || {};
     },
 
     async revokeCode(code) {
@@ -3293,7 +3366,7 @@
       el.innerHTML = '<h2>뽑기권으로 뽑기</h2>' +
         '<p class="aside-hint">로그인하면 구매확인으로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
         '<button class="btn btn-primary btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>' +
-        '<div class="aside-note">교환 코드가 있으면 로그인 없이도 번호를 열 수 있어요.</div>';
+        '<div class="aside-note">교환 코드는 번호를 고른 뒤 넣으면 바로 열 수 있어요. 여러 장 코드는 그 장수만큼 뽑기권이 한 번에 들어옵니다.</div>';
       return;
     }
     var mine = couponsFor(board);
@@ -3678,7 +3751,7 @@
         '</div>' +
       '</div>' +
       '<div class="md-row">' + buttons + restBtn + '</div>' +
-      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 1장 전용이에요.</p>';
+      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 코드에 담긴 장수만큼 뽑기권이 한 번에 들어와요.</p>';
   }
 
   function openMultiDraw(count) {
@@ -3874,7 +3947,7 @@
     el.innerHTML = '<h3>뽑기 이용 안내</h3><ul>' +
       '<li>라스트원상은 한 판의 마지막 1장을 뽑은 분께 추가로 지급됩니다.</li>' +
       '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
-      '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다.</li>' +
+      '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
       '<li>굿즈 포인트로도 뽑을 수 있습니다. 뽑으면 이 판 가격(' + won(board.price) + ')만큼 회원 포인트에서 차감됩니다.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
@@ -4017,6 +4090,7 @@
       '<p class="field-error" data-role="code-error" role="alert"></p>' +
       '<button class="btn ' + (mine.length ? 'btn-outline' : 'btn-primary') + '" type="submit">코드 확인</button>' +
     '</form>' +
+    '<p class="result-meta">교환 코드는 코드에 담긴 장수만큼 뽑기권으로 들어와요. 1장 코드는 이 자리에서 바로 개봉됩니다.</p>' +
     '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요.</p>';
 
     return html;
@@ -4076,7 +4150,7 @@
         '<p class="field-error" data-role="code-error" role="alert"></p>' +
         '<button class="btn btn-outline" type="submit">코드로 ' + n + '장 뽑기</button>' +
       '</form>' +
-      '<p class="md-code-note">교환 코드는 <b>1장 전용</b>이에요. ' + n + '장 연뽑은 <b>보유 쿠폰 · 포인트</b>로 할 수 있어요.</p>' +
+      '<p class="md-code-note">여러 장 코드를 넣으면 <b>그 장수만큼 뽑기권</b>이 한 번에 들어와요. 뽑기권이 들어오면 위의 <b>뽑기권 버튼</b>으로 뽑아 주세요. (1장 코드는 1장씩 뽑기에서 써 주세요)</p>' +
       '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요. 뽑을 번호는 무작위로 정해지며 뽑기 직전에 확정됩니다.</p>';
 
     return html;
@@ -7250,7 +7324,7 @@
       '<h3>2. 청약철회 제한</h3>' +
       '<p>「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라, 소비자의 사용 또는 일부 소비로 재판매가 곤란한 경우 청약철회가 제한됩니다. 교환 코드를 사용해 개봉한 경우가 이에 해당하며, 개봉 전에는 주문 취소가 가능합니다.</p>' +
       '<h3>3. 쿠폰(뽑기권)과 교환 코드</h3>' +
-      '<p>뽑기권은 구매확인 승인 후 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드입니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
+      '<p>뽑기권은 구매확인 승인 후 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
       '<h3>4. 등급 및 상품</h3>' +
       '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 하위 등급은 굿즈 포인트로 대체 지급될 수 있습니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
       '<h3>5. 상품 수령</h3>' +
@@ -7673,12 +7747,15 @@
       }).join('');
       genBoard.value = prev && (prev === '' || getBoard(prev)) ? prev : (ui.boardId || '');
     }
+    setGenQty(ui.genQty || 1);
     var box = $('#genResult');
     if (box) {
       if (!ui.lastGen) box.hidden = true;
       else {
         box.hidden = false;
-        box.innerHTML = '<div class="gen-result-head"><strong>' + fmt(ui.lastGen.codes.length) + '개 코드 발급 완료</strong>' +
+        var lgQty = Number(ui.lastGen.qty) || 1;
+        box.innerHTML = '<div class="gen-result-head"><strong>' + fmt(ui.lastGen.codes.length) + '개 코드 발급 완료' +
+            ' · <span style="color:var(--red-deep)">코드당 ' + fmt(lgQty) + '장</span></strong>' +
           '<span class="muted" style="font-size:12px">' + formatDateTime(ui.lastGen.at) + '</span></div>' +
           '<div class="code-list">' + ui.lastGen.codes.map(function (c) {
             return '<span class="code-item">' + h(c) + '<button data-action="copy-code" data-code="' + h(c) + '" aria-label="' + h(c) + ' 복사">' + icon('copy') + '</button></span>';
@@ -7717,13 +7794,21 @@
     if (table) table.hidden = false;
     tbody.innerHTML = rows.map(function (c) {
       var b = c.boardId ? getBoard(c.boardId) : null;
+      var qty = Number(c.qty) || 1;
       var status = c.usedAt ? '<span class="badge badge-closed">사용</span>' : '<span class="badge" style="background:#d9ffe9">미사용</span>';
+      var qtyCell = qty > 1
+        ? '<span class="badge" style="background:#fff3cf">' + fmt(qty) + '장</span>'
+        : '<span class="muted">1장</span>';
+      var usedCell = c.usedAt
+        ? formatDateTime(c.usedAt) + (qty > 1 ? ' · ' + fmt(qty) + '장 지급' : (c.usedN ? ' · ' + h(c.usedN) + '번' : ''))
+        : '—';
       return '<tr>' +
         '<td><span class="code-cell">' + h(c.code) + '</span></td>' +
         '<td>' + h(b ? b.title : '모든 판') + '</td>' +
+        '<td>' + qtyCell + '</td>' +
         '<td>' + status + '</td>' +
         '<td class="num">' + formatDateTime(c.createdAt) + '</td>' +
-        '<td class="num">' + (c.usedAt ? formatDateTime(c.usedAt) + ' · ' + c.usedN + '번' : '—') + '</td>' +
+        '<td class="num">' + usedCell + '</td>' +
         '<td style="text-align:right;white-space:nowrap">' +
           '<button class="btn btn-outline btn-sm" data-action="copy-code" data-code="' + h(c.code) + '">복사</button>' +
           (!c.usedAt ? ' <button class="btn btn-danger-ghost btn-sm" data-action="revoke-code" data-code="' + h(c.code) + '">폐기</button>' : '') +
@@ -8749,6 +8834,9 @@
         '<button class="auth-tab' + (isLogin ? ' active' : '') + '" data-action="auth-tab" data-tab="login">로그인</button>' +
         '<button class="auth-tab' + (!isLogin ? ' active' : '') + '" data-action="auth-tab" data-tab="signup">회원가입</button>' +
       '</div>' +
+      (ui.pendingBulkCode
+        ? '<p class="bulk-hint">입력하신 교환 코드는 <b>' + fmt(ui.pendingBulkCode.qty) + '장 코드</b>예요. 로그인하거나 가입하면 뽑기권 <b>' + fmt(ui.pendingBulkCode.qty) + '장</b>이 이 계정으로 바로 지급됩니다.</p>'
+        : '') +
       (isLogin
         ? '<h2 class="modal-title" id="modalTitle">다시 만나서 반가워요</h2>' +
           '<p class="modal-sub">구매확인으로 받은 뽑기권과 당첨 상품은 계정에 보관됩니다.</p>' +
@@ -8801,6 +8889,7 @@
       await Backend.signUp({ email: email, password: pw, nickname: nickname, phone: phone });
       closeModal();
       renderAll();
+      if (ui.pendingBulkCode) { await settlePendingBulkCode(); return; }
       toast(nickname + ' 님, 환영합니다! 뽑기권은 구매확인 후 지급됩니다.', 'ok');
       location.hash = '#/my';
     } catch (e) {
@@ -8820,6 +8909,7 @@
       var user = await Backend.signIn(email, pw);
       closeModal();
       renderAll();
+      if (ui.pendingBulkCode) { await settlePendingBulkCode(); return; }
       toast((user && user.nickname ? user.nickname + ' 님, ' : '') + '다시 오셨네요!', 'ok');
       if (ui.view === 'my') renderMy();
     } catch (e) {
@@ -9082,22 +9172,43 @@
         case 'copy-gen-all': if (ui.lastGen) copyText(ui.lastGen.codes.join('\n'), fmt(ui.lastGen.codes.length) + '개 코드를 복사했어요'); break;
         case 'copy-gen-sms':
           if (ui.lastGen) copyText(ui.lastGen.codes.map(function (c) {
-            return '[쿠지킹] 교환 코드 ' + c + ' — kujiking.co.kr 에서 번호를 선택하고 코드를 입력해 주세요.';
+            var qn = Number(ui.lastGen.qty) || 1;
+            return qn > 1
+              ? '[쿠지킹] 교환 코드 ' + c + ' (' + qn + '장) — kujiking.co.kr 에서 코드를 한 번 넣으면 뽑기권 ' + qn + '장이 한 번에 들어옵니다.'
+              : '[쿠지킹] 교환 코드 ' + c + ' — kujiking.co.kr 에서 번호를 선택하고 코드를 입력해 주세요.';
           }).join('\n'), '문자 발송용 문구를 복사했어요');
           break;
         case 'download-gen':
-          if (ui.lastGen) download('kujiking-codes-' + Date.now() + '.csv', '\ufeffcode\r\n' + ui.lastGen.codes.join('\r\n'), 'text/csv;charset=utf-8');
+          if (ui.lastGen) download('kujiking-codes-' + Date.now() + '.csv', '\ufeffcode,qty\r\n' + ui.lastGen.codes.map(function (c) { return c + ',' + (Number(ui.lastGen.qty) || 1); }).join('\r\n'), 'text/csv;charset=utf-8');
           break;
         case 'download-codes': {
-          var rows = ['code,board,status,created_at,used_at,ticket'];
+          var rows = ['code,board,qty,status,created_at,used_at,ticket'];
           state.codes.forEach(function (c) {
             var bb = c.boardId ? getBoard(c.boardId) : null;
-            rows.push([c.code, (bb ? bb.title : '모든 판'), (c.usedAt ? 'used' : 'unused'), c.createdAt, c.usedAt || '', c.usedN || ''].join(','));
+            rows.push([c.code, (bb ? bb.title : '모든 판'), (Number(c.qty) || 1), (c.usedAt ? 'used' : 'unused'), c.createdAt, c.usedAt || '', c.usedN || ''].join(','));
           });
           download('kujiking-codes-all-' + Date.now() + '.csv', '\ufeff' + rows.join('\r\n'), 'text/csv;charset=utf-8');
           break;
         }
         case 'gen-codes': generateCodesFlow(Number(el.getAttribute('data-count')) || 1); break;
+        case 'gen-qty': setGenQty(el.getAttribute('data-qty')); break;
+        case 'bulk-go-draw': {
+          var gb = id ? getBoard(id) : null;
+          closeModal();
+          if (gb) {
+            ui.boardId = gb.id;
+            if (location.hash !== '#/board/' + gb.id) location.hash = '#/board/' + gb.id;
+            else renderBoard();
+          } else if (ui.view !== 'board') {
+            /* 모든 판 코드 — 판을 고르러 뽑기판 목록으로 */
+            location.hash = '#/board';
+          }
+          setTimeout(function () {
+            var grid = $('#ticketGrid');
+            if (grid) grid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          }, 180);
+          break;
+        }
         case 'revoke-code': revokeCodeFlow(el.getAttribute('data-code')); break;
 
         case 'tier-add': {
@@ -9149,7 +9260,7 @@
     });
 
     /* ---------- 폼 ---------- */
-    document.addEventListener('submit', function (e) {
+    document.addEventListener('submit', async function (e) {
       var form = e.target;
       if (!form || !form.getAttribute) return;
       var type = form.getAttribute('data-form');
@@ -9160,21 +9271,37 @@
         var board = getBoard(ui.boardId) || firstBoard();
         var value = fieldValue(form, 'code');
         if (!board) { toast('판매 중인 판이 없어요', 'err'); return; }
-        var key = normalizeCode(value);
-        var codeOk = !!key && state.codes.some(function (c) { return normalizeCode(c.code) === key && !c.usedAt; });
-        if (!codeOk) {
-          if (!key) toast('교환 코드를 입력해 주세요', 'err');
-          else if (state.codes.some(function (c) { return normalizeCode(c.code) === key; })) toast('이미 사용된 코드예요', 'err');
-          else toast('등록되지 않은 코드예요. 코드를 다시 확인해 주세요.', 'err');
+        var stripBtn = form.querySelector('button[type="submit"]');
+        var stripErr = form.querySelector('[data-role="code-error"]');
+        var stripReset = function (msg) {
+          if (stripErr) stripErr.textContent = msg || '';
+          if (stripBtn) { stripBtn.removeAttribute('aria-disabled'); stripBtn.textContent = '코드 확인'; }
+        };
+        stripReset('');
+        if (stripBtn) { stripBtn.setAttribute('aria-disabled', 'true'); stripBtn.textContent = '확인 중…'; }
+        var stripOut = await resolveCodeEntry(value, { boardId: board.id });
+        if (stripOut.status === 'single' || stripOut.status === 'legacy') {
+          /* 코드에 대상 판이 있으면 그 판으로 데려간다 */
+          var targetBoard = (stripOut.boardId && getBoard(stripOut.boardId)) || board;
+          ui.pendingCode = value;
+          closeModal();
+          if (location.hash !== '#/board/' + targetBoard.id) location.hash = '#/board/' + targetBoard.id;
+          else renderBoard();
+          setTimeout(function () {
+            toast(targetBoard.id !== board.id
+              ? '이 코드는 「' + targetBoard.title + '」 전용이에요. 번호를 선택하세요.'
+              : '코드 확인 완료! 번호를 선택하세요.', 'ok');
+          }, 120);
           return;
         }
-        ui.pendingCode = value;
-        closeModal();
-        if (location.hash !== '#/board/' + board.id) location.hash = '#/board/' + board.id;
-        else renderBoard();
-        setTimeout(function () {
-          toast('코드 확인 완료! 번호를 선택하세요.', 'ok');
-        }, 120);
+        if (stripOut.status === 'granted') { openBulkGrantedModal(stripOut.qty, stripOut.boardId, stripOut.already); return; }
+        if (stripOut.status === 'login') {
+          stripReset('');
+          openAuthModal('login');
+          toast('이 코드는 ' + fmt(stripOut.qty) + '장 코드예요. 로그인하면 ' + fmt(stripOut.qty) + '장이 한 번에 들어옵니다.', 'ok');
+          return;
+        }
+        stripReset(stripOut.message);
         return;
       }
 
@@ -9187,16 +9314,45 @@
         var board2 = getBoard(d.boardId);
         if (!board2) return;
         var raw = fieldValue(form, 'code');
-        var k = normalizeCode(raw);
         var err2 = form.querySelector('[data-role="code-error"]');
-        if (!k) { if (err2) err2.textContent = '교환 코드를 입력해 주세요.'; return; }
-        var rec = state.codes.filter(function (c) { return normalizeCode(c.code) === k; })[0];
-        if (Backend.mode === 'local') {
-          if (!rec) { if (err2) err2.textContent = '등록되지 않은 코드예요. 코드를 다시 확인해 주세요.'; return; }
-          if (rec.usedAt) { if (err2) err2.textContent = '이미 사용된 코드예요 (' + formatDateTime(rec.usedAt) + ').'; return; }
-          if (rec.boardId && rec.boardId !== board2.id) { if (err2) err2.textContent = '이 코드는 다른 판 전용이에요.'; return; }
+        var codeBtn = form.querySelector('button[type="submit"]');
+        if (err2) err2.textContent = '';
+        if (!normalizeCode(raw)) { if (err2) err2.textContent = '교환 코드를 입력해 주세요.'; return; }
+        if (codeBtn) { codeBtn.setAttribute('aria-disabled', 'true'); codeBtn.textContent = '확인 중…'; }
+        var codeOut = await resolveCodeEntry(raw, { boardId: board2.id });
+        if (codeBtn) { codeBtn.removeAttribute('aria-disabled'); codeBtn.textContent = '코드 확인'; }
+        if (!ui.draw || ui.draw !== d) return;
+        if (codeOut.status === 'single' || codeOut.status === 'legacy') {
+          if (codeOut.boardId && codeOut.boardId !== board2.id) {
+            var ob3 = getBoard(codeOut.boardId);
+            if (err2) err2.textContent = '이 코드는 다른 판(' + (ob3 ? ob3.title : '삭제된 판') + ') 전용이에요. 그 판에서 번호를 골라 주세요.';
+            return;
+          }
+          enterPeel({ code: raw });
+          return;
         }
-        enterPeel({ code: raw });
+        if (codeOut.status === 'granted') {
+          /* 코드의 판이 지금 보는 판과 다르면 그 판으로 데려간다 */
+          if (codeOut.boardId && codeOut.boardId !== board2.id) {
+            var gb3 = codeOut.boardId ? getBoard(codeOut.boardId) : null;
+            ui.draw = null;
+            closeModal();
+            if (gb3) location.hash = '#/board/' + gb3.id;
+            toast('뽑기권 ' + fmt(codeOut.qty) + '장이 지급됐어요. 「' + (gb3 ? gb3.title : '판') + '」에서 쓸 수 있어요.', 'ok');
+            return;
+          }
+          /* 방금 들어온 뽑기권이 보이도록 뽑기 창을 결제 수단 선택으로 되돌린다 */
+          ui.draw = { boardId: board2.id, n: d.n, step: 'source', busy: false };
+          renderDrawModal();
+          toast('뽑기권 ' + fmt(codeOut.qty) + '장이 지급됐어요. 뽑기권으로 뽑아 주세요.', 'ok');
+          return;
+        }
+        if (codeOut.status === 'login') {
+          openAuthModal('login');
+          toast('이 코드는 ' + fmt(codeOut.qty) + '장 코드예요. 로그인하면 ' + fmt(codeOut.qty) + '장이 한 번에 들어옵니다.', 'ok');
+          return;
+        }
+        if (err2) err2.textContent = codeOut.message;
         return;
       }
 
@@ -9204,7 +9360,38 @@
         var md = ui.draw;
         if (!md || !md.batch) return;
         var mErr = form.querySelector('[data-role="code-error"]');
-        if (mErr) mErr.textContent = '교환 코드는 1장 전용이에요. ' + md.count + '장 연뽑은 보유 쿠폰·포인트로 할 수 있어요.';
+        var mBtn = form.querySelector('button[type="submit"]');
+        var mRaw = fieldValue(form, 'code');
+        if (mErr) mErr.textContent = '';
+        if (!normalizeCode(mRaw)) { if (mErr) mErr.textContent = '교환 코드를 입력해 주세요.'; return; }
+        if (mBtn) { mBtn.setAttribute('aria-disabled', 'true'); mBtn.textContent = '확인 중…'; }
+        var mOut = await resolveCodeEntry(mRaw, { boardId: md.boardId });
+        if (mBtn) { mBtn.removeAttribute('aria-disabled'); mBtn.textContent = '코드로 ' + md.count + '장 뽑기'; }
+        if (!ui.draw || ui.draw !== md) return;
+        if (mOut.status === 'granted') {
+          if (mOut.boardId && mOut.boardId !== md.boardId) {
+            var gb4 = getBoard(mOut.boardId);
+            ui.draw = null;
+            closeModal();
+            if (gb4) location.hash = '#/board/' + gb4.id;
+            toast('뽑기권 ' + fmt(mOut.qty) + '장이 지급됐어요. 「' + (gb4 ? gb4.title : '판') + '」에서 쓸 수 있어요.', 'ok');
+            return;
+          }
+          md.step = 'source';
+          renderDrawModal();
+          toast('뽑기권 ' + fmt(mOut.qty) + '장이 지급됐어요. 위의 뽑기권 버튼으로 뽑아 주세요.', 'ok');
+          return;
+        }
+        if (mOut.status === 'login') {
+          openAuthModal('login');
+          toast('이 코드는 ' + fmt(mOut.qty) + '장 코드예요. 로그인하면 ' + fmt(mOut.qty) + '장이 한 번에 들어옵니다.', 'ok');
+          return;
+        }
+        if (mOut.status === 'single' || mOut.status === 'legacy') {
+          if (mErr) mErr.textContent = '이 코드는 1장 코드예요. 1장씩 뽑기에서 번호를 골라 코드를 넣어 주세요.';
+          return;
+        }
+        if (mErr) mErr.textContent = mOut.message;
         return;
       }
 
@@ -9427,6 +9614,13 @@
       }
       if (e.target.name === 'cover' && e.target.closest('form[data-form="board-form"]')) updateCoverPreview(e.target.closest('form'));
       if (e.target.id === 'codeSearch') renderCodesTable();
+      if (e.target.id === 'genQty') {
+        var gq = Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 1)));
+        ui.genQty = gq;
+        $$('[data-action="gen-qty"]').forEach(function (b) {
+          b.classList.toggle('is-on', Number(b.getAttribute('data-qty')) === gq);
+        });
+      }
       if (e.target.id === 'revokeQty') refreshRevokePicks(e.target.value);
       if (e.target.id === 'memberSearch') {
         ui.memberQuery = e.target.value;
@@ -9711,12 +9905,32 @@
 
   async function generateCodesFlow(count) {
     var target = $('#genBoard') ? $('#genBoard').value : '';
+    var qty = genQtyValue();
+    setGenQty(qty);
     try {
-      var codes = await Backend.generateCodes(target || null, count);
-      ui.lastGen = { batch: uid('batch'), codes: codes, boardId: target || null, at: nowISO() };
+      var codes = await Backend.generateCodes(target || null, count, qty);
+      ui.lastGen = { batch: uid('batch'), codes: codes, qty: qty, boardId: target || null, at: nowISO() };
       renderCodesTab();
-      toast(count + '개 코드를 발급했어요', 'ok');
+      toast(count + '개 코드를 발급했어요 · 코드당 ' + fmt(qty) + '장', 'ok');
     } catch (e) { toast(errMsg(e), 'err'); }
+  }
+
+  /* 관리자 코드 발급 — 코드 1개당 뽑기권 장수 */
+  function genQtyValue() {
+    var el = $('#genQty');
+    var v = Number(el ? el.value : ui.genQty);
+    if (!v || isNaN(v) || v < 1) v = 1;
+    if (v > 100) v = 100;
+    return Math.round(v);
+  }
+  function setGenQty(v) {
+    var n = Math.max(1, Math.min(100, Math.round(Number(v) || 1)));
+    ui.genQty = n;
+    var el = $('#genQty');
+    if (el && String(el.value) !== String(n)) el.value = n;
+    $$('[data-action="gen-qty"]').forEach(function (b) {
+      b.classList.toggle('is-on', Number(b.getAttribute('data-qty')) === n);
+    });
   }
 
   async function revokeCodeFlow(codeVal) {
@@ -9825,7 +10039,7 @@
       '<h3>제1조 (목적)</h3>' +
       '<p>이 약관은 쿠지킹(이하 “회사”)이 운영하는 온라인 쿠지 서비스 kujiking.co.kr의 이용 조건과 절차, 회사와 회원의 권리·의무를 정합니다.</p>' +
       '<h3>제2조 (용어)</h3>' +
-      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 구매확인으로 지급되는 쿠폰, “교환 코드”는 결제 후 발급되는 1회용 코드, “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
+      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 구매확인으로 지급되는 쿠폰, “교환 코드”는 결제 후 발급되는 1회용 코드(코드마다 정해진 장수만큼 뽑기권 일괄 지급), “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
       '<h3>제3조 (서비스 내용)</h3>' +
       '<p>회사는 스마트스토어에서 뽑기권을 판매하고, 회원이 사이트에서 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
       '<h3>제4조 (이용계약)</h3>' +
@@ -9855,10 +10069,90 @@
       { wide: true, resetScroll: true, noAutofocus: true });
   }
 
+  /* =========================================================
+     교환 코드 — 1장은 바로 개봉, N장은 뽑기권 N장 일괄 지급 (v4.2.5)
+     ========================================================= */
+
+  /* 코드 하나를 한 곳에서 처리한다.
+     결과 status: single(1장 → 바로 개봉) · granted(N장 지급 완료) · login(로그인 필요) · error · legacy(서버 함수 준비 전) */
+  async function resolveCodeEntry(raw, ctx) {
+    ctx = ctx || {};
+    var key = normalizeCode(raw);
+    if (!key) return { status: 'error', message: '교환 코드를 입력해 주세요.' };
+
+    var info;
+    try { info = await Backend.codeInfo(raw); }
+    catch (e) { return { status: 'error', message: errMsg(e) }; }
+
+    if (!info.ok) {
+      /* DB 준비 전에는 예전처럼 서버가 코드를 직접 검사하도록 넘긴다 */
+      if (info.reason === 'no_rpc') return { status: 'legacy', code: raw };
+      if (info.reason === 'used') {
+        return { status: 'error', message: '이미 사용된 코드예요 (' + formatDateTime(info.usedAt) + ').' };
+      }
+      if (info.reason === 'board') {
+        var ob = info.boardId ? getBoard(info.boardId) : null;
+        return { status: 'error', message: '이 코드는 다른 판(' + (ob ? ob.title : '삭제된 판') + ') 전용이에요.' };
+      }
+      return { status: 'error', message: '등록되지 않은 코드예요. 코드를 다시 확인해 주세요.' };
+    }
+
+    /* 1장 코드 — 지금까지처럼 번호를 고른 그 자리에서 바로 개봉 */
+    if (info.qty <= 1) return { status: 'single', code: raw, boardId: info.boardId || null };
+
+    /* 2장 이상 — 뽑기권을 계정에 넣어야 하므로 로그인이 필요하다 */
+    var boardId = info.boardId || ctx.boardId || null;
+    if (!me()) {
+      ui.pendingBulkCode = { code: key, boardId: boardId, qty: info.qty };
+      return { status: 'login', qty: info.qty };
+    }
+    return await grantBulkCode(key, boardId, info.qty);
+  }
+
+  /* N장 코드 → 뽑기권 N장 지급 */
+  async function grantBulkCode(code, boardId, qty) {
+    try {
+      var r = await Backend.redeemCode(code, boardId);
+      var grantedN = Number(r && r.qty) || qty || 1;
+      ui.pendingCode = '';
+      try { await Backend.refreshData(); } catch (e0) {}
+      renderAll();
+      return { status: 'granted', qty: grantedN, boardId: (r && r.boardId) || boardId || null, already: !!(r && r.already) };
+    } catch (e) {
+      return { status: 'error', message: errMsg(e) };
+    }
+  }
+
+  /* 로그인·가입 직후: 대기 중인 N장 코드를 자동으로 지급한다 */
+  async function settlePendingBulkCode() {
+    var p = ui.pendingBulkCode;
+    if (!p) return false;
+    ui.pendingBulkCode = null;
+    var out = await grantBulkCode(p.code, p.boardId, p.qty);
+    if (out.status === 'granted') { openBulkGrantedModal(out.qty, out.boardId, out.already); return true; }
+    if (out.status === 'error') toast(out.message, 'err');
+    return false;
+  }
+
+  function openBulkGrantedModal(qty, boardId, already) {
+    var b = boardId ? getBoard(boardId) : null;
+    var n = Number(qty) || 1;
+    openModal('<h2 class="modal-title" id="modalTitle">' + (already ? '이미 지급된 코드였어요' : '뽑기권 ' + fmt(n) + '장이 들어왔어요') + '</h2>' +
+      '<p class="modal-sub">' + (already
+        ? '이 코드로는 <b>' + fmt(n) + '장</b>이 이미 계정에 지급돼 있어요. 뽑기권은 <b>내 보관함</b>에서 확인할 수 있습니다.'
+        : '교환 코드 한 번으로 <b>' + fmt(n) + '장</b>이 계정에 지급됐어요.' + (b ? ' <b>' + h(b.title) + '</b>에서 바로 쓸 수 있습니다.' : '')) + '</p>' +
+      '<div class="pay-option is-primary">' +
+        '<div class="pay-head"><span class="pay-badge">보유 뽑기권</span><b>' + fmt(n) + '장 지급 완료</b></div>' +
+        '<p class="pay-desc">번호를 하나씩 골라 뽑을 수 있어요. 5·10·15·20장이면 연뽑으로 한 번에 뽑을 수도 있습니다. 뽑기권은 내 보관함에 남아 있어요.</p>' +
+        '<button class="btn btn-primary btn-block" type="button" data-action="bulk-go-draw"' + (b ? ' data-id="' + h(b.id) + '"' : '') + '>지금 뽑기</button>' +
+      '</div>' +
+      '<p class="result-meta">뽑기권은 <b>내 보관함</b>에서 언제든 확인할 수 있어요.</p>');
+  }
+
   function openCodeModal() {
     var board = getBoard(ui.boardId) || firstBoard();
     openModal('<h2 class="modal-title" id="modalTitle">교환 코드 입력</h2>' +
-      '<p class="modal-sub">구매 후 받은 1회용 코드를 넣으면 뽑기판에서 바로 사용할 수 있어요. 코드는 한 번만 쓸 수 있습니다.</p>' +
+      '<p class="modal-sub">구매 후 받은 1회용 코드를 넣으면 뽑기판에서 바로 사용할 수 있어요. 코드는 한 번만 쓸 수 있으며, 코드에 담긴 장수만큼 뽑기권이 한 번에 들어옵니다.</p>' +
       '<form class="code-form" data-form="code-strip" novalidate>' +
         '<label class="sr-only" for="quickCodeInput">교환 코드</label>' +
         '<input id="quickCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX" value="' + h(ui.pendingCode || '') + '">' +

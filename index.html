@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.2.4">
+<link rel="stylesheet" href="assets/styles.css?v=4.2.5">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -596,7 +596,7 @@
           <div class="card admin-card">
             <div class="admin-card-head">
               <h2>교환 코드 발급</h2>
-              <span class="muted">1회용 · 발급 즉시 사용 가능</span>
+              <span class="muted">1회용 · 발급 즉시 사용 가능 · 코드당 장수 설정</span>
             </div>
             <div class="code-gen">
               <label class="field">
@@ -604,11 +604,24 @@
                 <select id="genBoard" class="input"></select>
               </label>
               <div class="field">
+                <span>코드 1개당 뽑기권</span>
+                <div class="qty-row">
+                  <button type="button" class="btn btn-outline btn-sm qty-btn" data-action="gen-qty" data-qty="1">1장</button>
+                  <button type="button" class="btn btn-outline btn-sm qty-btn" data-action="gen-qty" data-qty="5">5장</button>
+                  <button type="button" class="btn btn-outline btn-sm qty-btn" data-action="gen-qty" data-qty="10">10장</button>
+                  <span class="gen-qty-manual">
+                    <input id="genQty" class="input input-sm gen-qty-input" type="number" min="1" max="100" step="1" inputmode="numeric" value="1" aria-label="코드 1개당 뽑기권 장수 직접 입력">
+                    <em>장 직접 입력</em>
+                  </span>
+                </div>
+                <em class="field-hint">예) 5장으로 발급한 코드 1개 → 손님이 코드를 한 번 넣으면 뽑기권 5장이 한꺼번에 지급됩니다. (1~100장)</em>
+              </div>
+              <div class="field">
                 <span>발급 수량</span>
                 <div class="qty-row">
-                  <button class="btn btn-outline btn-sm" data-action="gen-codes" data-count="1">1개</button>
-                  <button class="btn btn-outline btn-sm" data-action="gen-codes" data-count="5">5개</button>
-                  <button class="btn btn-outline btn-sm" data-action="gen-codes" data-count="10">10개</button>
+                  <button type="button" class="btn btn-outline btn-sm" data-action="gen-codes" data-count="1">1개</button>
+                  <button type="button" class="btn btn-outline btn-sm" data-action="gen-codes" data-count="5">5개</button>
+                  <button type="button" class="btn btn-outline btn-sm" data-action="gen-codes" data-count="10">10개</button>
                 </div>
               </div>
             </div>
@@ -630,7 +643,7 @@
             </div>
             <div class="table-scroll">
               <table class="data-table" id="codesTable">
-                <thead><tr><th>코드</th><th>대상 판</th><th>상태</th><th>발급</th><th>사용</th><th></th></tr></thead>
+                <thead><tr><th>코드</th><th>대상 판</th><th>장수</th><th>상태</th><th>발급</th><th>사용</th><th></th></tr></thead>
                 <tbody></tbody>
               </table>
             </div>
@@ -799,6 +812,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.2.4" defer></script>
+<script src="assets/app.js?v=4.2.5" defer></script>
 </body>
 </html>
