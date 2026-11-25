@@ -372,6 +372,9 @@ begin
   );
 end;
 $$;
+
+grant execute on function public.draw_ticket(uuid, integer, uuid, text, boolean) to anon, authenticated;
+
 -- ---------------------------------------------------------
 -- [5] 확인
 -- ---------------------------------------------------------
