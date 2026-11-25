@@ -3698,3 +3698,87 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
 .grade-badge,.rank-badge{font-variant-numeric:tabular-nums}
 .rank-badge{letter-spacing:-.02em}
 .prize-card .rank-badge{max-width:100%}
+
+/* =========================================================
+   v4.3.2 — 카카오톡 채널 바로가기
+   · 상단 헤더 '카톡 문의' 버튼(PC)
+   · 우측 하단 플로팅 '카톡 문의' 버튼(PC·모바일 공통)
+     판 상세 하단 고정바(.store-bar)가 있으면 그 위로 올라간다.
+   ========================================================= */
+:root{
+  --kakao-yellow:#FEE500;
+  --kakao-yellow-hi:#FFEB4D;
+  --kakao-ink:#191600;
+  --fab-bottom:calc(20px + env(safe-area-inset-bottom,0px));
+  --fab-gap:64px;
+}
+body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+
+.header-kakao-btn{
+  display:inline-flex;align-items:center;gap:7px;flex-shrink:0;white-space:nowrap;
+  padding:8px 14px 8px 11px;
+  border:2px solid var(--ink);border-radius:999px;
+  background:var(--kakao-yellow);color:var(--kakao-ink);
+  box-shadow:0 3px 0 var(--ink);
+  font-weight:900;font-size:13px;letter-spacing:-.01em;line-height:1;text-decoration:none;
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.header-kakao-btn:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--ink);background:var(--kakao-yellow-hi)}
+.header-kakao-btn:active{transform:translateY(1px);box-shadow:0 2px 0 var(--ink)}
+.header-kakao-btn:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.header-kakao-btn .kakao-mark{width:18px;height:18px;color:var(--kakao-ink)}
+.header-kakao-btn .kakao-mark svg{width:18px;height:18px}
+.header-kakao-word{line-height:1}
+
+.kakao-fab{
+  position:fixed;right:18px;bottom:var(--fab-bottom);z-index:96;
+  display:inline-flex;align-items:center;gap:8px;
+  min-height:52px;padding:12px 18px 12px 14px;
+  border:2px solid var(--ink);border-radius:999px;
+  background:var(--kakao-yellow);color:var(--kakao-ink);text-decoration:none;
+  font-weight:900;font-size:14.5px;letter-spacing:-.02em;line-height:1;white-space:nowrap;
+  box-shadow:0 4px 0 var(--ink),0 10px 22px rgba(23,18,14,.22);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease,bottom .18s ease;
+}
+.kakao-fab:hover{transform:translateY(-2px);background:var(--kakao-yellow-hi);
+  box-shadow:0 6px 0 var(--ink),0 14px 26px rgba(23,18,14,.26)}
+.kakao-fab:active{transform:translateY(2px);box-shadow:0 2px 0 var(--ink),0 6px 14px rgba(23,18,14,.20)}
+.kakao-fab:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.kakao-fab-mark{display:grid;place-items:center;width:24px;height:24px;flex:none;color:var(--kakao-ink)}
+.kakao-fab-mark svg{width:24px;height:24px;display:block}
+.kakao-fab-word{line-height:1}
+/* 은은한 주의 환기 링 — 움직임을 줄이는 설정에서는 끈다 */
+.kakao-fab::after{
+  content:"";position:absolute;inset:-2px;border-radius:999px;pointer-events:none;
+  border:2px solid rgba(254,229,0,.75);
+  animation:kakaoFabRing 3.2s ease-out infinite;
+}
+@keyframes kakaoFabRing{
+  0%{transform:scale(1);opacity:.85}
+  65%{transform:scale(1.14);opacity:0}
+  100%{transform:scale(1.14);opacity:0}
+}
+/* 플로팅 버튼이 토스트를 가리지 않도록 토스트를 그 위로 올린다 */
+.toast-root{bottom:calc(var(--fab-bottom) + var(--fab-gap))}
+
+@media (max-width:760px){
+  /* 모바일은 플로팅 버튼이 있으니 헤더 버튼은 숨겨 헤더가 넘치지 않게 한다 */
+  .header-kakao-btn{display:none}
+}
+@media (max-width:420px){
+  .kakao-fab{right:12px;min-height:50px;padding:11px 16px 11px 13px;font-size:13.5px;gap:7px}
+  .kakao-fab-mark,.kakao-fab-mark svg{width:21px;height:21px}
+}
+@media (prefers-reduced-motion:reduce){
+  .kakao-fab::after{animation:none;opacity:0}
+  .kakao-fab{transition:none}
+}
+
+/* v4.3.2 — 뽑기판 화면을 짧게: 라인업 포스터·확률표를 걷어낸 자리의 안내 한 줄 */
+.prizes-note{
+  margin:16px 0 0;padding:11px 14px;border-radius:12px;
+  background:var(--cream);border:2px dashed var(--line-strong);
+  font-size:12.5px;line-height:1.55;font-weight:700;color:var(--ink-soft);
+}
+.prizes-note .inline-link{font-weight:900}
+@media (max-width:640px){.prizes-note{font-size:12px;padding:10px 12px}}

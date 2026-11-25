@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.3.1">
+<link rel="stylesheet" href="assets/styles.css?v=4.3.2">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -52,6 +52,10 @@
       <a href="#/admin" data-nav="admin">관리자</a>
     </nav>
     <div class="header-actions">
+      <a class="header-kakao-btn" id="headerKakaoBtn" href="https://pf.kakao.com/_xnxhmvX/chat" target="_blank" rel="noopener noreferrer" data-kakao-link title="카카오톡 채널 1:1 문의 (새 창)" aria-label="카카오톡 채널 1:1 문의 (새 창)">
+        <span class="kakao-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.9c-5.3 0-9.6 3.4-9.6 7.6 0 2.7 1.8 5.1 4.4 6.4l-1 3.3c-.1.4.3.7.6.5l4-2.5c.5.1 1 .1 1.6.1 5.3 0 9.6-3.4 9.6-7.6S17.3 2.9 12 2.9z" fill="currentColor"/></svg></span>
+        <span class="header-kakao-word">카톡 문의</span>
+      </a>
       <button class="yt-live-btn" id="ytLiveBtn" type="button" data-action="open-youtube-live" hidden aria-label="유튜브 라이브 방송 보기">
         <span class="yt-live-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="1.6" y="4.6" width="20.8" height="14.8" rx="4.4" fill="currentColor"/><path d="M10.2 8.9l5.6 3.1-5.6 3.1z" fill="#fff"/></svg></span>
         <span class="yt-live-word"><span class="yt-live-prefix">유튜브 </span>라이브</span>
@@ -863,11 +867,17 @@
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
     <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. <b>만 19세 이상 성인 전용 서비스</b>로, 미성년자는 이용할 수 없습니다.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.1</span></p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.2</span></p>
   </div>
 </footer>
 
 <div class="toast-root" id="toastRoot" aria-live="polite" aria-atomic="true"></div>
+
+<!-- v4.3.2 — 우측 하단 플로팅 카카오톡 문의 (판 하단 고정바가 있으면 그 위로 올라간다) -->
+<a class="kakao-fab" id="kakaoFab" href="https://pf.kakao.com/_xnxhmvX/chat" target="_blank" rel="noopener noreferrer" data-kakao-link title="카카오톡 채널 1:1 문의 (새 창)" aria-label="카카오톡 채널 1:1 문의 (새 창)">
+  <span class="kakao-fab-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M12 2.9c-5.3 0-9.6 3.4-9.6 7.6 0 2.7 1.8 5.1 4.4 6.4l-1 3.3c-.1.4.3.7.6.5l4-2.5c.5.1 1 .1 1.6.1 5.3 0 9.6-3.4 9.6-7.6S17.3 2.9 12 2.9z" fill="currentColor"/></svg></span>
+  <span class="kakao-fab-word">카톡 문의</span>
+</a>
 
 <div class="modal-root" id="modalRoot" hidden>
   <div class="modal-backdrop" data-action="close-modal"></div>
@@ -878,6 +888,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.3.1" defer></script>
+<script src="assets/app.js?v=4.3.2" defer></script>
 </body>
 </html>

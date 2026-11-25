@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v3.9.9, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.2, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -124,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.3.1';
+  var COVER_VER = '4.3.2';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -3351,6 +3351,15 @@
   }
 
   /* 방문자 화면(푸터·이용 안내·보관함·배송 신청)의 배송비 문구를 지금 설정값으로 맞춘다. */
+  /* v4.3.2 — 헤더·플로팅 카카오 버튼의 href를 지금 설정된 채널 주소로 맞춘다.
+     주소가 비어 있으면 기본 채널(https://pf.kakao.com/_xnxhmvX/chat)로 바로 연결된다. */
+  function renderKakaoLinks() {
+    var url = kakaoOpenchatUrl() || KAKAO_CHAT_URL;
+    $$('[data-kakao-link]').forEach(function (el) {
+      if (el.getAttribute('href') !== url) el.setAttribute('href', url);
+    });
+  }
+
   function renderShippingCopy() {
     var text = shippingNotice();
     $$('[data-ship-notice]').forEach(function (el) {
@@ -3361,6 +3370,7 @@
       el.classList.toggle('is-soon', !on);
       el.setAttribute('title', on ? '카카오톡 1:1 상담 열기 (새 창)' : '1:1 카카오톡 상담 연결 준비 중');
     });
+    renderKakaoLinks();
   }
 
   function shipNoticeBoxHTML(cls) {
@@ -4276,11 +4286,8 @@
         '</span>' +
       '</button>';
 
-    var lineupSrc = lineupSrcOf(board);
-    var lineupBlock = lineupSrc
-        ? '<figure class="prize-lineup"><img src="' + h(coverSrc(lineupSrc)) + '" alt="' + h(board.title) + ' 전체 구성 피규어 라인업" width="1600" height="760" loading="lazy" decoding="async" onerror="var f=this.closest(&quot;figure&quot;);if(f){f.style.display=&quot;none&quot;}"></figure>'
-        : '';
-
+    /* v4.3.2 — 뽑기판 화면을 짧게: 라인업 포스터와 등급별 확률표는 판 화면에서 걷어냈다.
+       확률·수량은 상품 카드(수량·잔여·확률)와 [공정성 검증] › 확률·이용 안내에서 그대로 볼 수 있다. */
     el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
         '<span class="step-no">1</span>' +
         '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
@@ -4289,22 +4296,8 @@
             : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
           '실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
         '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
-      lineupBlock +
       '<div class="prize-gallery' + (board.tiers.length > 6 ? ' is-dense' : '') + '">' + cards + lo + '</div>' +
-      '<div class="prize-table-wrap">' +
-        '<div class="table-scroll"><table class="data-table prob-table"><thead><tr><th>등급</th><th>상품</th><th>수량</th><th>확률</th><th>잔여</th></tr></thead><tbody>' +
-        board.tiers.map(function (t) {
-          var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
-          var pct = board.tickets ? (t.count / board.tickets * 100) : 0;
-          return '<tr>' +
-            '<td><span class="grade-badge" style="background:' + gradeColor(t.grade) + ';width:28px;height:28px;font-size:12px">' + h(t.grade) + '</span></td>' +
-            '<td>' + h(t.label) + (t.pointOnly ? ' <span class="muted">P상 · 즉시 적립</span>' : '') + '</td>' +
-            '<td class="num">' + fmt(t.count) + '개</td>' +
-            '<td class="num">' + pct.toFixed(1).replace(/\.0$/, '') + '%</td>' +
-            '<td class="num">' + fmt(Math.max(0, t.count - sold)) + '개</td>' +
-          '</tr>';
-        }).join('') + '</tbody></table></div>' +
-      '</div>';
+      '<p class="prizes-note">등급·수량·확률은 각 상품 카드에서 바로 확인할 수 있고, 전체 확률 공시는 <a href="#/fairness" class="inline-link">공정성 검증</a>에서 볼 수 있어요.</p>';
   }
 
   function renderBoardManual(board) {
@@ -4318,7 +4311,7 @@
       return t.grade + '상 ' + (t.count / (board.tickets || 1) * 100).toFixed(1).replace(/\.0$/, '') + '%';
     }).join(' · ');
     var baseNotes = [
-      probs ? '등급별 확률: ' + probs : '등급별 확률은 상품 구성 표를 참고해 주세요.',
+      probs ? '등급별 확률: ' + probs : '등급별 확률은 상품 구성과 확률 공시를 참고해 주세요.',
       '한 번 연 번호는 되돌릴 수 없고, 개봉(사용) 후에는 청약철회가 제한됩니다.',
       '당첨 상품은 내 보관함에 보관되고, 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.',
       '상품 사진은 제조사 제공 이미지이며, 실제 상품과 색상·조립 상태가 다를 수 있습니다.'
