@@ -123,7 +123,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.6';
+  var COVER_VER = '4.2.7';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -2140,6 +2140,34 @@
       return n;
     },
 
+    /* 관리자: 다른 회원의 관리자 권한 지정/해제 (v4.2.7)
+       profiles 는 컬럼 권한으로 is_admin 직접 UPDATE 가 막혀 있어 서버 함수로만 바꾼다. */
+    async setUserAdmin(userId, makeAdmin) {
+      if (!userId) throw new Error('대상 회원을 찾을 수 없습니다.');
+      if (state.me && String(state.me.id) === String(userId)) {
+        throw new Error('내 계정의 관리자 권한은 이 화면에서 바꿀 수 없습니다.');
+      }
+      if (this.mode === 'local') {
+        var u = userById(userId);
+        if (!u) throw new Error('대상 회원을 찾을 수 없습니다.');
+        u.isAdmin = !!makeAdmin;
+        persist();
+        buildLocalViews();
+        return { id: userId, nickname: u.nickname, isAdmin: u.isAdmin };
+      }
+      var res = await this.sb.rpc('admin_set_user_admin', {
+        p_target_user_id: userId, p_make_admin: !!makeAdmin
+      });
+      if (res.error) {
+        if (isMissingRpc(res.error)) {
+          throw new Error('관리자 지정은 서버 함수가 필요해요. kujiking_v427_admin_and_200.txt 를 Supabase SQL Editor에서 한 번 실행해 주세요.');
+        }
+        throw new Error(res.error.message || '관리자 권한을 바꾸지 못했어요.');
+      }
+      await this.loadAdmin();
+      return res.data || {};
+    },
+
     async shipDelivery(id, carrier, tracking) {
       if (this.mode === 'local') {
         var dl = state.deliveries.filter(function (x) { return x.id === id; })[0];
@@ -2165,12 +2193,16 @@
       var tiersNorm = normalizeTiers(payload.tiers);
       if (this.mode === 'local') {
         var existing = payload.id ? getBoard(payload.id) : null;
-        var seed = payload.seed || (existing ? existing.seed : '') || randomSeed();
-        var hash = await sha256Hex(seed);
-        var opens = existing ? existing.opens : [];
         var structureChanged = !existing || existing.tickets !== payload.tickets ||
           tierStructureKey(existing.tiers) !== tierStructureKey(tiersNorm) ||
           (!!payload.seed && payload.seed !== existing.seed);
+        /* 장수·등급만 바꿔도 번호 배치가 새로 섞이도록 시드를 새로 만든다 (sold === 0 이라 안전) */
+        if (existing && structureChanged && !payload.seed) {
+          payload = Object.assign({}, payload, { seed: randomSeed() });
+        }
+        var seed = payload.seed || (existing ? existing.seed : '') || randomSeed();
+        var hash = await sha256Hex(seed);
+        var opens = existing ? existing.opens : [];
         if (existing && structureChanged) opens = [];
         var board = {
           id: existing ? existing.id : uid('board'),
@@ -2200,14 +2232,42 @@
         return board;
       }
       if (payload.id) {
-        var up = await this.sb.from('boards').update({
+        var current = getBoard(payload.id);
+        var soldNow = current ? openedCount(current) : 0;
+        var resize = !!(current && (Number(current.tickets) !== Number(payload.tickets) ||
+          tierStructureKey(current.tiers) !== tierStructureKey(tiersNorm) ||
+          (!!payload.seed && payload.seed !== current.seed)));
+        if (resize && soldNow > 0) {
+          throw new Error('이미 ' + fmt(soldNow) + '장이 팔린 판은 장수·등급을 바꿀 수 없어요.');
+        }
+        /* 아직 안 팔린 판(sold === 0)의 장수·등급 수정 — 서버에서 티켓을 새로 만들고
+           boards.ticket_count·tiers·seed_hash 를 함께 갱신한다. */
+        if (resize) {
+          var rs = await this.sb.rpc('admin_resize_board', {
+            p_board_id: payload.id,
+            p_ticket_count: payload.tickets,
+            p_tiers: tiersNorm,
+            p_seed: payload.seed || null
+          });
+          if (rs.error) {
+            if (isMissingRpc(rs.error)) {
+              throw new Error('장수·등급 수정은 서버 함수가 필요해요. kujiking_v427_admin_and_200.txt 를 Supabase SQL Editor에서 한 번 실행해 주세요.');
+            }
+            throw rs.error;
+          }
+        }
+        var upd = {
           title: payload.title, category: payload.category, price: payload.price,
           last_one_label: payload.lastOneLabel, status: payload.status, cover: payload.cover || null,
-          tiers: tiersNorm,
           last_one_image: payload.lastOneImage || null, last_one_desc: payload.lastOneDesc || null,
           manual: payload.manual || null
-        }).eq('id', payload.id);
-        if (up.error) throw up.error;
+        };
+        if (!resize) upd.tiers = tiersNorm;   /* resize 때는 서버 함수가 이미 저장했다 */
+        var up = await this.sb.from('boards').update(upd).eq('id', payload.id);
+        if (up.error) {
+          await this.refreshData().catch(function () {});
+          throw up.error;
+        }
         await this.refreshData();
         return getBoard(payload.id);
       }
@@ -2862,7 +2922,9 @@
     var r = parseRoute();
     ui.view = r.view;
     if (r.view === 'board') {
-      var board = r.id ? getBoard(r.id) : firstBoard();
+      /* 상단·하단 메뉴의 '뽑기판'(#/board)은 직전에 보던 판을 그대로 연다.
+         (예전에는 무조건 firstBoard() 로 되돌아가 갸루 판이 계속 열렸다) */
+      var board = r.id ? getBoard(r.id) : (getBoard(ui.boardId) || firstBoard());
       if (!board) ui.view = 'home';
       else ui.boardId = board.id;
     }
@@ -3523,6 +3585,7 @@
       return;
     }
     ui.boardId = board.id;
+    renderBoardSwitch(board);
     renderBoardHero(board);
     renderBoardStoreBar(board);
     renderCouponCard(board);
@@ -3541,6 +3604,30 @@
     $$('[data-board-panel]').forEach(function (p) {
       p.hidden = p.getAttribute('data-board-panel') !== ui.boardTab;
     });
+  }
+
+  /* 판 이름을 칩에 넣을 짧은 이름으로 — "[치이카와] 갸루 치이카와 쿠지" → "갸루 치이카와" */
+  function boardShortName(board) {
+    var t = String((board && board.title) || '').replace(/^\s*\[[^\]]*\]\s*/, '');
+    t = t.replace(/\s*이벤트\s*$/i, '').replace(/\s*(쿠지|뽑기)\s*$/i, '').trim();
+    return t || String((board && board.category) || '판');
+  }
+
+  /* 열린 판이 2개 이상이면 뽑기판 안에서 바로 다른 판으로 넘어가는 칩 바 (v4.2.7) */
+  function renderBoardSwitch(board) {
+    var el = $('#boardSwitch');
+    if (!el) return;
+    var open = (state.boards || []).filter(function (b) { return b.status === 'open'; });
+    if (open.length < 2) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML = open.map(function (b) {
+      var active = b.id === board.id;
+      return '<a class="board-chip' + (active ? ' is-active' : '') + '" href="#/board/' + encodeURIComponent(b.id) + '"' +
+        (active ? ' aria-current="page"' : '') + '>' +
+        '<span>' + h(boardShortName(b)) + '</span>' +
+        '<small>' + fmt(Math.max(0, Number(b.tickets || 0) - openedCount(b))) + '장</small>' +
+      '</a>';
+    }).join('');
   }
 
   function renderBoardHero(board) {
@@ -8003,6 +8090,10 @@
         if (mEmpty) mEmpty.hidden = true;
         if (mTable) mTable.hidden = false;
         mb.innerHTML = rows.map(function (m) {
+          var isMe = !!(state.me && String(state.me.id) === String(m.id));
+          var adminBtn = isMe
+            ? '<span class="muted small">내 계정</span>'
+            : '<button class="btn ' + (m.isAdmin ? 'btn-danger-ghost' : 'btn-outline') + ' btn-sm" data-action="set-admin" data-id="' + h(m.id) + '" data-make="' + (m.isAdmin ? '0' : '1') + '">' + (m.isAdmin ? '관리자 해제' : '관리자 지정') + '</button>';
           return '<tr>' +
             '<td><b>' + h(m.nickname) + '</b>' + (m.isAdmin ? ' <span class="badge" style="font-size:10px">관리자</span>' : '') + '<br><span class="muted small">' + h(m.email || '') + '</span></td>' +
             '<td class="num">' + h(m.phone || '-') + '</td>' +
@@ -8014,6 +8105,7 @@
               (Number(m.couponCount || 0) > 0
                 ? ' <button class="btn btn-danger-ghost btn-sm" data-action="revoke-open" data-id="' + h(m.id) + '">쿠폰 회수</button>'
                 : '') +
+              ' ' + adminBtn +
             '</td>' +
           '</tr>';
         }).join('');
@@ -8985,18 +9077,19 @@
   }
 
   /* ---------- 판 편집 ---------- */
-  function tierRowsHTML(tiers) {
+  /* locked: 이미 1장 이상 팔린 판 — 장수·등급(번호 구성)은 잠근다. */
+  function tierRowsHTML(tiers, locked) {
     return tiers.map(function (t) {
       return '<div class="tier-row">' +
         '<div class="tier-main">' +
-          '<select name="grade">' + TIER_GRADES.map(function (g) {
+          '<select name="grade"' + (locked ? ' disabled' : '') + '>' + TIER_GRADES.map(function (g) {
             return '<option value="' + g + '"' + (g === t.grade ? ' selected' : '') + '>' + (g === 'P' ? 'P상 (포인트)' : g + '상') + '</option>';
           }).join('') + '</select>' +
           '<input name="label" type="text" maxlength="40" value="' + h(t.label || '') + '" placeholder="상품명">' +
-          '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '">' +
-          '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '">' +
-          '<label class="tier-point-only" title="이 등급은 실물 대신 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + '><span>P상</span></label>' +
-          '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>' +
+          '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '"' + (locked ? ' readonly' : '') + '>' +
+          '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '"' + (locked ? ' readonly' : '') + '>' +
+          '<label class="tier-point-only" title="이 등급은 실물 대신 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + (locked ? ' disabled' : '') + '><span>P상</span></label>' +
+          (locked ? '' : '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>') +
         '</div>' +
         '<div class="tier-extra">' +
           '<span class="tier-thumb-prev" data-role="tier-thumb">' +
@@ -9041,6 +9134,9 @@
       board.title = (String(board.title || '') + ' 복사').slice(0, 60);
     }
     var dupMode = !!board && !editing;
+    /* 아직 1장도 안 팔린 판(sold === 0)만 장수·등급 수정을 연다. */
+    var soldCount = editing ? openedCount(editing) : 0;
+    var lockStructure = !!editing && soldCount > 0;
     ui.editingBoardId = editing ? editing.id : null;
     var tiers = (board && board.tiers && board.tiers.length) ? board.tiers : [
       { grade: 'A', label: '', count: 1, points: 0 },
@@ -9054,7 +9150,9 @@
     var html = '' +
       '<h2 class="modal-title" id="modalTitle">' + (editing ? '판 수정' : (dupMode ? '판 복제' : '새 판 만들기')) + '</h2>' +
       '<p class="modal-sub">' + (editing
-        ? '내용을 고치면 손님 화면에 바로 반영됩니다. 진행 중인 판의 장수·등급은 바꿀 수 없어요.'
+        ? (lockStructure
+            ? '내용을 고치면 손님 화면에 바로 반영됩니다. 이미 <b>' + fmt(soldCount) + '장</b>이 팔려 장수·등급은 바꿀 수 없어요.'
+            : '내용을 고치면 손님 화면에 바로 반영됩니다. 아직 1장도 안 팔려서 <b>장수·등급도 바꿀 수 있어요</b> — 저장하면 번호 구성이 새로 만들어집니다.')
         : '카테고리와 금액을 정하고, 등급 수량의 합계를 전체 장수와 맞춰 주세요.') + '</p>' +
       (editing ? '' :
         '<div class="kuji-import">' +
@@ -9073,7 +9171,8 @@
             CATEGORIES.map(function (c) { return '<option' + ((board ? board.category : '원피스') === c ? ' selected' : '') + '>' + h(c) + '</option>'; }).join('') +
           '</select></label>' +
           '<label class="field"><span>1장 가격 (원)</span><input name="price" type="number" min="100" step="100" value="' + Number(board ? board.price : 12000) + '"></label>' +
-          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 100) + '"></label>' +
+          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 100) + '"' + (lockStructure ? ' readonly' : '') + '>' +
+            (lockStructure ? '<span class="field-hint">' + fmt(soldCount) + '장이 팔려 장수를 바꿀 수 없어요.</span>' : '') + '</label>' +
           '<label class="field"><span>판매 상태</span><select name="status">' +
             '<option value="open"' + (!board || board.status === 'open' ? ' selected' : '') + '>판매 중</option>' +
             '<option value="closed"' + (board && board.status === 'closed' ? ' selected' : '') + '>종료</option>' +
@@ -9117,14 +9216,15 @@
         '</div>' +
         '<div class="tier-editor" id="tierEditor">' +
           '<div class="tier-editor-head"><span>등급</span><span>상품명</span><span>수량</span><span>지급 포인트(P)</span><span>구분</span><span></span></div>' +
-          '<div id="tierRows">' + tierRowsHTML(tiers) + '</div>' +
+          '<div id="tierRows">' + tierRowsHTML(tiers, lockStructure) + '</div>' +
           '<div class="tier-summary"><span>등급 수량 합계 <b id="tierSumLabel">0</b> / <b id="ticketTotalLabel">0</b>장</span><span id="tierSumState"></span></div>' +
         '</div>' +
+        (lockStructure ? '' :
         '<div class="btn-row tight">' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button>' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add-point">+ P상(포인트) 추가</button>' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="tier-fill-point">P상 자동 계산</button>' +
-        '</div>' +
+        '</div>') +
         '<div class="manual-editor">' +
           '<div class="manual-editor-head"><span>상품 설명서</span><small>판 상세 하단에 그대로 표시됩니다.</small></div>' +
           '<div class="field">' +
@@ -9249,13 +9349,18 @@
     if (sum !== data.tickets) return fail('등급 수량 합계(' + fmt(sum) + '장)가 전체 장수(' + fmt(data.tickets) + '장)와 같아야 합니다.');
 
     var existing = ui.editingBoardId ? getBoard(ui.editingBoardId) : null;
+    var soldCount = existing ? openedCount(existing) : 0;
     var structureChanged = !existing || existing.tickets !== data.tickets ||
       tierStructureKey(existing.tiers) !== tierStructureKey(data.tiers) ||
       (!!data.seed && data.seed !== existing.seed);
 
-    if (Backend.mode === 'supabase' && existing && structureChanged) {
-      return fail('서버 모드에서는 진행 중인 판의 구조(장수·등급)를 바꿀 수 없어요. 새 판을 만들어 주세요.');
+    /* 이미 1장이라도 팔린 판(sold > 0)은 번호 구성(장수·등급·시드)을 잠근다.
+       아직 안 팔린 판(sold === 0)은 장수·등급을 바꾸고 번호를 새로 만들 수 있다. */
+    if (existing && structureChanged && soldCount > 0) {
+      return fail('이미 ' + fmt(soldCount) + '장이 팔린 판은 장수·등급을 바꿀 수 없어요. 새 판을 만들어 주세요.');
     }
+    /* 번호 구성을 새로 만들 때, 시드를 손대지 않았다면 새 시드로 다시 섞는다 */
+    if (existing && structureChanged && soldCount === 0 && data.seed === existing.seed) data.seed = '';
 
     var proceed = async function () {
       try {
@@ -9277,12 +9382,11 @@
       }
     };
 
-    if (existing && structureChanged && (existing.opens || []).length && Backend.mode === 'local') {
+    if (existing && structureChanged) {
       confirmDialog({
-        title: '판매 내역이 초기화됩니다',
-        message: '번호 구성(장수·등급·시드)이 바뀌면 기존 판매 내역 <b>' + fmt(existing.opens.length) + '건</b>이 초기화됩니다. 계속할까요?',
-        confirmLabel: '초기화하고 저장',
-        danger: true
+        title: '번호 구성을 새로 만듭니다',
+        message: '아직 1장도 안 팔린 판이에요. 저장하면 <b>' + fmt(data.tickets) + '장</b> 번호와 봉인 해시가 새로 만들어지고, 기존 번호 구성은 사라집니다. 계속할까요?',
+        confirmLabel: '새로 만들고 저장'
       }).then(function (ok) {
         if (ok) proceed();
         else openBoardEditor(existing.id);
@@ -9646,6 +9750,28 @@
 
         case 'grant-open': openGrantModal(id); break;
         case 'admin-reload': ensureAdminData(true); break;
+        case 'set-admin': {
+          var target = (state.adminMembers || []).filter(function (x) { return String(x.id) === String(id); })[0];
+          if (!target) { toast('대상 회원을 찾을 수 없어요', 'err'); break; }
+          var makeAdmin = el.getAttribute('data-make') === '1';
+          confirmDialog({
+            title: makeAdmin ? '관리자를 지정할까요?' : '관리자 권한을 해제할까요?',
+            message: '<b>' + h(target.nickname || '회원') + '</b>' + (target.email ? ' (' + h(target.email) + ')' : '') +
+              (makeAdmin
+                ? ' 님에게 관리자 권한을 줍니다. 회원·판·쿠폰 관리 화면 전체를 쓸 수 있게 돼요.'
+                : ' 님의 관리자 권한을 거둡니다. 바로 [관리자] 화면이 닫혀요.'),
+            confirmLabel: makeAdmin ? '관리자 지정' : '관리자 해제',
+            danger: !makeAdmin
+          }).then(function (ok) {
+            if (!ok) return;
+            Backend.setUserAdmin(id, makeAdmin).then(function () {
+              toast((makeAdmin ? '관리자로 지정했어요: ' : '관리자 권한을 해제했어요: ') + (target.nickname || target.email || ''), 'ok');
+              if (Backend.mode === 'supabase') ensureAdminData(true);
+              else renderMembersTab();
+            }).catch(function (e) { toast(errMsg(e), 'err'); });
+          });
+          break;
+        }
         case 'revoke-open': openRevokeModal(id, 0); break;
         case 'revoke-open-claim': {
           var rc = (state.adminClaims || []).filter(function (x) { return x.id === id; })[0];
@@ -10589,7 +10715,7 @@
   };
 
   function policyHTML(key) {
-    var biz = '<p class="policy-biz">쿠지킹 · 대표 원준철 · 사업자등록번호 719-32-01822 · 서울특별시 성북구 장위로24길 47-15(장위동) · 고객센터 010-8070-1115</p>';
+    var biz = '<p class="policy-biz">쿠지킹 · 대표 원준철 · 사업자등록번호 719-32-01822 · 서울특별시 성북구 장위로24길 47-15(장위동) · 고객센터 010-8383-9273</p>';
     if (key === 'privacy') {
       return '<div class="policy-doc">' +
         '<h3>1. 수집하는 개인정보</h3>' +
@@ -10601,11 +10727,11 @@
         '<h3>4. 제3자 제공 및 처리 위탁</h3>' +
         '<p>배송을 위해 택배사에 수령인 이름·연락처·주소를 제공합니다. 서비스 운영을 위해 Supabase(데이터 보관), GitHub Pages(사이트 호스팅), 네이버 스마트스토어(주문·결제)에 처리를 위탁하며, 위탁 범위를 벗어난 이용은 하지 않습니다.</p>' +
         '<h3>5. 이용자의 권리</h3>' +
-        '<p>언제든지 자신의 개인정보 열람·정정·삭제·처리정지를 요구할 수 있습니다. 카카오톡 채널 ‘쿠지킹’ 1:1 문의 또는 010-8070-1115로 요청하면 지체 없이 조치합니다.</p>' +
+        '<p>언제든지 자신의 개인정보 열람·정정·삭제·처리정지를 요구할 수 있습니다. 카카오톡 채널 ‘쿠지킹’ 1:1 문의 또는 010-8383-9273로 요청하면 지체 없이 조치합니다.</p>' +
         '<h3>6. 쿠키</h3>' +
         '<p>로그인 유지와 순번·쿨타임 기억을 위해 브라우저 저장소(쿠키·로컬스토리지)를 최소한으로 사용합니다. 브라우저 설정에서 삭제할 수 있으나 로그인이 풀릴 수 있습니다.</p>' +
         '<h3>7. 개인정보 보호 책임자</h3>' +
-        '<p>원준철 · 010-8070-1115 · 카카오톡 채널 ‘쿠지킹’</p>' +
+        '<p>원준철 · 010-8383-9273 · 카카오톡 채널 ‘쿠지킹’</p>' +
         biz +
         '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
       '</div>';

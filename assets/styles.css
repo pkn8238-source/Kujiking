@@ -370,6 +370,21 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
    Board page
    ========================================================= */
 .board-page{padding:30px 0 80px}
+.back-link{margin-bottom:12px}
+/* 판 전환 칩 — 열린 판이 2개 이상일 때 뽑기판 안에서 바로 판을 바꾼다 */
+.board-switch{display:flex;gap:8px;overflow-x:auto;margin:0 0 14px;padding:2px 2px 4px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.board-switch::-webkit-scrollbar{display:none}
+.board-switch .board-chip{
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:7px;max-width:220px;
+  padding:8px 13px;border-radius:999px;border:2px solid var(--line-strong);
+  background:var(--paper);color:var(--ink-soft);font-size:13px;font-weight:800;line-height:1.2;
+  text-decoration:none;white-space:nowrap;transition:background .15s,border-color .15s,color .15s;
+}
+.board-switch .board-chip span{overflow:hidden;text-overflow:ellipsis}
+.board-switch .board-chip small{font-size:11px;font-weight:700;color:var(--muted)}
+.board-switch .board-chip:hover{border-color:var(--ink)}
+.board-switch .board-chip.is-active{background:var(--ink);border-color:var(--ink);color:#fff;box-shadow:0 3px 0 rgba(23,18,14,.2)}
+.board-switch .board-chip.is-active small{color:rgba(255,255,255,.78)}
 .board-hero{
   display:grid;grid-template-columns:230px 1fr auto;gap:26px;align-items:center;
   padding:22px;margin-bottom:22px;overflow:hidden;position:relative;
