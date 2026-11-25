@@ -123,7 +123,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.7';
+  var COVER_VER = '4.2.8';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -1655,6 +1655,7 @@
         state.draws = state.myDraws;
         state.claims = state.myClaims;
         state.deliveries = state.myDeliveries;
+        pruneCouponPending();
       } else {
         state.me = null;
         state.myCoupons = []; state.myDraws = []; state.myClaims = []; state.myDeliveries = []; state.myGoodsOrders = [];
@@ -2494,13 +2495,16 @@
       var timer = null;
       var kick = function () {
         clearTimeout(timer);
+        /* 뽑기 연출이 도는 동안에는 전체 새로고침을 미룬다 — 연속 뽑기가 끊기지 않게 (v4.2.7) */
+        var d = ui.draw;
+        var busy = !!d && (d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing');
         timer = setTimeout(async function () {
           try {
             await self.refreshData();
             if (state.me && state.me.isAdmin && ui.view === 'admin' && ui.adminUnlocked) await self.loadAdmin();
             renderAll();
           } catch (e) { /* 실시간 갱신 실패는 조용히 무시 */ }
-        }, 350);
+        }, busy ? 1500 : 350);
       };
       try {
         this.sb.channel('kujiking-live')
@@ -2975,11 +2979,125 @@
      6. 헤더 · 공통 조각
      ========================================================= */
   function availableCoupons() {
-    return (state.myCoupons || []).filter(function (c) { return !c.usedAt; });
+    return (state.myCoupons || []).filter(function (c) { return !c.usedAt && !couponPending[c.id]; });
   }
   function couponsFor(board) {
     return availableCoupons().filter(function (c) { return !c.boardId || c.boardId === board.id; })
       .sort(function (a, b) { return (a.boardId ? 0 : 1) - (b.boardId ? 0 : 1); });
+  }
+
+  /* =========================================================
+     뽑기 결제 낙관 처리 (v4.2.7)
+     ---------------------------------------------------------
+     서버 응답과 전체 새로고침(refreshData)을 기다리면, 방금 쓴 쿠폰이 아직
+     '미사용'으로 남아 있어 다음 카드를 0.1초 만에 누를 때 같은 쿠폰을 또 보내
+     '이미 사용한 쿠폰'이 납니다. 제출 즉시 로컬에서 사용으로 표시하고,
+     서버가 실패한 경우에만 되돌립니다.
+     ========================================================= */
+  var couponPending = {};      /* couponId -> { usedAt, usedDrawId } (되돌리기용 이전 값) */
+
+  function markCouponsPending(ids) {
+    /* 로컬(데모) 모드는 Backend.draw 가 즉시 사용 처리하므로 낙관 표시가 필요 없다.
+       (미리 표시하면 로컬 뽑기가 '이미 사용한 쿠폰'으로 막힌다) */
+    if (Backend.mode !== 'supabase') return;
+    (ids || []).forEach(function (id) {
+      if (!id || couponPending[id]) return;
+      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
+      if (!c) return;
+      couponPending[id] = { usedAt: c.usedAt || null, usedDrawId: c.usedDrawId || null };
+      c.usedAt = nowISO();
+    });
+    syncCouponChips();
+  }
+
+  function settleCouponsPending(ids) {
+    /* 성공해도 표시는 유지한다 — 뒤늦게 도착한 예전 목록이 쿠폰을 '미사용'으로
+       되살려도 다시 잡지 않도록, 서버가 사용으로 확인해 줄 때까지 제외한다. */
+    (ids || []).forEach(function (id) {
+      if (id && couponPending[id]) couponPending[id].settled = true;
+    });
+  }
+
+  /* 서버 목록에 사용으로 반영된 쿠폰은 임시 표시를 거둔다 */
+  function pruneCouponPending() {
+    Object.keys(couponPending).forEach(function (id) {
+      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
+      if (!c) { delete couponPending[id]; return; }
+      if (c.usedAt) delete couponPending[id];
+    });
+  }
+
+  function rollbackCouponsPending(ids) {
+    (ids || []).forEach(function (id) {
+      var prev = couponPending[id];
+      if (!prev) return;
+      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
+      if (c) { c.usedAt = prev.usedAt; c.usedDrawId = prev.usedDrawId; }
+      delete couponPending[id];
+    });
+    syncCouponChips();
+  }
+
+  /* 상단·판 사이드의 보유 뽑기권 숫자를 바로 맞춘다 */
+  function syncCouponChips() {
+    var n = availableCoupons().length;
+    var chip = $('#userCoupons');
+    if (chip) chip.textContent = '쿠폰 ' + fmt(n);
+    if (ui.view === 'board') {
+      var b = getBoard(ui.boardId);
+      if (b) renderCouponCard(b);
+    }
+  }
+
+  /* 뽑은 번호를 기다리지 않고 화면에 바로 반영 — 티켓 셀·등급 현황·남은 장수 (v4.2.8) */
+  function syncBoardAfterDraw(board, no) {
+    if (!board) return;
+    var n = Number(no);
+    if (ui.view === 'board' && getBoard(ui.boardId) === board) {
+      var opened = (board.opens || []).filter(function (o) { return o.n === n; })[0];
+      var cell = document.querySelector('#ticketGrid .ticket[data-n="' + n + '"]');
+      if (cell && opened && !cell.classList.contains('is-open')) cell.outerHTML = ticketCellHTML(n, opened);
+      var summary = $('#gridSummary');
+      if (summary) summary.textContent = fmt(board.tickets) + '장 중 ' + fmt(remaining(board)) + '장 남음 · 판매 ' + fmt(openedCount(board)) + '장';
+      var sc = $('#salesCount');
+      if (sc) sc.textContent = fmt(openedCount(board));
+      renderBoardStatus(board);
+      renderBoardHero(board);
+      renderQueuePanel(board);
+    }
+  }
+
+  /* 서버 응답의 판매 결과를 새로고침 없이 화면 상태에 먼저 반영한다 */
+  function applyDrawOpenLocally(board, no, res) {
+    if (!board || !res || !(Number(no) > 0)) return;
+    var opens = board.opens || (board.opens = []);
+    var n = Number(no);
+    if (!opens.some(function (o) { return o.n === n; })) {
+      var u = me();
+      opens.unshift({
+        n: n, grade: res.grade, tierLabel: res.tierLabel || '', at: nowISO(),
+        name: u ? maskName(u.nickname) : '게스트',
+        userId: u ? u.id : null, demo: !!res.demo, last: !!res.isLast
+      });
+    }
+    if (res.lastOneWon) {
+      if (!board.lastOneWinnerName) board.lastOneWinnerName = me() ? maskName(me().nickname) : '게스트';
+      if (!board.lastOneWonAt) board.lastOneWonAt = nowISO();
+    }
+    syncPointsBalance(res);
+    syncBoardAfterDraw(board, n);
+    syncCouponChips();
+  }
+
+  /* 결과 화면을 막지 않도록 전체 새로고침은 뒤에서 한 번만 돌린다 */
+  var bgRefreshTimer = null;
+  function scheduleBackgroundRefresh(delay) {
+    if (Backend.mode !== 'supabase') return;
+    clearTimeout(bgRefreshTimer);
+    bgRefreshTimer = setTimeout(function () {
+      bgRefreshTimer = null;
+      Backend.refreshData().then(function () { renderAll(); }).catch(function () {});
+    }, Number(delay) || 1200);
   }
 
   /* ---------- 판별 스토어 구매 링크 (판 상세 하단 고정바) ---------- */
@@ -3737,6 +3855,23 @@
       '</button>';
   }
 
+  function ticketCellHTML(n, o) {
+    if (o) {
+      return '<button class="ticket is-open" style="--ticket-color:' + gradeColor(o.grade) + '" ' +
+        'data-action="ticket-info" data-n="' + n + '" title="' + h(o.name + ' · ' + timeAgo(o.at)) + '" ' +
+        'aria-label="' + n + '번, ' + h(o.grade) + '상 판매 완료">' +
+        '<span class="ticket-grade">' + h(o.grade) + '</span>' +
+        '<span class="ticket-num">' + n + '</span>' +
+        '<span class="ticket-buyer">' + h(o.name) + '</span>' +
+        (o.last ? '<span class="last-flag" aria-hidden="true">' + icon('crown') + '</span>' : '') +
+        '</button>';
+    }
+    return '<button class="ticket" data-action="pick-ticket" data-n="' + n + '" aria-label="' + n + '번 선택">' +
+      '<span class="ticket-num">' + pad2(n) + '</span>' +
+      '<span class="ticket-hint">뽑기</span>' +
+      '</button>';
+  }
+
   function renderTicketGrid(board) {
     var grid = $('#ticketGrid');
     if (!grid) return;
@@ -3744,22 +3879,7 @@
     (board.opens || []).forEach(function (o) { sold.set(o.n, o); });
     var html = '';
     for (var n = 1; n <= board.tickets; n++) {
-      var o = sold.get(n);
-      if (o) {
-        html += '<button class="ticket is-open" style="--ticket-color:' + gradeColor(o.grade) + '" ' +
-          'data-action="ticket-info" data-n="' + n + '" title="' + h(o.name + ' · ' + timeAgo(o.at)) + '" ' +
-          'aria-label="' + n + '번, ' + h(o.grade) + '상 판매 완료">' +
-          '<span class="ticket-grade">' + h(o.grade) + '</span>' +
-          '<span class="ticket-num">' + n + '</span>' +
-          '<span class="ticket-buyer">' + h(o.name) + '</span>' +
-          (o.last ? '<span class="last-flag" aria-hidden="true">' + icon('crown') + '</span>' : '') +
-          '</button>';
-      } else {
-        html += '<button class="ticket" data-action="pick-ticket" data-n="' + n + '" aria-label="' + n + '번 선택">' +
-          '<span class="ticket-num">' + pad2(n) + '</span>' +
-          '<span class="ticket-hint">뽑기</span>' +
-          '</button>';
-      }
+      html += ticketCellHTML(n, sold.get(n));
     }
     grid.classList.toggle('is-dense', board.tickets > 100);
     grid.innerHTML = html;
@@ -4337,6 +4457,7 @@
     } else if (d.step === 'peel') {
       bindPeel();
       paintPeek(d);
+      kujiSound.refreshToggle(false);
     } else if (d.step === 'seal') {
       bindSeal();
     } else if (d.step === 'promote') {
@@ -4853,6 +4974,11 @@
     var PCM_PEAK = 0.92;           /* 버퍼 정규화 피크 */
     var PCM_GAIN = 1;              /* PCM 버스 기본 게인 (음압은 마스터 컴프가 만든다) */
     var MASTER_GAIN = 1.5;         /* 컴프 뒤 메이크업 게인 */
+    /* v4.2.8 — 기본 볼륨을 낮추고(PC 38% · 모바일 80%) 사용자가 조절한 값을 저장한다.
+       PC 스피커에서 풀볼륨이 너무 크다는 제보를 반영. */
+    var VOL_KEY = 'kujiking.volume';
+    var VOL_DESKTOP = 0.38, VOL_MOBILE = 0.8;
+    var userVol = null;
     var WA_GAIN = 3.4;             /* AudioContext 없이 웹오디오 신스로 폴백할 때의 보정 */
     var KEYS = ['tear0', 'tear1', 'tear2', 'seal', 'snap0', 'snap1', 'snap2', 'snap3',
       'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
@@ -4883,14 +5009,69 @@
       muted = !!v;
       try { window.localStorage.setItem('kujiking.sound', muted ? 'off' : 'on'); } catch (e) {}
     }
+    function defaultVolume() {
+      var coarse = false;
+      try {
+        coarse = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) ||
+          (window.innerWidth || 0) <= 820;
+      } catch (e) {}
+      return coarse ? VOL_MOBILE : VOL_DESKTOP;
+    }
+    function getVolume() {
+      if (userVol !== null) return userVol;
+      var v = null;
+      try {
+        var raw = window.localStorage.getItem(VOL_KEY);
+        if (raw != null && raw !== '') v = Number(raw);
+      } catch (e) {}
+      if (v != null && isFinite(v)) {
+        if (v > 1 && v <= 100) v = v / 100;    /* 퍼센트로 저장된 값도 읽는다 */
+        userVol = Math.max(0, Math.min(1, v));
+      } else {
+        userVol = defaultVolume();
+      }
+      return userVol;
+    }
+    function applyVolume() {
+      if (!master) return;
+      try { master.gain.value = MASTER_GAIN * getVolume(); } catch (e) {}
+    }
+    function setVolume(v) {
+      var n = Number(v);
+      if (!isFinite(n)) return getVolume();
+      userVol = Math.max(0, Math.min(1, n));
+      try { window.localStorage.setItem(VOL_KEY, String(Math.round(userVol * 1000) / 1000)); } catch (e) {}
+      applyVolume();
+      refreshToggle(false);
+      return userVol;
+    }
     function refreshToggle(flash) {
       var btn = document.getElementById('peelSound');
       var off = isMuted();
+      var pct = Math.round(getVolume() * 100);
       if (btn) {
         btn.textContent = off ? '🔇 소리 꺼짐' : (flash ? '🔊 효과음 재생!' : '🔊 소리 켜짐');
         btn.setAttribute('aria-pressed', off ? 'false' : 'true');
         btn.title = off ? '개봉 효과음 켜기 (누르면 테스트음이 재생됩니다)' : '개봉 효과음 끄기';
       }
+      /* 상단 사운드 버튼 + 설정 팝오버도 같은 상태를 보여 준다 */
+      var hb = document.getElementById('soundBtn');
+      if (hb) {
+        hb.textContent = off ? '🔇' : '🔊';
+        hb.setAttribute('aria-pressed', off ? 'false' : 'true');
+        hb.title = off ? '효과음 꺼짐 · 눌러서 설정' : '효과음 ' + pct + '% · 눌러서 조절';
+        hb.classList.toggle('is-off', off);
+      }
+      var pm = document.getElementById('soundPopMute');
+      if (pm) { pm.textContent = off ? '🔇 꺼짐' : '🔊 켜짐'; pm.setAttribute('aria-pressed', off ? 'false' : 'true'); }
+      var r1 = document.getElementById('soundVolRange');
+      if (r1 && Number(r1.value) !== pct) r1.value = String(pct);
+      var r2 = document.getElementById('peelVolume');
+      if (r2 && Number(r2.value) !== pct) r2.value = String(pct);
+      var l1 = document.getElementById('soundVolPct');
+      if (l1) l1.textContent = pct + '%';
+      var l2 = document.getElementById('peelVolumePct');
+      if (l2) l2.textContent = pct + '%';
       if (flashTimer) { clearTimeout(flashTimer); flashTimer = 0; }
       if (flash && !off && btn) {
         flashTimer = setTimeout(function () { flashTimer = 0; refreshToggle(false); }, 1200);
@@ -5471,7 +5652,7 @@
       cursor[key] = (cursor[key] + 1) % 1024;
       playSeq++;
       try { el.muted = false; } catch (e) {}
-      try { el.volume = Math.max(0.05, Math.min(1, opt.vol == null ? 1 : opt.vol)); } catch (e) {}
+      try { el.volume = Math.max(0.01, Math.min(1, (opt.vol == null ? 1 : opt.vol) * getVolume())); } catch (e) {}
       try { el.playbackRate = Math.max(0.85, Math.min(1.35, opt.rate == null ? 1 : opt.rate)); } catch (e) {}
       try { el.pause(); } catch (e) {}
       try { el.currentTime = 0; } catch (e) {}
@@ -5544,7 +5725,7 @@
         mixNode = c.createGain();
         mixNode.gain.value = 1;
         var masterGain = c.createGain();
-        masterGain.gain.value = MASTER_GAIN;
+        masterGain.gain.value = MASTER_GAIN * getVolume();
         var comp = null;
         if (c.createDynamicsCompressor) {
           /* 쫀득한 음압 밀도: 어택은 조금 늦춰 트랜지언트를 남기고, 릴리즈로 펀치를 되살린다 */
@@ -5591,6 +5772,7 @@
         }
         last.connect(c.destination);
         master = masterGain;
+        applyVolume();
       } catch (e) { mixNode = null; revIn = null; master = null; }
     }
     function makeCtx() {
@@ -6055,7 +6237,8 @@
       cBeat: cBeat, promote: promote,
       unlock: unlock, buzz: buzz,
       isMuted: isMuted, setMuted: setMuted, refreshToggle: refreshToggle,
-      toggle: function () { setMuted(!isMuted()); }
+      getVolume: getVolume, setVolume: setVolume, defaultVolume: defaultVolume,
+      toggle: function () { setMuted(!isMuted()); refreshToggle(false); }
     };
   })();
 
@@ -6122,6 +6305,7 @@
         '<span class="peel-meter-row">' +
           '<span class="peel-meter-text" id="peelMeterText">아래로 찢어서 열기 ↓</span>' +
           '<button class="peel-sound" id="peelSound" type="button" data-action="toggle-sound" aria-pressed="true">🔊 소리 켬</button>' +
+          '<span class="peel-vol"><input id="peelVolume" type="range" min="0" max="100" step="1" value="38" aria-label="효과음 볼륨"><b id="peelVolumePct">38%</b></span>' +
         '</span>' +
       '</div>' +
       '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
@@ -6135,9 +6319,13 @@
   function enterPeel(opts) {
     var d = ui.draw;
     if (!d) return;
+    /* 연타·중복 제출 방지 — 이미 뽑는 중이면 같은 쿠폰을 또 보내지 않는다 */
+    if (d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing') return;
     /* 실제 뽑기 동작이 시작되는 사용자 제스처에서만 효과음 잠금을 푼다 */
     kujiSound.unlock();
     opts = opts || {};
+    /* 제출 즉시 쿠폰을 사용으로 표시 — 서버 응답 전에 다음 카드를 눌러도 안전 */
+    if (opts.couponId) markCouponsPending([opts.couponId]);
     ui.draw = {
       boardId: d.boardId, n: d.n, step: 'peel',
       couponId: opts.couponId || null,
@@ -6162,6 +6350,9 @@
       var tuned = tierOf(board, res.grade);
       if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
       ui.pendingCode = '';
+      /* 성공 — 낙관 표시를 확정하고 결과를 바로 화면 상태에 반영한다 */
+      settleCouponsPending([d.couponId]);
+      applyDrawOpenLocally(board, d.n, res);
       if (!ui.draw || ui.draw !== d || d.step !== 'peel') {
         /* 화면이 닫혔거나 다른 단계로 넘어간 경우: 결과는 이미 서버·보관함에 기록됐다 */
         toast('뽑기 완료! ' + res.grade + '상', 'ok');
@@ -6174,7 +6365,11 @@
       paintPeek(d);
       updatePeelText(peelDrag ? peelDrag.p : 0);
       queueAfterDraw(getBoard(d.boardId) || board);
+      /* 전체 새로고침은 뒤에서 — 카드를 바로 이어 까도 막히지 않게 (v4.2.7) */
+      scheduleBackgroundRefresh(1200);
     } catch (e) {
+      /* 실패한 경우에만 쿠폰 사용 표시를 되돌린다 */
+      rollbackCouponsPending([d.couponId]);
       if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(errMsg(e), 'err'); return; }
       d.busy = false;
       ui.draw = { boardId: d.boardId, n: d.n, step: 'source', busy: false };
@@ -6201,6 +6396,8 @@
   function startMultiDraw(pay) {
     var d = ui.draw;
     if (!d || !d.batch) return;
+    /* 연뽑 연타·중복 제출 방지 */
+    if (d.step !== 'source') return;
     var board = getBoard(d.boardId);
     if (!board) return;
     kujiSound.unlock();
@@ -6224,6 +6421,8 @@
       toast('남은 번호가 없어 뽑을 수 없어요', 'err');
       return;
     }
+    /* 발라 놓은 쿠폰은 지금 바로 사용으로 표시 — 결과를 기다리지 않는다 */
+    markCouponsPending(d.pay.couponIds);
     runMultiDraw();
   }
 
@@ -6237,19 +6436,24 @@
     for (var i = d.results.length; i < d.numbers.length; i++) {
       if (!ui.draw || ui.draw !== d || d.step !== 'drawing') return;  /* 창을 닫으면 중단 */
       var no = d.numbers[i];
+      var cid = pay.couponIds ? (pay.couponIds[i] || null) : null;
       try {
         var res = await Backend.draw({
           boardId: board.id, n: no,
-          couponId: pay.couponIds ? (pay.couponIds[i] || null) : null,
+          couponId: cid,
           code: pay.code || null
         });
         var tuned = tierOf(board, res.grade);
         if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
         res.n = no;
         d.results.push(res);
+        if (cid) settleCouponsPending([cid]);
+        applyDrawOpenLocally(board, no, res);
         syncPointsBalance(res);
       } catch (e) {
         d.error = errMsg(e);
+        /* 못 쓴 쿠폰(현재·남은 것)은 다시 사용 가능으로 되돌린다 */
+        rollbackCouponsPending(pay.couponIds ? pay.couponIds.slice(i) : []);
         break;
       }
       updateMultiProgress();
@@ -6262,8 +6466,9 @@
   async function finishMultiDraw() {
     var d = ui.draw;
     if (!d || !d.batch) return;
-    try { await Backend.refreshData(); } catch (e) {}
+    /* 결과 화면을 먼저 띄우고, 전체 새로고침은 뒤에서 */
     renderAll();
+    scheduleBackgroundRefresh(1200);
     /* 창이 닫혔거나 다른 화면으로 이동한 경우: 결과는 이미 서버·보관함에 기록됐다 */
     if (!ui.draw || ui.draw !== d) {
       if (d.results.length) toast('무작위 연뽑 완료 · ' + d.results.length + '장', 'ok');
@@ -9509,6 +9714,13 @@
      ========================================================= */
   function bindEvents() {
     document.addEventListener('click', function (e) {
+      /* 사운드 설정 팝오버 — 바깥을 누르면 닫는다 */
+      var spEl = $('#soundPop');
+      if (spEl && !spEl.hidden && !e.target.closest('#soundPop') && !e.target.closest('#soundBtn')) {
+        spEl.hidden = true;
+        var spBtn0 = $('#soundBtn');
+        if (spBtn0) spBtn0.setAttribute('aria-expanded', 'false');
+      }
       var tab = e.target.closest('[data-admin-tab]');
       if (tab) {
         ui.adminTab = tab.getAttribute('data-admin-tab');
@@ -9650,7 +9862,7 @@
           break;
         }
         case 'multi-coupon': {
-          if (!ui.draw || !ui.draw.batch) break;
+          if (!ui.draw || !ui.draw.batch || ui.draw.step !== 'source') break;
           var mBoard = getBoard(ui.draw.boardId);
           var mCoupons = mBoard ? couponsFor(mBoard) : [];
           if (mCoupons.length < ui.draw.count) { toast('뽑기권이 부족해요 (필요 ' + ui.draw.count + '장)', 'err'); break; }
@@ -9669,8 +9881,16 @@
           if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.test(false); }
           break;
         }
+        case 'toggle-sound-panel': {
+          var sp = $('#soundPop');
+          if (!sp) break;
+          sp.hidden = !sp.hidden;
+          el.setAttribute('aria-expanded', sp.hidden ? 'false' : 'true');
+          if (!sp.hidden) kujiSound.refreshToggle(false);
+          break;
+        }
         case 'draw-coupon': {
-          if (!ui.draw) break;
+          if (!ui.draw || ui.draw.step !== 'source') break;
           enterPeel({ couponId: id });
           break;
         }
@@ -10444,6 +10664,18 @@
       state = normalizeLocalState(fresh);
       buildLocalViews();
       renderAll();
+    });
+
+    /* 효과음 볼륨 슬라이더 (상단 설정 팝오버 · 개봉 화면) — 끌는 동안 바로 적용 */
+    document.addEventListener('input', function (e) {
+      var r = e.target;
+      if (!r || (r.id !== 'soundVolRange' && r.id !== 'peelVolume')) return;
+      kujiSound.setVolume(Number(r.value) / 100);
+    });
+    document.addEventListener('change', function (e) {
+      var r = e.target;
+      if (!r || (r.id !== 'soundVolRange' && r.id !== 'peelVolume')) return;
+      if (!kujiSound.isMuted()) { kujiSound.unlock(); kujiSound.test(false); }
     });
   }
 

@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.2.7">
+<link rel="stylesheet" href="assets/styles.css?v=4.2.8">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -56,6 +56,7 @@
         <span class="yt-live-mark" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="1.6" y="4.6" width="20.8" height="14.8" rx="4.4" fill="currentColor"/><path d="M10.2 8.9l5.6 3.1-5.6 3.1z" fill="#fff"/></svg></span>
         <span class="yt-live-word"><span class="yt-live-prefix">유튜브 </span>라이브</span>
       </button>
+      <button class="sound-btn" id="soundBtn" type="button" data-action="toggle-sound-panel" aria-label="효과음 볼륨 설정" aria-expanded="false" title="효과음 설정">🔊</button>
       <button class="user-chip guest" id="authBtn" data-action="open-auth">
         <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c.8-3.6 3.8-5.4 7.5-5.4S18.7 16.4 19.5 20"/></svg>
         <span class="user-chip-label">로그인 / 회원가입</span>
@@ -70,6 +71,18 @@
       <button class="nav-toggle" id="navToggle" aria-label="메뉴 열기" aria-expanded="false" aria-controls="mainNav">
         <span></span><span></span><span></span>
       </button>
+      <div class="sound-pop" id="soundPop" hidden role="dialog" aria-label="효과음 설정">
+        <div class="sound-pop-head">
+          <b>효과음</b>
+          <button type="button" class="sound-pop-mute" id="soundPopMute" data-action="toggle-sound" aria-pressed="true">🔊 켜짐</button>
+        </div>
+        <label class="sound-vol" for="soundVolRange">
+          <span>볼륨</span>
+          <input id="soundVolRange" type="range" min="0" max="100" step="1" value="38" aria-label="효과음 볼륨">
+          <b id="soundVolPct">38%</b>
+        </label>
+        <p class="sound-pop-note">PC는 기본 38%, 모바일은 80%로 시작해요. 조절한 값은 이 브라우저에 저장됩니다.</p>
+      </div>
     </div>
   </div>
 </header>
@@ -912,7 +925,7 @@
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
     <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. 미성년자는 법정대리인 동의 후 이용해 주세요.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.2.7</span></p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.2.8</span></p>
   </div>
 </footer>
 
@@ -927,6 +940,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.2.7" defer></script>
+<script src="assets/app.js?v=4.2.8" defer></script>
 </body>
 </html>
