@@ -4417,7 +4417,7 @@
     var RATE = 44100;              /* 22.05k → 44.1k: 바스락·반짝임·트랜지언트 해상도 */
     var PCM_PEAK = 0.92;           /* 버퍼 정규화 피크 */
     var PCM_GAIN = 1;              /* PCM 버스 기본 게인 (음압은 마스터 컴프가 만든다) */
-    var MASTER_GAIN = 1.45;        /* 컴프 뒤 메이크업 게인 */
+    var MASTER_GAIN = 1.5;         /* 컴프 뒤 메이크업 게인 */
     var WA_GAIN = 3.4;             /* AudioContext 없이 웹오디오 신스로 폴백할 때의 보정 */
     var KEYS = ['tear0', 'tear1', 'tear2', 'seal', 'snap0', 'snap1', 'snap2', 'snap3',
       'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
@@ -5023,6 +5023,21 @@
       }
       return ir;
     }
+    /* 0.78 아래는 그대로, 그 위만 부드럽게 눌러 절대 ±1 을 넘지 않게 하는 소프트 클리퍼 곡선 */
+    var softCurveCache = null;
+    function softCurve() {
+      if (softCurveCache) return softCurveCache;
+      var n = 4096, cur = new Float32Array(n), k = 0.78, i, x, a, y;
+      for (i = 0; i < n; i++) {
+        x = i / (n - 1) * 2 - 1;
+        a = x < 0 ? -x : x;
+        if (a <= k) y = x;
+        else y = (x < 0 ? -1 : 1) * (k + (1 - k) * Math.tanh((a - k) / (1 - k)));
+        cur[i] = y;
+      }
+      softCurveCache = cur;
+      return cur;
+    }
     function buildChain(c) {
       try {
         mixNode = c.createGain();
@@ -5033,11 +5048,11 @@
         if (c.createDynamicsCompressor) {
           /* 쫀득한 음압 밀도: 어택은 조금 늦춰 트랜지언트를 남기고, 릴리즈로 펀치를 되살린다 */
           comp = c.createDynamicsCompressor();
-          comp.threshold.value = -12;
-          comp.knee.value = 8;
-          comp.ratio.value = 2.8;
-          comp.attack.value = 0.007;
-          comp.release.value = 0.18;
+          comp.threshold.value = -20;
+          comp.knee.value = 6;
+          comp.ratio.value = 3;
+          comp.attack.value = 0.006;
+          comp.release.value = 0.15;
         }
         if (comp) {
           mixNode.connect(comp);
@@ -5054,17 +5069,26 @@
         } else {
           mixNode.connect(masterGain);
         }
+        /* 마지막에 리미터 + 소프트 클리퍼: 어떤 소리에서도 0dB 를 넘지 않게(아이폰 스피커 왜곡 방지) */
+        var last = masterGain;
         if (c.createDynamicsCompressor) {
           var lim = c.createDynamicsCompressor();
           lim.threshold.value = -1.5;
           lim.knee.value = 0;
           lim.ratio.value = 20;
-          lim.attack.value = 0.001;
-          lim.release.value = 0.06;
-          masterGain.connect(lim); lim.connect(c.destination);
-        } else {
-          masterGain.connect(c.destination);
+          lim.attack.value = 0.0005;
+          lim.release.value = 0.07;
+          last.connect(lim); last = lim;
         }
+        if (c.createWaveShaper) {
+          try {
+            var sh = c.createWaveShaper();
+            sh.curve = softCurve();
+            sh.oversample = '2x';
+            last.connect(sh); last = sh;
+          } catch (e) {}
+        }
+        last.connect(c.destination);
         master = masterGain;
       } catch (e) { mixNode = null; revIn = null; master = null; }
     }
