@@ -7706,6 +7706,17 @@
     }).join('');
   }
 
+  function updateCoverPreview(form) {
+    var box = form.querySelector('#coverPreview');
+    if (!box) return;
+    var input = form.querySelector('input[name="cover"]');
+    var img = box.querySelector('img');
+    var v = input ? input.value.trim() : '';
+    if (!v) { box.hidden = true; if (img) img.removeAttribute('src'); return; }
+    box.hidden = false;
+    if (img) img.src = v;
+  }
+
   function openBoardEditor(boardId, opts) {
     opts = opts || {};
     var editing = boardId ? getBoard(boardId) : null;
