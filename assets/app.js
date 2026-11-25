@@ -7472,9 +7472,18 @@
       if (i >= KUJI_PROXY.length) return Promise.reject(new Error('proxy'));
       var proxy = KUJI_PROXY[i++];
       return fetchWithTimeout(proxy.make(target), 16000, proxy.headers).then(function (txt) {
+        /* 공식 사이트 점검 공지 — 다른 프록시를 더 돌려도 같으므로 바로 알린다 */
+        if (/メンテナンス|maintenance/i.test(txt) && !/itemCol|aboutCol/i.test(txt)) {
+          var mErr = new Error('maintenance');
+          mErr.fatal = true;
+          throw mErr;
+        }
         if (!txt || txt.length < 500 || !/itemCol|aboutCol|1kuji/i.test(txt)) throw new Error('empty');
         return txt;
-      }).catch(function () { return attempt(); });
+      }).catch(function (err) {
+        if (err && err.fatal) throw err;
+        return attempt();
+      });
     }
     return attempt();
   }
@@ -7673,6 +7682,10 @@
       setKujiStatus('등급 ' + parsed.tiers.length + '종 + 라스트원을 채웠어요. 사진은 1kuji 공식 이미지 주소로 연결됩니다. 내용을 확인하고 저장을 눌러주세요.');
     } catch (e) {
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '불러오기'; }
+      if (e && e.message === 'maintenance') {
+        setKujiStatus('1kuji.com이 지금 점검 중이에요. 점검이 끝난 뒤 다시 시도하거나, 아래 칸을 직접 채워 주세요.', 1);
+        return;
+      }
       setKujiStatus('불러오지 못했어요. 1kuji.com이 점검 중이거나 주소가 달라졌을 수 있어요. 잠시 후 다시 시도하거나 직접 입력해 주세요.', 1);
     }
   }
