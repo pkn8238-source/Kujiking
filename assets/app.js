@@ -7440,21 +7440,24 @@
   }
 
   /* ---------- 1kuji.com 링크로 판 자동 채우기 ----------
-     브라우저에서 1kuji.com 을 직접 부를 수 없어(CORS) 공개 프록시를 차례로 시도한다. */
+     브라우저에서 1kuji.com 을 직접 부를 수 없어(CORS) 공개 프록시를 차례로 시도한다.
+     · r.jina.ai — x-respond-with: html 로 원본 HTML 을 받는다 (CORS 허용 확인)
+     · allorigins / codetabs / cors.lol — 예비 (막힐 때가 있어 순서대로) */
   var KUJI_PROXY = [
-    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
-    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
-    function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); }
+    { make: function (u) { return 'https://r.jina.ai/' + u; }, headers: { 'x-respond-with': 'html' } },
+    { make: function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); } },
+    { make: function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); } },
+    { make: function (u) { return 'https://api.cors.lol/?url=' + encodeURIComponent(u); } }
   ];
 
-  function fetchWithTimeout(url, ms) {
+  function fetchWithTimeout(url, ms, headers) {
     return new Promise(function (resolve, reject) {
       var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
       var timer = setTimeout(function () {
         if (ctl) { try { ctl.abort(); } catch (e) { /* 무시 */ } }
         reject(new Error('시간 초과'));
       }, ms || 14000);
-      fetch(url, { credentials: 'omit', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+      fetch(url, { credentials: 'omit', cache: 'no-store', headers: headers || {}, signal: ctl ? ctl.signal : undefined })
         .then(function (r) {
           if (!r.ok) throw new Error('HTTP ' + r.status);
           return r.text();
@@ -7463,48 +7466,17 @@
     });
   }
 
-  function fetchBlobWithTimeout(url, ms) {
-    return new Promise(function (resolve, reject) {
-      var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
-      var timer = setTimeout(function () {
-        if (ctl) { try { ctl.abort(); } catch (e) { /* 무시 */ } }
-        reject(new Error('시간 초과'));
-      }, ms || 15000);
-      fetch(url, { credentials: 'omit', cache: 'force-cache', signal: ctl ? ctl.signal : undefined })
-        .then(function (r) {
-          if (!r.ok) throw new Error('HTTP ' + r.status);
-          return r.blob();
-        })
-        .then(function (b) {
-          clearTimeout(timer);
-          if (!/^image\//.test(b.type || '')) reject(new Error('이미지가 아니에요'));
-          else resolve(b);
-        }, function (e) { clearTimeout(timer); reject(e); });
-    });
-  }
-
   function fetchKujiHtml(target) {
     var i = 0;
     function attempt() {
       if (i >= KUJI_PROXY.length) return Promise.reject(new Error('proxy'));
-      var url = KUJI_PROXY[i++](target);
-      return fetchWithTimeout(url, 15000).then(function (txt) {
+      var proxy = KUJI_PROXY[i++];
+      return fetchWithTimeout(proxy.make(target), 16000, proxy.headers).then(function (txt) {
         if (!txt || txt.length < 500 || !/itemCol|aboutCol|1kuji/i.test(txt)) throw new Error('empty');
         return txt;
       }).catch(function () { return attempt(); });
     }
     return attempt();
-  }
-
-  function fetchKujiImageBlob(url) {
-    return fetchBlobWithTimeout(url, 12000).catch(function () {
-      var i = 0;
-      function attempt() {
-        if (i >= KUJI_PROXY.length) return Promise.reject(new Error('image-proxy'));
-        return fetchBlobWithTimeout(KUJI_PROXY[i++](url), 15000).catch(function () { return attempt(); });
-      }
-      return attempt();
-    });
   }
 
   function absImageUrl(u, base) {
@@ -7675,49 +7647,6 @@
     updateTierSummary();
   }
 
-  function collectKujiImages(parsed) {
-    var jobs = [];
-    if (parsed.cover) jobs.push({ url: parsed.cover, sel: 'input[name="cover"]' });
-    if (parsed.lastOne && parsed.lastOne.image) jobs.push({ url: parsed.lastOne.image, sel: 'input[name="lastOneImage"]' });
-    parsed.tiers.slice(0, GRADES.length).forEach(function (t, i) {
-      if (t.image) jobs.push({ url: t.image, sel: '#tierRows .tier-row:nth-child(' + (i + 1) + ') input[name="image"]' });
-    });
-    return jobs;
-  }
-
-  /* 1kuji 사진을 우리 저장소로 옮긴다 — 실패한 장은 1kuji 주소를 그대로 쓴다 */
-  function mirrorKujiImages(form, jobs) {
-    if (!jobs || !jobs.length) return;
-    if (Backend.mode !== 'supabase') {
-      setKujiStatus('사진은 1kuji 주소로 연결했어요 (서버 저장은 Supabase 연결에서만 됩니다).');
-      return;
-    }
-    var total = jobs.length;
-    var done = 0;
-    var saved = 0;
-    var step = function () {
-      if (!form || !form.isConnected) return;
-      if (!jobs.length) {
-        setKujiStatus('사진 ' + saved + '/' + total + '장을 서버에 저장했어요. 내용을 확인하고 저장을 눌러주세요.');
-        return;
-      }
-      var job = jobs.shift();
-      setKujiStatus('사진을 서버에 저장하는 중… ' + (done + 1) + '/' + total);
-      fetchKujiImageBlob(job.url).then(shrinkImage).then(uploadImageBlob).then(function (url) {
-        var input = form.querySelector(job.sel);
-        if (input && input.value.trim() === job.url) {
-          input.value = url;
-          refreshBoardImages(form);
-        }
-        saved++;
-      }).catch(function () { /* 한 장 실패는 넘어간다 */ }).then(function () {
-        done++;
-        step();
-      });
-    };
-    step();
-  }
-
   async function kujiImportFlow() {
     var form = $('form[data-form="board-form"]');
     var input = $('#kujiSrc');
@@ -7741,8 +7670,7 @@
       if (!parsed.tiers.length) throw new Error('no-tiers');
       applyKujiToForm(form, parsed);
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '불러오기'; }
-      setKujiStatus('등급 ' + parsed.tiers.length + '종 + 라스트원을 채웠어요. 내용을 확인하고 저장을 눌러주세요.');
-      mirrorKujiImages(form, collectKujiImages(parsed));
+      setKujiStatus('등급 ' + parsed.tiers.length + '종 + 라스트원을 채웠어요. 사진은 1kuji 공식 이미지 주소로 연결됩니다. 내용을 확인하고 저장을 눌러주세요.');
     } catch (e) {
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '불러오기'; }
       setKujiStatus('불러오지 못했어요. 1kuji.com이 점검 중이거나 주소가 달라졌을 수 있어요. 잠시 후 다시 시도하거나 직접 입력해 주세요.', 1);

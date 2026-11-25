@@ -396,12 +396,13 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 - 모달 맨 위에 주소칸 + `불러오기` 버튼. `https://1kuji.com/products/chiikawa4` 같은 상품 주소를 붙여넣으면
   제목·커버·라스트원상·등급(A賞~) 이름/사진/크기·일본 발매일/가격이 **자동으로 채워집니다**.
 - 브라우저에서 1kuji.com 을 직접 부를 수 없어(CORS) 공개 프록시를 순서대로 시도합니다:
-  `api.allorigins.win/raw` → `corsproxy.io/?url=` → `api.codetabs.com/v1/proxy?quest=`.
-  한 곳이 실패하면 다음으로 넘어가고, 모두 실패하면 안내 문구를 띄웁니다.
+  `r.jina.ai`(`x-respond-with: html`) → `api.allorigins.win/raw` → `api.codetabs.com/v1/proxy?quest=` → `api.cors.lol`.
+  한 곳이 실패하면 다음으로 넘어가고, 모두 실패하면(공식 사이트 점검 등) 안내 문구를 띄웁니다.
 - 파싱: `#aboutCol h2`(제목) · `.mvCol img`(커버) · `#aboutCol .detail`(발매일·`1回◯◯円`) ·
   `.itemColList`(등급별 `h4.name` · `.itemColGallery` 첫 이미지 · `ul.data` 크기 · `p.detail`).
-- 채운 뒤 실제 등급 사진은 **우리 저장소(`board-images`)로 복사**를 시도하고(성공한 장만 교체),
-  실패하면 1kuji 주소를 그대로 씁니다. 진행 상황은 주소칸 아래 한 줄로 표시됩니다.
+- 사진은 **1kuji 공식 이미지 주소(assets.1kuji.com)를 그대로 연결**합니다 — 그 CDN 은 CORS 를 열어주지 않아
+  브라우저에서 파일을 받아 우리 저장소로 복사할 수 없고, 주소 연결은 즉시 됩니다. 오래 쓰거나 내 사진으로
+  바꾸고 싶으면 각 칸의 `📷 올리기` 로 우리 저장소(`board-images`)에 올려 교체하면 됩니다.
 - 규칙은 쿠지킹 기준을 그대로 적용: **실물 등급 각 1장 · 전체 장수 = 등급 수 × 20 · 나머지는 P상 1,200P**.
 
 ### 📷 앨범에서 사진 올리기
@@ -435,7 +436,7 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 - 서버는 설정돼 있는데 데이터를 못 읽은 경우에는 예전처럼 **데모 판 8개로 떨어지지 않고**
   `판을 불러오지 못했어요` + `다시 연결` 버튼을 보여줍니다. (데모 시드는 Supabase 설정이 아예 없을 때만)
 
-파일: `assets/app.js`(`kujiImportFlow` · `parseKujiHtml` · `applyKujiToForm` · `mirrorKujiImages` ·
+파일: `assets/app.js`(`kujiImportFlow` · `fetchKujiHtml` · `parseKujiHtml` · `applyKujiToForm` ·
 `handleUploadFile` · `shrinkImage` · `fillPointTier` · `clearAllBoardsFlow` · `Backend.clearAllBoards`),
 `assets/styles.css`(v4.0.6 블록), `index.html`(전체 비우기 카드)
 
