@@ -1612,6 +1612,16 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .auth-modal .modal-title{padding-right:0;margin-bottom:6px}
 .auth-modal .field{margin-bottom:11px}
 .auth-privacy{font-size:11.5px;color:var(--muted);background:var(--cream);border-radius:10px;padding:9px 11px;margin:2px 0 12px;line-height:1.55}
+/* v4.3.1 — 만 19세 이상 성인 확인 (필수 체크) */
+.adult-check{display:flex;align-items:flex-start;gap:10px;padding:11px 12px;margin:2px 0 10px;border:2px solid var(--ink);border-radius:12px;background:var(--paper);box-shadow:0 2px 0 var(--ink);cursor:pointer;font-size:12.5px;font-weight:700;color:var(--ink-soft);line-height:1.5;user-select:none}
+.adult-check input{position:absolute;opacity:0;width:1px;height:1px}
+.adult-box{position:relative;flex:none;width:22px;height:22px;margin-top:1px;border:2px solid var(--ink);border-radius:6px;background:#fff;transition:background .12s ease}
+.adult-box::after{content:"✓";position:absolute;inset:0;display:grid;place-items:center;font-size:15px;font-weight:900;line-height:1;color:#fff;opacity:0;transform:scale(.6);transition:opacity .12s ease,transform .12s ease}
+.adult-check input:checked + .adult-box{background:var(--red);border-color:var(--red)}
+.adult-check input:checked + .adult-box::after{opacity:1;transform:scale(1)}
+.adult-check input:focus-visible + .adult-box{outline:3px solid var(--blue);outline-offset:2px}
+.adult-check input[aria-invalid="true"] + .adult-box{border-color:var(--red);box-shadow:0 0 0 3px rgba(239,59,45,.16)}
+.adult-text b{color:var(--red-deep)}
 .auth-demo{margin-top:16px;padding-top:14px;border-top:2px dashed var(--line-strong);display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}
 .auth-demo p{font-size:12px;color:var(--muted)}
 
@@ -3382,7 +3392,7 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
 }
 
 /* =========================================================
-   v4.2.0 — 판 상세 하단 고정 액션바 (스마트스토어 구매 / 구매확인·뽑기)
+   v4.2.0 — 판 상세 하단 고정 액션바 (스마트스토어 구매 / 교환 코드·뽑기)
    ========================================================= */
 .store-bar{
   position:fixed;left:0;right:0;bottom:0;z-index:95;

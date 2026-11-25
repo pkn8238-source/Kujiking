@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.3.0b">
+<link rel="stylesheet" href="assets/styles.css?v=4.3.1">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -33,7 +33,7 @@
 <div class="announce">
   <div class="container announce-inner">
     <span class="announce-badge">OPEN</span>
-    <p class="announce-live">스마트스토어 <strong>쿠지킹</strong>에서 구매하고 <strong>구매확인</strong>을 요청하면 뽑기권(쿠폰)이 계정에 지급됩니다 · <a class="announce-link" href="https://smartstore.naver.com/kujiking" target="_blank" rel="noopener">스마트스토어 바로가기 <span aria-hidden="true">→</span></a></p>
+    <p class="announce-live">스마트스토어 <strong>쿠지킹</strong>에서 구매하면 <strong>카카오톡으로 교환 코드</strong>를 보내 드립니다. 사이트에서 코드를 넣으면 뽑기권(쿠폰)이 바로 지급됩니다 · <a class="announce-link" href="https://smartstore.naver.com/kujiking" target="_blank" rel="noopener">스마트스토어 바로가기 <span aria-hidden="true">→</span></a></p>
   </div>
 </div>
 
@@ -236,7 +236,7 @@
         </aside>
       </div>
     </div>
-    <!-- 판 상세 하단 고정 액션바 : 스마트스토어 구매 / 구매확인·뽑기 -->
+    <!-- 판 상세 하단 고정 액션바 : 스마트스토어 구매 / 교환 코드·뽑기 -->
     <div class="store-bar" id="storeBar">
       <div class="store-bar-inner">
         <a class="store-bar-btn store-bar-buy" id="storeBarBuy" href="https://smartstore.naver.com/kujiking/products/13893473264" target="_blank" rel="noopener noreferrer">
@@ -289,7 +289,7 @@
       <div class="page-head">
         <span class="eyebrow">MY KUJIKING</span>
         <h1>내 보관함</h1>
-        <p class="page-desc">구매확인으로 받은 쿠폰, 당첨 상품 배송 신청, 뽑기 기록을 한 곳에서 관리합니다.</p>
+        <p class="page-desc">교환 코드로 받은 쿠폰, 당첨 상품 배송 신청, 뽑기 기록을 한 곳에서 관리합니다.</p>
       </div>
 
       <div class="card auth-gate" id="myGate" hidden>
@@ -307,7 +307,6 @@
           <button class="my-tab active" data-my-tab="coupons" role="tab">내 쿠폰함 <span class="tab-count" id="myCouponCount">0</span></button>
           <button class="my-tab" data-my-tab="inventory" role="tab">내 보관함 <span class="tab-count" id="myItemCount">0</span></button>
           <button class="my-tab" data-my-tab="goods" role="tab">굿즈 주문 <span class="tab-count" id="myGoodsCount">0</span></button>
-          <button class="my-tab" data-my-tab="claims" role="tab">구매확인 요청</button>
           <button class="my-tab" data-my-tab="history" role="tab">뽑기 기록</button>
         </div>
 
@@ -315,9 +314,9 @@
           <div class="my-panel-head">
             <div>
               <h2>내 쿠폰함</h2>
-              <p class="muted">구매 확인이 완료되면 뽑기권이 지급됩니다. 판 전용 쿠폰은 해당 판에서만 사용할 수 있어요.</p>
+              <p class="muted">스마트스토어에서 구매한 뒤 카카오톡으로 받은 <b>교환 코드</b>를 넣으면 뽑기권이 지급됩니다. 판 전용 쿠폰은 해당 판에서만 사용할 수 있어요.</p>
             </div>
-            <button class="btn btn-primary btn-sm" data-action="go-claim">구매확인 요청하기</button>
+            <button class="btn btn-primary btn-sm" data-action="open-code-modal">교환 코드 입력</button>
           </div>
           <div class="coupon-grid" id="myCoupons"></div>
         </div>
@@ -341,53 +340,6 @@
             <a class="btn btn-outline btn-sm" href="#/goods">굿즈 보러 가기</a>
           </div>
           <div class="goods-order-list" id="myGoodsOrders"></div>
-        </div>
-
-        <div class="my-panel" data-my-panel="claims" hidden>
-          <div class="my-panel-head">
-            <div>
-              <h2>구매확인 요청</h2>
-              <p class="muted">스마트스토어 주문번호 또는 입금 내역을 남겨 주시면, 확인 후 뽑기권을 지급합니다.</p>
-            </div>
-          </div>
-          <div class="claim-layout">
-            <form class="card claim-form" data-form="claim" novalidate>
-              <h3>새 구매확인 요청</h3>
-              <label class="field">
-                <span>구매한 판</span>
-                <select name="boardId" id="claimBoardSelect" class="input"></select>
-              </label>
-              <div class="form-grid two">
-                <label class="field">
-                  <span>구매 채널</span>
-                  <select name="channel" class="input">
-                    <option value="스마트스토어">스마트스토어</option>
-                    <option value="계좌입금">계좌입금</option>
-                    <option value="기타">기타</option>
-                  </select>
-                </label>
-                <label class="field">
-                  <span>수량 (뽑기권 N장)</span>
-                  <input name="qty" type="number" min="1" max="100" step="1" value="1" required>
-                </label>
-              </div>
-              <label class="field">
-                <span>주문번호 / 입금자명</span>
-                <input name="orderNo" type="text" maxlength="40" required placeholder="예: 20261123-1234567 또는 홍길동">
-              </label>
-              <label class="field">
-                <span>결제 금액 (원)</span>
-                <input name="amount" type="number" min="0" step="100" id="claimAmount" placeholder="판 가격 × 수량 자동 계산">
-              </label>
-              <label class="field">
-                <span>남길 말 (선택)</span>
-                <input name="memo" type="text" maxlength="100" placeholder="예: 11/23 오후 입금했습니다">
-              </label>
-              <p class="form-error" data-role="claim-error" role="alert"></p>
-              <button class="btn btn-primary btn-block" type="submit">구매확인 요청 보내기</button>
-            </form>
-            <div class="claim-history" id="myClaimList"></div>
-          </div>
         </div>
 
         <div class="my-panel" data-my-panel="history" hidden>
@@ -560,7 +512,7 @@
       <div class="page-head">
         <span class="eyebrow">OWNER ONLY</span>
         <h1>관리자</h1>
-        <p class="page-desc">회원 구매확인 · 쿠폰 지급, 판 구성, 배송/출고, 코드 발급을 관리합니다.</p>
+        <p class="page-desc">회원 쿠폰 지급, 판 구성, 배송/출고, 교환 코드 발급을 관리합니다.</p>
       </div>
 
       <div class="admin-gate card" id="adminGate">
@@ -591,20 +543,6 @@
         <!-- 회원 · 쿠폰 -->
         <div class="admin-tab-panel" data-admin-panel="members">
           <div class="admin-stats" id="adminStats"></div>
-
-          <div class="card admin-card">
-            <div class="admin-card-head">
-              <h2>구매확인 요청</h2>
-              <span class="muted">승인하면 요청 수량만큼 뽑기권(쿠폰)이 즉시 지급됩니다.</span>
-            </div>
-            <div class="table-scroll">
-              <table class="data-table" id="claimsTable">
-                <thead><tr><th>신청</th><th>판</th><th>주문</th><th>수량</th><th>금액</th><th>상태</th><th></th></tr></thead>
-                <tbody></tbody>
-              </table>
-            </div>
-            <div class="empty" id="claimsEmpty" hidden><p>대기 중인 구매확인 요청이 없어요.</p></div>
-          </div>
 
           <div class="card admin-card">
             <div class="admin-card-head">
@@ -639,7 +577,7 @@
               <h2>전체 비우기</h2>
               <span class="muted">테스트로 만든 판과 뽑기 기록을 한 번에 지우고 새로 시작합니다.</span>
             </div>
-            <p class="admin-danger-note">모든 판과 판매 기록(티켓·보관함·배송 요청·구매확인 요청)이 삭제됩니다. 회원 계정과 굿즈 포인트는 그대로 남습니다.</p>
+            <p class="admin-danger-note">모든 판과 판매 기록(티켓·보관함·배송 요청)이 삭제됩니다. 회원 계정과 굿즈 포인트는 그대로 남습니다.</p>
             <button class="btn btn-danger btn-sm" type="button" data-action="clear-all-boards">🗑️ 모든 판 전체 비우기</button>
           </div>
         </div>
@@ -924,8 +862,8 @@
       <button type="button" data-action="open-policy" data-policy="refund">청약철회·환불 정책</button>
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
-    <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. 미성년자는 법정대리인 동의 후 이용해 주세요.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.0</span></p>
+    <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. <b>만 19세 이상 성인 전용 서비스</b>로, 미성년자는 이용할 수 없습니다.</p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.1</span></p>
   </div>
 </footer>
 
@@ -940,6 +878,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.3.0b" defer></script>
+<script src="assets/app.js?v=4.3.1" defer></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
-     구매확인 요청 → 관리자 승인 → 쿠폰 지급, 실시간 판매 현황
+     교환 코드 입력 → 뽑기권 지급, 실시간 판매 현황
    · Supabase 키가 없으면 데모 모드(localStorage)로 100% 동작
    · SHA-256 은 Web Crypto 가 없으면(HTTP 접속) 순수 JS 로 계산
    ========================================================= */
@@ -124,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.3.0b';
+  var COVER_VER = '4.3.1';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -1304,16 +1304,8 @@
     s.coupons.push(
       { id: 'cp-demo-1', userId: 'u-demo', boardId: null, kind: 'universal', label: '모든 판 뽑기권', note: '오픈 기념 지급', grantedAt: new Date(now - 86400000).toISOString(), usedAt: null, usedDrawId: null },
       { id: 'cp-demo-2', userId: 'u-demo', boardId: null, kind: 'universal', label: '모든 판 뽑기권', note: '오픈 기념 지급', grantedAt: new Date(now - 86400000).toISOString(), usedAt: null, usedDrawId: null },
-      { id: 'cp-demo-3', userId: 'u-demo', boardId: 'b-sanrio', kind: 'board', label: '산리오 전용 뽑기권', note: '구매확인 승인 · 스마트스토어 20261118-0001', grantedAt: new Date(now - 3600000 * 5).toISOString(), usedAt: null, usedDrawId: null }
+      { id: 'cp-demo-3', userId: 'u-demo', boardId: 'b-sanrio', kind: 'board', label: '산리오 전용 뽑기권', note: '교환 코드 지급 · 스마트스토어 20261118-0001', grantedAt: new Date(now - 3600000 * 5).toISOString(), usedAt: null, usedDrawId: null }
     );
-
-    /* 관리자 화면용 대기 중 구매확인 요청 1건 */
-    s.claims.push({
-      id: 'cl-seed-1', userId: 'u-marmel', boardId: 'b-sanrio',
-      channel: '스마트스토어', orderNo: '20261122-8842137', qty: 3, amount: 29700,
-      memo: '어제 밤에 결제했어요', status: 'pending', granted: 0,
-      at: new Date(now - 3600000 * 9).toISOString(), decidedAt: null
-    });
 
     /* 굿즈샵 예시 (v4.2.6) — 관리자 [굿즈 관리]에서 실제 상품으로 바꿔 쓴다 */
     s.goodsItems = [
@@ -1684,15 +1676,21 @@
       state.adminMembers = (mRes.data || []).map(function (m) {
         return { id: m.id, nickname: m.nickname, email: m.email, phone: m.phone, points: m.points, isAdmin: m.is_admin, createdAt: m.created_at, couponCount: m.coupons, drawCount: m.draws };
       });
-      var cRes = await sb.from('purchase_claims')
-        .select('*, profiles:user_id(nickname,phone)')
-        .order('created_at', { ascending: false }).limit(200);
-      state.adminClaims = (cRes.data || []).map(function (c) {
-        var row = mapClaim(c);
-        row.nickname = c.profiles ? c.profiles.nickname : '';
-        row.phone = c.profiles ? c.profiles.phone : '';
-        return row;
-      });
+      /* v4.3.1 — 구매확인 요청 UI는 없어졌지만, 기존 DB 테이블(purchase_claims) 조회에서
+         오류가 나 관리자 화면이 멈추지 않도록 안전하게 유지한다 (결과는 화면에 쓰지 않는다). */
+      try {
+        var cRes = await sb.from('purchase_claims')
+          .select('*, profiles:user_id(nickname,phone)')
+          .order('created_at', { ascending: false }).limit(200);
+        state.adminClaims = (cRes.error ? [] : (cRes.data || [])).map(function (c) {
+          var row = mapClaim(c);
+          row.nickname = c.profiles ? c.profiles.nickname : '';
+          row.phone = c.profiles ? c.profiles.phone : '';
+          return row;
+        });
+      } catch (eClaim) {
+        state.adminClaims = [];
+      }
       var dRes = await sb.from('deliveries')
         .select('*, profiles:user_id(nickname,phone)')
         .order('requested_at', { ascending: false }).limit(200);
@@ -1857,54 +1855,7 @@
       return { ok: !res.error };
     },
 
-    /* ---------- 구매확인 / 배송 / 전환 ---------- */
-    async submitClaim(d) {
-      if (this.mode === 'local') {
-        var claim = {
-          id: uid('cl'), userId: state.me.id, boardId: d.boardId || null,
-          channel: d.channel, orderNo: d.orderNo, qty: Number(d.qty) || 1,
-          amount: Number(d.amount) || 0, memo: d.memo || '', status: 'pending', granted: 0,
-          at: nowISO(), decidedAt: null
-        };
-        state.claims.unshift(claim);
-        persist();
-        buildLocalViews();
-        return claim;
-      }
-      if (!state.me) throw new Error('로그인이 필요합니다.');
-      var res = await this.sb.from('purchase_claims').insert({
-        user_id: state.me.id, board_id: d.boardId || null, channel: d.channel,
-        order_no: d.orderNo, qty: Number(d.qty) || 1, amount: Number(d.amount) || 0, memo: d.memo || ''
-      });
-      if (res.error) throw res.error;
-      await this.refreshData();
-    },
-
-    async decideClaim(id, approve, qty) {
-      if (this.mode === 'local') {
-        var c = state.claims.filter(function (x) { return x.id === id; })[0];
-        if (!c) throw new Error('구매확인 요청을 찾을 수 없습니다.');
-        if (c.status !== 'pending') throw new Error('이미 처리된 요청입니다.');
-        if (approve) {
-          c.status = 'approved';
-          c.granted = Number(qty) || c.qty;
-          c.decidedAt = nowISO();
-          grantLocalCoupons(c.userId, c.boardId, c.granted, '구매확인 승인 · ' + c.channel + ' ' + c.orderNo);
-        } else {
-          c.status = 'rejected';
-          c.granted = 0;
-          c.decidedAt = nowISO();
-        }
-        persist();
-        buildLocalViews();
-        return c;
-      }
-      var res = await this.sb.rpc('admin_decide_claim', { p_claim_id: id, p_approve: !!approve, p_qty: Number(qty) || null });
-      if (res.error) throw res.error;
-      await this.loadAdmin();
-      await this.refreshData();   /* v4.3.0 — 구매확인 승인 직후 보유 뽑기권 갱신 */
-    },
-
+    /* ---------- 배송 / 전환 ---------- */
     async requestDelivery(drawId, info) {
       if (this.mode === 'local') {
         var d = state.draws.filter(function (x) { return x.id === drawId; })[0];
@@ -3851,7 +3802,7 @@
     var user = me();
     if (!user) {
       el.innerHTML = '<h2>뽑기권으로 뽑기</h2>' +
-        '<p class="aside-hint">로그인하면 구매확인으로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
+        '<p class="aside-hint">로그인하면 교환 코드로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
         '<button class="btn btn-primary btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>' +
         '<div class="aside-note">교환 코드는 번호를 고른 뒤 넣으면 바로 열 수 있어요. 여러 장 코드는 그 장수만큼 뽑기권이 한 번에 들어옵니다.</div>';
       return;
@@ -3865,8 +3816,8 @@
             return '<li><b>' + h(c.boardId ? '이 판 전용' : '전체 사용') + '</b><span>' + h(c.label || '') + '</span></li>';
           }).join('') + '</ul>' +
           '<button class="btn btn-primary btn-block btn-sm" data-action="scroll-grid">쿠폰으로 뽑기</button>'
-        : '<p class="aside-hint">이 판에 쓸 수 있는 쿠폰이 없어요. 구매확인을 요청하면 관리자 확인 후 뽑기권이 지급됩니다.</p>' +
-          '<button class="btn btn-outline btn-block btn-sm" data-action="go-claim">구매확인 요청</button>' +
+        : '<p class="aside-hint">이 판에 쓸 수 있는 뽑기권이 없어요. 스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 넣으면 뽑기권이 바로 지급됩니다.</p>' +
+          '<button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 입력</button>' +
           '<div class="aside-note">다른 판 전용 쿠폰은 해당 판에서만 쓸 수 있어요.</div>');
   }
 
@@ -4437,7 +4388,7 @@
       '<li><b>마지막 10장 순번제</b> — 남은 티켓이 <b>10장 이하</b>가 되면 여러 장을 한꺼번에 뽑는 <b>연뽑(5·10·15·20장)은 자동으로 잠깁니다.</b></li>' +
       '<li>이때는 <b>줄서기(대기 순번)</b>에 참여한 뒤 <b>본인 차례에 60초 안에 1장씩</b>만 뽑을 수 있습니다. 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다.</li>' +
       '<li>그 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</li>' +
-      '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
+      '<li>뽑기권은 스마트스토어 구매 후 카카오톡으로 받은 <b>교환 코드</b>를 입력하면 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
       '<li>뽑기는 <b>뽑기권(쿠폰)</b> 또는 <b>교환 코드</b>로만 할 수 있습니다. 모은 굿즈 포인트(P)는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 굿즈로 교환합니다.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
@@ -4539,14 +4490,13 @@
     } else if (!user) {
       html += '<div class="pay-option login-hint">' +
         '<div class="pay-head"><span class="pay-badge">회원 혜택</span><b>로그인하면 뽑기권으로 뽑기</b></div>' +
-        '<p class="pay-desc">구매확인으로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
+        '<p class="pay-desc">교환 코드로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
         '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>' +
       '</div>';
     } else {
       html += '<div class="pay-option">' +
         '<div class="pay-head"><span class="pay-badge">보유 뽑기권</span><b>0장</b></div>' +
-        '<p class="pay-desc">구매확인을 요청하면 관리자 확인 후 뽑기권이 지급됩니다.</p>' +
-        '<button class="btn btn-outline btn-block btn-sm" data-action="go-claim">구매확인 요청하기</button>' +
+        '<p class="pay-desc">스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 아래에 넣으면 뽑기권이 바로 지급됩니다.</p>' +
       '</div>';
     }
 
@@ -4585,9 +4535,7 @@
         : '<b class="pay-gap">' + fmt(Math.max(0, n - ms.mine.length)) + '장</b> 부족해요. (필요 ' + n + '장 · 보유 ' + fmt(ms.mine.length) + '장)') + '</p>' +
       (canCoupon
         ? '<button class="btn btn-primary btn-block" data-action="multi-coupon">쿠폰 ' + n + '장으로 뽑기</button>'
-        : (ms.user
-          ? '<button class="btn btn-outline btn-block btn-sm" data-action="go-claim">구매확인 요청하기</button>'
-          : '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>')) +
+        : '<button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 입력</button>') +
     '</div>';
 
     /* v4.2.6 — 포인트로 뽑기는 없어졌다. 연뽑도 뽑기권(쿠폰)·교환 코드로만. */
@@ -7829,7 +7777,7 @@
           '<div class="pstat"><span>보관중</span><strong>' + fmt((state.myDraws || []).filter(function (d) { return d.itemStatus === '보관중'; }).length) + '개</strong></div>' +
         '</div>' +
         '<div class="profile-actions">' +
-          '<button class="btn btn-outline btn-sm" data-action="go-claim">구매확인 요청</button>' +
+          '<button class="btn btn-outline btn-sm" data-action="open-code-modal">교환 코드 입력</button>' +
           '<button class="btn btn-ghost btn-sm" data-action="logout">로그아웃</button>' +
         '</div>';
     }
@@ -7851,7 +7799,6 @@
     renderMyCoupons();
     renderMyInventory();
     renderMyGoodsOrders();
-    renderMyClaims();
     renderMyHistory();
   }
 
@@ -7861,8 +7808,8 @@
     var list = (state.myCoupons || []);
     if (!list.length) {
       el.innerHTML = '<div class="card empty"><span class="empty-icon">' + icon('ticket2') + '</span>' +
-        '<p>아직 받은 쿠폰이 없어요.<br>스마트스토어에서 구매한 뒤 구매확인을 요청하면 뽑기권이 지급됩니다.</p>' +
-        '<button class="btn btn-primary" data-action="go-claim">구매확인 요청하기</button></div>';
+        '<p>아직 받은 뽑기권이 없어요.<br>스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 입력하면 뽑기권이 바로 지급됩니다.</p>' +
+        '<button class="btn btn-primary" data-action="open-code-modal">교환 코드 입력하기</button></div>';
       return;
     }
     el.innerHTML = list.map(function (c) {
@@ -7934,35 +7881,6 @@
           '</div>' +
         '</div>' +
       '</article>';
-    }).join('');
-  }
-
-  function renderMyClaims() {
-    var sel = $('#claimBoardSelect');
-    if (sel) {
-      var open = state.boards.filter(function (b) { return b.status === 'open'; });
-      sel.innerHTML = open.length
-        ? open.map(function (b) { return '<option value="' + h(b.id) + '">' + h(b.title) + ' · ' + won(b.price) + '</option>'; }).join('')
-        : '<option value="">진행 중인 판이 없어요</option>';
-    }
-    var list = $('#myClaimList');
-    if (!list) return;
-    var rows = state.myClaims || [];
-    if (!rows.length) {
-      list.innerHTML = '<div class="card empty"><p>아직 구매확인 요청이 없어요.<br>왼쪽에서 주문 정보를 남겨 주세요.</p></div>';
-      return;
-    }
-    list.innerHTML = '<h3 class="claim-history-title">내 요청 내역</h3>' + rows.map(function (c) {
-      var board = getBoard(c.boardId);
-      var cls = c.status === 'approved' ? 'ok' : c.status === 'rejected' ? 'no' : 'wait';
-      var label = c.status === 'approved' ? '승인 완료 · ' + c.granted + '장 지급' : c.status === 'rejected' ? '반려' : '확인 대기 중';
-      return '<div class="claim-card ' + cls + '">' +
-        '<div class="claim-card-head"><span class="claim-status ' + cls + '">' + h(label) + '</span>' +
-          '<span class="muted small">' + formatDateTime(c.at) + '</span></div>' +
-        '<b>' + h(board ? board.title : '판 미지정') + '</b>' +
-        '<p class="muted small">' + h(c.channel) + ' · ' + h(c.orderNo) + ' · ' + fmt(c.qty) + '장 · ' + won(c.amount) + '</p>' +
-        (c.memo ? '<p class="claim-memo">' + h(c.memo) + '</p>' : '') +
-      '</div>';
     }).join('');
   }
 
@@ -8077,7 +7995,7 @@
       '<h3>2. 청약철회 제한</h3>' +
       '<p>「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라, 소비자의 사용 또는 일부 소비로 재판매가 곤란한 경우 청약철회가 제한됩니다. 교환 코드를 사용해 개봉한 경우가 이에 해당하며, 개봉 전에는 주문 취소가 가능합니다.</p>' +
       '<h3>3. 쿠폰(뽑기권)과 교환 코드</h3>' +
-      '<p>뽑기권은 구매확인 승인 후 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
+      '<p>뽑기권은 스마트스토어 구매 후 카카오톡으로 받은 교환 코드를 입력하면 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
       '<h3>4. 등급 및 상품</h3>' +
       '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 실물 등급은 대부분 등급마다 1개씩이고, 하위 등급은 굿즈 포인트(P상)로 대체 지급됩니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
       '<h3>5. 마지막 10장 순번제</h3>' +
@@ -8088,8 +8006,8 @@
       '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
       '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
       kakaoPillHTML('kakao-pill-sm') +
-      '<h3>8. 미성년자 이용</h3>' +
-      '<p>미성년자는 법정대리인의 동의를 받은 후 이용할 수 있습니다. 만 14세 미만은 이용할 수 없습니다.</p>' +
+      '<h3>8. 성인 전용 서비스 · 미성년자 결제 제한</h3>' +
+      '<p>쿠지킹은 <b>만 19세 이상 성인 전용</b> 서비스입니다. 가입 시 만 19세 이상 성인임을 확인하며, 미성년자는 가입·결제·이용을 할 수 없습니다. 미성년자가 법정대리인의 동의 없이 결제하거나 성인인 것처럼 속여 결제한 경우 회사는 거래를 취소하거나 이용을 제한할 수 있으며, 이미 교환 코드를 사용해 랜덤 뽑기를 개봉(사용)한 경우에는 전자상거래법 제17조 제2항 제2호에 따라 청약철회·환불이 제한됩니다.</p>' +
       '<h3>9. 결과 검증</h3>' +
       '<p>판 종료 후 공개되는 시드와 이 페이지의 검증 도구로 누구나 결과를 다시 계산해 볼 수 있습니다. 계산 규칙은 아래와 같습니다.</p>' +
       '<p style="font-family:var(--font-mono);font-size:11.5px;background:#fff;border:1px solid var(--line-strong);border-radius:8px;padding:10px;margin-top:6px">' +
@@ -8317,52 +8235,13 @@
   function renderMembersTab() {
     var stats = $('#adminStats');
     var members = state.adminMembers || [];
-    var claims = state.adminClaims || [];
-    var pending = claims.filter(function (c) { return c.status === 'pending'; }).length;
     var couponsLeft = members.reduce(function (s, m) { return s + (m.couponCount || 0); }, 0);
     var deliveries = (state.adminDeliveries || []).filter(function (d) { return d.status !== '출고완료'; }).length;
     var notLoaded = Backend.mode === 'supabase' && !state.adminLoaded;
     if (stats) {
       stats.innerHTML = '<div class="astat"><span>회원</span><strong>' + (notLoaded ? '…' : fmt(members.length) + '명') + '</strong></div>' +
-        '<div class="astat is-alert"><span>대기 중 구매확인</span><strong>' + (notLoaded ? '…' : fmt(pending) + '건') + '</strong></div>' +
         '<div class="astat"><span>미사용 쿠폰</span><strong>' + (notLoaded ? '…' : fmt(couponsLeft) + '장') + '</strong></div>' +
         '<div class="astat"><span>출고 대기</span><strong>' + (notLoaded ? '…' : fmt(deliveries) + '건') + '</strong></div>';
-    }
-
-    var tbody = $('#claimsTable tbody');
-    var empty = $('#claimsEmpty');
-    var table = $('#claimsTable');
-    if (tbody) {
-      if (!claims.length) {
-        tbody.innerHTML = '';
-        if (empty) empty.hidden = false;
-        if (table) table.hidden = true;
-      } else {
-        if (empty) empty.hidden = true;
-        if (table) table.hidden = false;
-        tbody.innerHTML = claims.map(function (c) {
-          var board = getBoard(c.boardId);
-          var st = c.status === 'approved' ? '<span class="badge" style="background:#d9ffe9">승인 ' + (c.granted || 0) + '장</span>'
-            : c.status === 'rejected' ? '<span class="badge badge-closed">반려</span>'
-            : '<span class="badge" style="background:#fff3ba">대기</span>';
-          return '<tr>' +
-            '<td><b>' + h(c.nickname || '회원') + '</b><br><span class="muted small">' + h(c.phone || '') + '</span></td>' +
-            '<td>' + h(board ? board.title : '판 미지정') + '</td>' +
-            '<td>' + h(c.channel) + ' · <span class="code-cell">' + h(c.orderNo) + '</span></td>' +
-            '<td class="num">' + fmt(c.qty) + '장</td>' +
-            '<td class="num">' + won(c.amount) + '</td>' +
-            '<td>' + st + '<br><span class="muted small">' + formatDateTime(c.at) + '</span></td>' +
-            '<td style="white-space:nowrap;text-align:right">' +
-              (c.status === 'pending'
-                ? '<button class="btn btn-primary btn-sm" data-action="claim-approve" data-id="' + h(c.id) + '">승인 · 지급</button> ' +
-                  '<button class="btn btn-danger-ghost btn-sm" data-action="claim-reject" data-id="' + h(c.id) + '">반려</button>'
-                : (c.status === 'approved' && Number(c.granted || 0) > 0
-                    ? '<button class="btn btn-danger-ghost btn-sm" data-action="revoke-open-claim" data-id="' + h(c.id) + '">쿠폰 회수</button>'
-                    : '—')) +
-            '</td>' +
-          '</tr>';
-        }).join('');
-      }
     }
 
     var q = (ui.memberQuery || '').toLowerCase();
@@ -8943,26 +8822,6 @@
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '회수 확정'; }
       toast(errMsg(e), 'err');
     });
-  }
-
-  function openClaimModal(claimId) {
-    var c = (state.adminClaims || []).filter(function (x) { return x.id === claimId; })[0];
-    if (!c) return;
-    var board = getBoard(c.boardId);
-    openModal('<h2 class="modal-title" id="modalTitle">구매확인 승인</h2>' +
-      '<p class="modal-sub">' + h(c.nickname || '회원') + ' 님 · ' + h(board ? board.title : '판 미지정') + '<br>' +
-      h(c.channel) + ' ' + h(c.orderNo) + ' · 신청 ' + fmt(c.qty) + '장 · ' + won(c.amount) + '</p>' +
-      (c.memo ? '<p class="claim-memo">' + h(c.memo) + '</p>' : '') +
-      '<form data-form="claim-approve" novalidate>' +
-        '<label class="field"><span>지급할 뽑기권 수량</span><input name="qty" type="number" min="1" max="100" step="1" value="' + fmt(c.qty) + '" required></label>' +
-        '<p class="muted small">지급 범위: ' + (board ? h(board.title) + ' 전용' : '모든 판 사용') + '</p>' +
-        '<p class="form-error" data-role="approve-error" role="alert"></p>' +
-        '<div class="modal-actions">' +
-          '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
-          '<button type="submit" class="btn btn-primary">승인하고 지급</button>' +
-        '</div>' +
-      '</form>');
-    ui.approveClaimId = claimId;
   }
 
   function openDeliveryModal(drawId) {
@@ -9730,7 +9589,7 @@
         : '') +
       (isLogin
         ? '<h2 class="modal-title" id="modalTitle">다시 만나서 반가워요</h2>' +
-          '<p class="modal-sub">구매확인으로 받은 뽑기권과 당첨 상품은 계정에 보관됩니다.</p>' +
+          '<p class="modal-sub">교환 코드로 받은 뽑기권과 당첨 상품은 계정에 보관됩니다.</p>' +
           '<form data-form="login" novalidate>' +
             '<label class="field"><span>이메일</span><input name="email" type="email" autocomplete="email" required placeholder="you@example.com"></label>' +
             '<label class="field"><span>비밀번호</span><input name="password" type="password" autocomplete="current-password" required placeholder="6자 이상"></label>' +
@@ -9738,7 +9597,7 @@
             '<button class="btn btn-primary btn-block" type="submit">로그인</button>' +
           '</form>'
         : '<h2 class="modal-title" id="modalTitle">쿠지킹 회원가입</h2>' +
-          '<p class="modal-sub">배송·주문 확인을 위해 닉네임과 연락처를 받습니다. 닉네임은 판매 내역에 마스킹되어 표시돼요.</p>' +
+          '<p class="modal-sub">만 19세 이상 성인 전용입니다. 배송·주문 확인을 위해 닉네임과 연락처를 받습니다. 닉네임은 판매 내역에 마스킹되어 표시돼요.</p>' +
           '<form data-form="signup" novalidate>' +
             '<label class="field"><span>이메일</span><input name="email" type="email" autocomplete="email" required placeholder="you@naver.com">' +
               '<span class="field-hint" data-role="signup-email-note">' + h(SIGNUP_EMAIL_NOTE) + '</span>' +
@@ -9751,6 +9610,11 @@
               '<label class="field"><span>닉네임</span><input name="nickname" type="text" maxlength="12" required placeholder="예: 쿠지러버"></label>' +
               '<label class="field"><span>휴대폰 번호</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required placeholder="010-0000-0000"></label>' +
             '</div>' +
+            '<label class="adult-check">' +
+              '<input type="checkbox" name="adult" value="1" required>' +
+              '<span class="adult-box" aria-hidden="true"></span>' +
+              '<span class="adult-text"><b>만 19세 이상 성인입니다</b> (미성년자 이용 불가)</span>' +
+            '</label>' +
             '<p class="auth-privacy">주문 확인과 배송을 위해서만 사용하며, 판매 내역에는 닉네임이 <b>박*남</b>처럼 마스킹되어 표시됩니다.</p>' +
             '<p class="form-error" data-role="auth-error" role="alert"></p>' +
             '<button class="btn btn-primary btn-block" type="submit">가입하고 시작하기</button>' +
@@ -9773,6 +9637,11 @@
     if (pw !== pw2) return fail('비밀번호 확인이 일치하지 않습니다.');
     if (nickname.length < 2) return fail('닉네임은 2자 이상 입력해 주세요.');
     if (!/^[0-9+\-\s]{9,20}$/.test(phone)) return fail('휴대폰 번호를 확인해 주세요.');
+    var adultEl = form.querySelector('[name="adult"]');
+    if (!adultEl || !adultEl.checked) {
+      if (adultEl) { adultEl.setAttribute('aria-invalid', 'true'); adultEl.focus(); }
+      return fail('만 19세 이상 성인만 가입할 수 있습니다. (미성년자 이용 불가)');
+    }
 
     var btn = form.querySelector('button[type="submit"]');
     if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '가입 중…'; }
@@ -9781,7 +9650,7 @@
       closeModal();
       renderAll();
       if (ui.pendingBulkCode) { await settlePendingBulkCode(); return; }
-      toast(nickname + ' 님, 환영합니다! 뽑기권은 구매확인 후 지급됩니다.', 'ok');
+      toast(nickname + ' 님, 환영합니다! 스마트스토어 구매 후 카카오톡으로 받은 교환 코드를 입력하면 뽑기권이 들어옵니다.', 'ok');
       location.hash = '#/my';
     } catch (e) {
       if (errEl) errEl.textContent = errMsg(e);
@@ -9868,12 +9737,6 @@
         case 'open-auth': openAuthModal(); break;
         case 'auth-tab': ui.authTab = el.getAttribute('data-tab'); openModal(authModalHTML()); break;
         case 'go-my': closeModal(); location.hash = '#/my'; break;
-        case 'go-claim':
-          closeModal();
-          ui.myTab = 'claims';
-          if (location.hash !== '#/my') location.hash = '#/my';
-          else renderMy();
-          break;
         case 'open-code-modal': openCodeModal(); break;
         case 'code-quick-coupon': {
           closeModal();
@@ -10103,19 +9966,12 @@
           break;
         }
         case 'revoke-open': openRevokeModal(id, 0); break;
-        case 'revoke-open-claim': {
-          var rc = (state.adminClaims || []).filter(function (x) { return x.id === id; })[0];
-          if (rc) openRevokeModal(rc.userId, Number(rc.granted) || 0, { nickname: rc.nickname, email: '' });
-          break;
-        }
         case 'revoke-preset':
           if (ui.revoke) { ui.revoke.qty = Number(el.getAttribute('data-qty')) || 1; renderRevokePicker(); }
           break;
         case 'revoke-next': renderRevokeConfirm(); break;
         case 'revoke-back': renderRevokePicker(); break;
         case 'revoke-confirm': runRevoke(); break;
-        case 'claim-approve': openClaimModal(id); break;
-        case 'claim-reject': rejectClaim(id); break;
 
         case 'new-board': openBoardEditor(null); break;
         case 'edit-board': openBoardEditor(id); break;
@@ -10458,31 +10314,6 @@
       }
 
       if (type === 'board-form') { saveBoardForm(form); return; }
-      if (type === 'claim') {
-        var cerr = form.querySelector('[data-role="claim-error"]');
-        var boardId = fieldValue(form, 'boardId');
-        var qty = Number(fieldValue(form, 'qty'));
-        var orderNo = fieldValue(form, 'orderNo').trim();
-        var amount = Number(fieldValue(form, 'amount')) || 0;
-        if (!boardId) { if (cerr) cerr.textContent = '구매한 판을 선택해 주세요.'; return; }
-        if (!(qty >= 1 && qty <= 100)) { if (cerr) cerr.textContent = '수량은 1~100장 사이로 입력해 주세요.'; return; }
-        if (!orderNo) { if (cerr) cerr.textContent = '주문번호 또는 입금자명을 입력해 주세요.'; return; }
-        var btnC = form.querySelector('button[type="submit"]');
-        if (btnC) { btnC.setAttribute('aria-disabled', 'true'); btnC.textContent = '보내는 중…'; }
-        Backend.submitClaim({
-          boardId: boardId, channel: fieldValue(form, 'channel'), orderNo: orderNo,
-          qty: qty, amount: amount, memo: fieldValue(form, 'memo').trim()
-        }).then(function () {
-          form.reset();
-          if (btnC) { btnC.removeAttribute('aria-disabled'); btnC.textContent = '구매확인 요청 보내기'; }
-          renderMy();
-          toast('구매확인 요청을 보냈어요. 확인 후 뽑기권이 지급됩니다.', 'ok');
-        }).catch(function (e2) {
-          if (cerr) cerr.textContent = errMsg(e2);
-          if (btnC) { btnC.removeAttribute('aria-disabled'); btnC.textContent = '구매확인 요청 보내기'; }
-        });
-        return;
-      }
 
       if (type === 'delivery') {
         var derr = form.querySelector('[data-role="delivery-error"]');
@@ -10618,26 +10449,6 @@
         return;
       }
 
-      if (type === 'claim-approve') {
-        var aerr = form.querySelector('[data-role="approve-error"]');
-        var qtyA = Number(fieldValue(form, 'qty'));
-        if (!(qtyA >= 1 && qtyA <= 100)) { if (aerr) aerr.textContent = '지급 수량은 1~100장 사이입니다.'; return; }
-        var btnA = form.querySelector('button[type="submit"]');
-        if (btnA) { btnA.setAttribute('aria-disabled', 'true'); btnA.textContent = '승인 중…'; }
-        Backend.decideClaim(ui.approveClaimId, true, qtyA)
-          .then(function () {
-            closeModal();
-            renderAdmin();
-            renderHeader();
-            toast('승인하고 ' + qtyA + '장을 지급했어요', 'ok');
-          })
-          .catch(function (e5) {
-            if (aerr) aerr.textContent = errMsg(e5);
-            if (btnA) { btnA.removeAttribute('aria-disabled'); btnA.textContent = '승인하고 지급'; }
-          });
-        return;
-      }
-
       if (type === 'ship') {
         var carrier = fieldValue(form, 'carrier');
         var tracking = fieldValue(form, 'tracking').trim();
@@ -10696,10 +10507,6 @@
           }
         }, 250);
       }
-      if (e.target.id === 'claimAmount') return;
-      if (e.target.closest('form[data-form="claim"]') && (e.target.name === 'qty' || e.target.name === 'boardId')) {
-        autoClaimAmount();
-      }
     });
 
     document.addEventListener('change', function (e) {
@@ -10718,7 +10525,6 @@
       if (e.target.id === 'boardSort') { ui.filters.sort = e.target.value; renderHome(); }
       if (e.target.id === 'codeFilter') renderCodesTable();
       if (e.target.id === 'revokeQty' && ui.revoke) e.target.value = ui.revoke.qty;
-      if (e.target.id === 'claimBoardSelect') autoClaimAmount();
       if (e.target.matches && e.target.matches('[data-role="cover-preset"]')) {
         var cform = e.target.closest('form');
         var cinput = cform ? cform.querySelector('input[name="cover"]') : null;
@@ -10728,7 +10534,6 @@
           updateCoverPreview(cform);
         }
       }
-      if (e.target.closest('form[data-form="claim"]') && e.target.name === 'qty') autoClaimAmount();
       if (e.target.id === 'importFile') {
         if (e.target.files && e.target.files[0]) importData(e.target.files[0]);
         e.target.value = '';
@@ -10789,16 +10594,6 @@
     });
   }
 
-  function autoClaimAmount() {
-    var form = $('form[data-form="claim"]');
-    if (!form) return;
-    var boardId = fieldValue(form, 'boardId');
-    var qty = Number(fieldValue(form, 'qty')) || 1;
-    var board = getBoard(boardId);
-    var amountEl = form.querySelector('#claimAmount') || form.querySelector('input[name="amount"]');
-    if (board && amountEl) amountEl.value = board.price * qty;
-  }
-
   async function convertPointsFlow(drawId) {
     var d = (state.myDraws || []).filter(function (x) { return x.id === drawId; })[0];
     if (!d) return;
@@ -10815,22 +10610,6 @@
       await Backend.convertPoints(drawId);
       renderAll();
       toast(fmt(points) + 'P를 적립했어요', 'ok');
-    } catch (e) { toast(errMsg(e), 'err'); }
-  }
-
-  async function rejectClaim(claimId) {
-    var ok = await confirmDialog({
-      title: '구매확인 요청을 반려할까요?',
-      message: '회원에게 뽑기권이 지급되지 않습니다. 주문 정보를 다시 확인해 주세요.',
-      confirmLabel: '반려',
-      danger: true
-    });
-    if (!ok) return;
-    try {
-      await Backend.decideClaim(claimId, false, 0);
-      renderAdmin();
-      renderHeader();
-      toast('요청을 반려했어요');
     } catch (e) { toast(errMsg(e), 'err'); }
   }
 
@@ -10907,7 +10686,7 @@
   async function clearAllBoardsFlow() {
     var ok1 = await confirmDialog({
       title: '🗑️ 모든 판 전체 비우기',
-      message: '<b>판 ' + fmt(state.boards.length) + '개</b>와 판매 기록·보관함·배송 요청·구매확인 요청을 모두 지웁니다.' +
+      message: '<b>판 ' + fmt(state.boards.length) + '개</b>와 판매 기록·보관함·배송 요청을 모두 지웁니다.' +
         '<br><span class="muted small">회원 계정과 굿즈 포인트는 그대로 남습니다. 이 작업은 되돌릴 수 없어요.</span>',
       confirmLabel: '계속',
       danger: true
@@ -11063,7 +10842,7 @@
         '<h3>1. 수집하는 개인정보</h3>' +
         '<p>쿠지킹은 회원가입·뽑기·배송을 위해 다음 정보를 수집합니다. 필수: 이메일, 비밀번호(암호화 저장), 닉네임, 휴대폰 번호. 배송 신청 시: 수령인 이름, 연락처, 주소. 자동 수집: 접속 일시, 뽑기·결제 이용 기록, 브라우저 정보.</p>' +
         '<h3>2. 이용 목적</h3>' +
-        '<p>회원 식별과 본인 확인, 뽑기권(쿠폰) 지급과 사용, 당첨 상품 배송, 구매확인·환불 처리, 고객 문의 응대, 부정 이용과 순번제 방해 행위 방지에 사용합니다.</p>' +
+        '<p>회원 식별과 본인 확인, 뽑기권(쿠폰) 지급과 사용, 당첨 상품 배송, 교환 코드·환불 처리, 고객 문의 응대, 부정 이용과 순번제 방해 행위 방지에 사용합니다.</p>' +
         '<h3>3. 보유 및 파기</h3>' +
         '<p>회원 탈퇴 시 수집한 정보를 지체 없이 파기합니다. 다만 전자상거래 등에서의 소비자보호에 관한 법률에 따라 계약·대금결제 기록 5년, 소비자 불만·분쟁 처리 기록 3년, 표시·광고 기록 6개월은 보관합니다. 전자적 파일은 복구할 수 없는 방식으로 삭제합니다.</p>' +
         '<h3>4. 제3자 제공 및 처리 위탁</h3>' +
@@ -11081,7 +10860,7 @@
     if (key === 'refund') {
       return '<div class="policy-doc">' +
         '<h3>1. 개봉 전 취소</h3>' +
-        '<p>스마트스토어에서 결제한 주문은 배송 전·교환 코드 미사용 상태에서 취소할 수 있습니다. 구매확인으로 지급된 뽑기권은 사용 전이라면 회수 후 환불합니다.</p>' +
+        '<p>스마트스토어에서 결제한 주문은 배송 전·교환 코드 미사용 상태에서 취소할 수 있습니다. 교환 코드로 지급된 뽑기권은 사용 전이라면 회수 후 환불합니다.</p>' +
         '<h3>2. 개봉 후 청약철회 제한</h3>' +
         '<p>본 상품은 무작위 추첨 상품입니다. 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라 소비자의 사용 또는 일부 소비로 재판매가 곤란한 경우 청약철회가 제한됩니다. 교환 코드를 사용해 번호를 개봉한 경우가 이에 해당합니다.</p>' +
         '<h3>3. 교환·환불되는 경우</h3>' +
@@ -11092,6 +10871,8 @@
         '<p>접수 후 3영업일 이내에 회신하고, 환불이 확정되면 7일 이내에 결제 수단으로 환급합니다.</p>' +
         '<h3>6. 굿즈 포인트</h3>' +
         '<p>P상으로 적립된 굿즈 포인트는 현금으로 환급되지 않으며 다른 회원에게 양도할 수 없습니다.</p>' +
+        '<h3>7. 성인 전용 · 미성년자 결제</h3>' +
+        '<p>이 서비스는 만 19세 이상 성인 전용입니다. 미성년자가 법정대리인의 동의 없이 결제하거나 성인인 것처럼 속여 결제한 경우, 회사는 해당 결제를 취소하거나 이용을 제한할 수 있습니다. 다만 이미 교환 코드를 사용해 랜덤 뽑기를 개봉(사용)한 경우에는 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라 청약철회 및 환불이 제한됩니다.</p>' +
         biz +
         '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
       '</div>';
@@ -11115,13 +10896,15 @@
       '<h3>제1조 (목적)</h3>' +
       '<p>이 약관은 쿠지킹(이하 “회사”)이 운영하는 온라인 쿠지 서비스 kujiking.co.kr의 이용 조건과 절차, 회사와 회원의 권리·의무를 정합니다.</p>' +
       '<h3>제2조 (용어)</h3>' +
-      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 구매확인으로 지급되는 쿠폰, “교환 코드”는 결제 후 발급되는 1회용 코드(코드마다 정해진 장수만큼 뽑기권 일괄 지급), “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
+      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 교환 코드로 지급되는 1회용 쿠폰, “교환 코드”는 네이버 스마트스토어 결제 후 카카오톡으로 발급되는 1회용 코드(코드마다 정해진 장수만큼 뽑기권 일괄 지급), “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
       '<h3>제3조 (서비스 내용)</h3>' +
-      '<p>회사는 스마트스토어에서 뽑기권을 판매하고, 회원이 사이트에서 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
-      '<h3>제4조 (이용계약)</h3>' +
-      '<p>만 19세 이상 이용할 수 있으며, 미성년자는 법정대리인의 동의 후 이용해야 합니다. 타인의 정보를 도용하거나 1인이 여러 계정으로 참여하는 행위는 제한될 수 있습니다.</p>' +
+      '<p>회사는 네이버 스마트스토어에서 뽑기권을 판매하고, 결제가 확인되면 카카오톡으로 교환 코드를 발급합니다. 회원이 사이트에서 교환 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 계정에 지급되고, 회원이 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
+      '<h3>제4조 (이용자격 · 성인 확인)</h3>' +
+      '<p>이 서비스는 <b>만 19세 이상 성인 전용</b>입니다. 회원은 가입 시 만 19세 이상 성인임을 확인·보증하여야 하며, 회사는 회원가입 단계에서 성인 여부를 확인합니다. 만 19세 미만 미성년자는 회원가입·결제·이용을 할 수 없습니다. 타인의 정보를 도용하거나 1인이 여러 계정으로 참여하는 행위는 제한될 수 있습니다.</p>' +
+      '<h3>제4조의2 (미성년자 결제 제한)</h3>' +
+      '<p>① 회사는 미성년자의 결제를 받지 않습니다. ② 미성년자가 법정대리인의 동의 없이 결제하거나, 성인인 것처럼 나이·신분을 속여 가입·결제한 경우 회사는 해당 거래를 취소하거나 계정 이용을 제한할 수 있습니다. ③ 위 ②에 해당하는 거래라도 이미 교환 코드를 사용해 랜덤 뽑기를 개봉(사용)한 경우에는 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라 청약철회 및 환불이 제한됩니다. ④ 타인의 명의·정보를 도용해 성인인 것처럼 가입·결제한 경우 그 책임은 해당 가입자에게 있으며, 회사는 계정을 정지하고 관계 기관에 통보할 수 있습니다.</p>' +
       '<h3>제5조 (결제와 뽑기권)</h3>' +
-      '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 구매확인 요청을 회사가 승인하면 요청 수량만큼 뽑기권이 지급되며, 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
+      '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 회사는 결제 확인 후 카카오톡으로 교환 코드를 발급하며, 회원이 사이트에서 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 지급됩니다. 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
       '<h3>제5조의2 (마지막 10장 순번제)</h3>' +
       '<p>남은 티켓이 10장 이하가 되면 여러 장을 한꺼번에 뽑는 연뽑(5·10·15·20장)은 자동으로 잠깁니다. 이때는 줄서기(대기 순번)에 참여한 뒤 본인 차례에 60초 안에 1장씩 뽑을 수 있으며, 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다. 판의 마지막 1장을 뽑은 회원에게는 라스트원 상품이 지급됩니다.</p>' +
       '<h3>제6조 (청약철회)</h3>' +
