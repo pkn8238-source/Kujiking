@@ -120,7 +120,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.0.8';
+  var COVER_VER = '4.0.9';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -428,7 +428,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' },
+      settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
@@ -1306,7 +1306,8 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' }, s.settings || {});
+    s.settings = Object.assign({ pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' }, s.settings || {});
+    if ('demoCode' in s.settings) delete s.settings.demoCode;
     s.users = s.users || [];
     s.coupons = s.coupons || [];
     s.draws = s.draws || [];
@@ -1417,6 +1418,12 @@
       el.onerror = function () { reject(new Error('script load failed: ' + src)); };
       document.head.appendChild(el);
     });
+  }
+
+  /* 서버에 아직 없는 RPC(마이그레이션 전)를 구분한다 */
+  function isMissingRpc(err) {
+    var s = String((err && err.code) || '') + ' ' + String((err && err.message) || '');
+    return /PGRST202|Could not find the function|schema cache|does not exist/i.test(s);
   }
 
   var Backend = {
@@ -1531,11 +1538,10 @@
       state.boards = boards;
       state.loadError = '';
 
-      var setRes = await sb.from('app_settings').select('key,value').in('key', ['demo_code', 'youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice']);
+      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice']);
       if (!setRes.error && setRes.data) {
         var settingsMap = {};
         setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
-        if (settingsMap.demo_code) state.settings.demoCode = settingsMap.demo_code;
         if (typeof settingsMap.youtube_live_url === 'string') state.settings.youtubeLiveUrl = settingsMap.youtube_live_url;
         if (typeof settingsMap.youtube_live_enabled === 'string') {
           state.settings.youtubeLiveEnabled = !/^(false|0|off|no)$/i.test(settingsMap.youtube_live_enabled.trim());
@@ -1749,6 +1755,28 @@
         lastOneWinnerName: r.last_one_winner_name || '',
         source: r.source, demo: r.source === 'demo', pointsBalance: r.points_balance
       };
+    },
+
+    /* ---------- 마지막 10장 순번제 (v4.0.9) ---------- */
+    async queueStatus(boardId) {
+      if (this.mode !== 'supabase') return { ok: false, reason: 'local' };
+      var res = await this.sb.rpc('queue_board_status', { p_board_id: boardId });
+      if (res.error) return { ok: false, reason: isMissingRpc(res.error) ? 'missing' : 'error', error: res.error };
+      return { ok: true, data: res.data || {} };
+    },
+
+    async queueJoin(boardId) {
+      if (this.mode !== 'supabase') return { ok: false, reason: 'local' };
+      var res = await this.sb.rpc('queue_join_board', { p_board_id: boardId });
+      if (res.error) return { ok: false, reason: isMissingRpc(res.error) ? 'missing' : 'error', error: new Error(res.error.message || '순번을 받지 못했어요.') };
+      return { ok: true, data: res.data || {} };
+    },
+
+    async queueLeave(boardId) {
+      if (this.mode !== 'supabase') return { ok: false, reason: 'local' };
+      var res = await this.sb.rpc('queue_leave_board', { p_board_id: boardId });
+      if (res.error && !isMissingRpc(res.error)) throw new Error(res.error.message || '순번을 반납하지 못했어요.');
+      return { ok: !res.error };
     },
 
     /* ---------- 구매확인 / 배송 / 전환 ---------- */
@@ -2243,25 +2271,20 @@
     } else if (args.code) {
       var key = normalizeCode(args.code);
       if (!key) throw new Error('교환 코드를 입력해 주세요.');
-      if (key === normalizeCode(state.settings.demoCode)) {
-        source = 'demo';
-        demo = true;
-      } else {
-        var rec = null;
-        for (var j = 0; j < state.codes.length; j++) {
-          if (normalizeCode(state.codes[j].code) === key) { rec = state.codes[j]; break; }
-        }
-        if (!rec) throw new Error('등록되지 않은 코드예요. 코드를 다시 확인해 주세요.');
-        if (rec.usedAt) throw new Error('이미 사용된 코드예요 (' + formatDateTime(rec.usedAt) + ' · ' + rec.usedN + '번)');
-        if (rec.boardId && rec.boardId !== board.id) {
-          var other = getBoard(rec.boardId);
-          throw new Error('이 코드는 다른 판(' + (other ? other.title : '삭제된 판') + ') 전용이에요.');
-        }
-        rec.usedAt = nowISO();
-        rec.usedN = args.n;
-        rec.usedBy = state.me ? state.me.id : null;
-        source = 'code';
+      var rec = null;
+      for (var j = 0; j < state.codes.length; j++) {
+        if (normalizeCode(state.codes[j].code) === key) { rec = state.codes[j]; break; }
       }
+      if (!rec) throw new Error('등록되지 않은 코드예요. 코드를 다시 확인해 주세요.');
+      if (rec.usedAt) throw new Error('이미 사용된 코드예요 (' + formatDateTime(rec.usedAt) + ' · ' + rec.usedN + '번)');
+      if (rec.boardId && rec.boardId !== board.id) {
+        var other = getBoard(rec.boardId);
+        throw new Error('이 코드는 다른 판(' + (other ? other.title : '삭제된 판') + ') 전용이에요.');
+      }
+      rec.usedAt = nowISO();
+      rec.usedN = args.n;
+      rec.usedBy = state.me ? state.me.id : null;
+      source = 'code';
     } else if (args.usePoints || args.withPoints) {
       /* 굿즈 포인트로 뽑기 (v3.6): 판 가격만큼 회원 포인트를 차감한다 */
       if (!state.me) throw new Error('포인트로 뽑으려면 로그인이 필요합니다.');
@@ -2541,6 +2564,7 @@
     });
     setMenu(false);
     if (modalRoot && !modalRoot.hidden) closeModal();
+    if (r.view !== 'board') { stopQueue(); queue.data = null; }
     window.scrollTo({ top: 0, behavior: 'auto' });
     renderView();
     renderHeader();
@@ -2861,10 +2885,6 @@
   function renderHeader() {
     var live = Backend.mode === 'supabase';
     document.body.classList.toggle('is-live', live);
-    var ad = $('.announce-demo');
-    var al = $('.announce-live');
-    if (ad) ad.hidden = live;
-    if (al) al.hidden = !live;
 
     var ytBtn = $('#ytLiveBtn');
     if (ytBtn) {
@@ -2924,7 +2944,6 @@
   function boardCardHTML(board) {
     var left = remaining(board);
     var lo = lastOneStatus(board);
-    var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var soldout = left === 0;
     var closed = board.status !== 'open';
     var low = isLowStock(board);
@@ -2939,37 +2958,27 @@
       : '<span class="cover-kicker">KUJIKING KUJI</span>' +
         '<strong class="cover-title">' + h(board.category || '쿠지') + '</strong>' +
         '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>';
+    /* v4.0.9 — 이미지 · 제목 · 남은 수량/가격 · CTA 만 남긴 간결한 카드 */
     return '' +
       '<article class="board-card' + (low ? ' is-lowstock' : '') + (soldout ? ' is-soldout' : '') + (closed ? ' is-closed' : '') + '">' +
         '<a class="board-card-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
           coverInner +
           '<span class="badge cover-tag">' + h(board.category || '자체 스페셜') + '</span>' +
           statusBadge +
-          '<span class="cover-price">1장 ' + won(board.price) + ' · ' + fmt(board.tickets) + '장</span>' +
         '</a>' +
         '<div class="board-card-body">' +
           (soldout ? '<span class="soldout-stamp">품절<span>SOLD OUT</span></span>' : '') +
           (!soldout && closed ? '<span class="soldout-stamp is-closed-stamp">판 종료<span>CLOSED</span></span>' : '') +
-          (low ? '<span class="lowstock-flag">🔥 품절임박 · ' + fmt(left) + '장 남음</span>' : '') +
+          (low ? '<span class="lowstock-flag">🔥 품절임박</span>' : '') +
           (lo && lo.won ? '<span class="last-won-flag">🏆 라스트원 획득: ' + h(lo.name) + '</span>' : '') +
           (lo && lo.soon ? '<span class="last-soon-flag">🔥 라스트원까지 ' + fmt(lo.left) + '장!</span>' : '') +
-          '<div class="board-card-top">' +
-            '<span class="band-tag band-' + priceBand(board.price) + '">' + priceBandLabel(board.price) + '</span>' +
-            '<span class="muted sold-line">판매 ' + fmt(openedCount(board)) + '장</span>' +
-          '</div>' +
           '<h3><a href="#/board/' + h(board.id) + '">' + h(board.title) + '</a></h3>' +
-          '<div class="progress">' +
-            '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
-            '<div class="progress-labels"><span>' + pct + '% 진행</span><span>남은 번호 <b>' + fmt(left) + '</b>장</span></div>' +
-          '</div>' +
-          '<div class="grade-chips">' + board.tiers.slice(0, 5).map(function (t) {
-            return '<span class="grade-chip"><i style="background:' + gradeColor(t.grade) + '"></i>' + h(t.grade) + ' <b>' + fmt(t.count) + '</b></span>';
-          }).join('') + '</div>' +
+          '<p class="board-card-line"><b>1장 ' + won(board.price) + '</b><span>남은 <b>' + fmt(left) + '</b>장</span></p>' +
+          '<div class="progress"><div class="progress-track"><div class="progress-fill" style="width:' + (board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0) + '%"></div></div></div>' +
           '<div class="board-card-foot">' +
-            '<div class="price-tag"><strong>' + fmt(board.price) + '</strong><span>원 / 1장</span></div>' +
             (soldout
               ? '<span class="btn btn-outline" aria-disabled="true">전량 소진</span>'
-              : '<a class="btn btn-primary" href="#/board/' + h(board.id) + '">뽑기 시작</a>') +
+              : '<a class="btn btn-primary" href="#/board/' + h(board.id) + '">뽑기</a>') +
           '</div>' +
         '</div>' +
       '</article>';
@@ -2996,8 +3005,9 @@
 
     renderFilters();
     renderLiveTicker();
-    var filterBar = $('.filter-bar');
-    if (filterBar) filterBar.hidden = !state.boards.length;
+    var filterBar = $('#filterBar');
+    /* v4.0.9 — 판이 하나뿐이면 필터·정렬 줄도 감춰서 판 카드를 위로 올린다 */
+    if (filterBar) filterBar.hidden = !openBoards.length || openBoards.length <= 1;
 
     var list = $('#boardList');
     if (!list) return;
@@ -3026,6 +3036,7 @@
           '</div>';
       }
     } else {
+      list.className = 'board-list' + (filtered.length === 1 ? ' is-single' : '');
       list.innerHTML = filtered.map(boardCardHTML).join('');
     }
     var summary = $('#filterSummary');
@@ -3039,22 +3050,40 @@
   }
 
   function renderFilters() {
+    /* v4.0.9 — 실제 판이 있는 카테고리만 노출하고, 고를 게 없으면 줄을 감춘다 */
+    var openBoards = state.boards.filter(function (b) { return b.status === 'open'; });
+    var present = CATEGORIES.filter(function (c) {
+      return openBoards.some(function (b) { return b.category === c; });
+    });
+    openBoards.forEach(function (b) {
+      if (b.category && present.indexOf(b.category) === -1) present.push(b.category);
+    });
+    if (ui.filters.category !== '전체' && present.indexOf(ui.filters.category) === -1) ui.filters.category = '전체';
+
+    var cats = ['전체'].concat(present);
     var catBox = $('#categoryChips');
+    var catRow = $('#catRow');
     if (catBox) {
-      var cats = ['전체'].concat(CATEGORIES);
       catBox.innerHTML = cats.map(function (c) {
         var count = c === '전체'
-          ? state.boards.filter(function (b) { return b.status === 'open'; }).length
-          : state.boards.filter(function (b) { return b.status === 'open' && b.category === c; }).length;
+          ? openBoards.length
+          : openBoards.filter(function (b) { return b.category === c; }).length;
         return '<button class="chip' + (ui.filters.category === c ? ' active' : '') + '" data-action="filter-cat" data-value="' + h(c) + '">' +
           h(c) + '<span class="chip-num">' + count + '</span></button>';
       }).join('');
     }
+    if (catRow) catRow.hidden = cats.length <= 2;
+
+    var bandIds = {};
+    openBoards.forEach(function (b) { bandIds[priceBand(b.price)] = true; });
     var priceBox = $('#priceChips');
     if (priceBox) {
       priceBox.innerHTML = PRICE_BANDS.map(function (p) {
         return '<button class="chip' + (ui.filters.price === p.id ? ' active' : '') + '" data-action="filter-price" data-value="' + p.id + '">' + h(p.label) + '</button>';
       }).join('');
+      priceBox.hidden = Object.keys(bandIds).length <= 1;
+      var priceLabel = priceBox.parentNode ? priceBox.parentNode.querySelector('.filter-label') : null;
+      if (priceLabel) priceLabel.hidden = priceBox.hidden;
     }
     var sort = $('#boardSort');
     if (sort) sort.value = ui.filters.sort;
@@ -3125,6 +3154,8 @@
     renderBoardStatus(board);
     renderTicketGrid(board);
     renderMultiDraw(board);
+    renderQueuePanel(board);
+    startQueue(board);
     renderSalesPanel(board);
     renderPrizesPanel(board);
     renderBoardManual(board);
@@ -3189,7 +3220,6 @@
       el.innerHTML = '<h2>뽑기권으로 뽑기</h2>' +
         '<p class="aside-hint">로그인하면 구매확인으로 받은 뽑기권이 계정에 쌓이고, 당첨 상품을 보관함에서 배송 신청할 수 있어요.</p>' +
         '<button class="btn btn-primary btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>' +
-        '<button class="btn btn-ghost btn-block btn-sm demo-only" data-action="demo-login">체험 계정으로 시작</button>' +
         '<div class="aside-note">교환 코드가 있으면 로그인 없이도 번호를 열 수 있어요.</div>';
       return;
     }
@@ -3275,11 +3305,241 @@
   }
 
   /* =========================================================
+     v4.0.9 — 마지막 10장 순번제(큐)
+     · 서버에 board_queue · queue_* 함수가 있으면 진짜 순번(1인 60초)을 쓴다.
+     · 아직 SQL 을 실행하지 않은 서버면 1장씩만 + 1인 30초 쿨타임으로 조용히 대체한다.
+     ========================================================= */
+  var queue = {
+    boardId: null,
+    supported: null,   /* null: 확인 전 · true: 서버 순번 · false: 쿨타임 대체 */
+    data: null,
+    loading: false,
+    busy: false,
+    poll: null,
+    ticker: null,
+    cooldownUntil: 0,
+    error: ''
+  };
+
+  function queueMode(board) {
+    return !!board && board.status === 'open' && remaining(board) <= QUEUE_LIMIT;
+  }
+
+  function queueKey(board) {
+    return 'kj_cd_' + (me() ? me().id : 'guest') + '_' + board.id;
+  }
+  function loadCooldown(board) {
+    try {
+      var v = Number(localStorage.getItem(queueKey(board)) || 0);
+      queue.cooldownUntil = v > Date.now() ? v : 0;
+    } catch (e) { queue.cooldownUntil = 0; }
+    return queue.cooldownUntil;
+  }
+  function setCooldown(board) {
+    var until = Date.now() + COOLDOWN_SECONDS * 1000;
+    queue.cooldownUntil = until;
+    try { localStorage.setItem(queueKey(board), String(until)); } catch (e) {}
+  }
+
+  function stopQueue() {
+    if (queue.poll) { clearInterval(queue.poll); queue.poll = null; }
+    if (queue.ticker) { clearInterval(queue.ticker); queue.ticker = null; }
+  }
+
+  function resetQueue() {
+    stopQueue();
+    queue.boardId = null;
+    queue.supported = null;
+    queue.data = null;
+    queue.loading = false;
+    queue.busy = false;
+    queue.error = '';
+  }
+
+  function queueTurnLeft() {
+    var d = queue.data;
+    if (!d || !d.turn_ends_at) return 0;
+    var t = new Date(d.turn_ends_at).getTime();
+    if (!isFinite(t)) return 0;
+    return Math.max(0, Math.ceil((t - Date.now()) / 1000));
+  }
+
+  async function refreshQueue(board, opts) {
+    opts = opts || {};
+    if (!board || !queueMode(board)) { queue.data = null; return; }
+    var user = me();
+    /* 로그인 전이거나 로컬 모드면 서버 순번을 쓰지 않고 쿨타임으로 대체 */
+    if (!user || Backend.mode !== 'supabase') {
+      queue.supported = false;
+      loadCooldown(board);
+      renderQueuePanel(board);
+      return;
+    }
+    if (queue.loading) return;
+    queue.loading = true;
+    try {
+      var r = await Backend.queueStatus(board.id);
+      if (r.ok) { queue.supported = true; queue.data = r.data || {}; queue.error = ''; }
+      else if (r.reason === 'missing') { queue.supported = false; loadCooldown(board); }
+      else { queue.error = errMsg(r.error); }
+    } catch (e) { queue.error = errMsg(e); }
+    queue.loading = false;
+    renderQueuePanel(board);
+  }
+
+  function startQueue(board) {
+    if (!board) return;
+    if (queue.boardId !== board.id) { resetQueue(); queue.boardId = board.id; }
+    if (!queueMode(board)) { renderQueuePanel(board); return; }
+    refreshQueue(board);
+    if (!queue.poll) queue.poll = setInterval(function () {
+      var b = getBoard(ui.boardId);
+      if (!b || !queueMode(b)) { stopQueue(); renderQueuePanel(b); return; }
+      refreshQueue(b, { silent: true });
+    }, 5000);
+    if (!queue.ticker) queue.ticker = setInterval(function () {
+      var t = $('#queueTimeLeft');
+      if (t) t.textContent = String(queueTurnLeft());
+    }, 1000);
+  }
+
+  function renderQueuePanel(board) {
+    var el = $('#queuePanel');
+    if (!el) return;
+    if (!board || !queueMode(board)) { el.hidden = true; el.innerHTML = ''; return; }
+    var left = remaining(board);
+    el.hidden = false;
+    var head = '<div class="queue-head">' +
+        '<span class="queue-badge">LAST ' + fmt(left) + '</span>' +
+        '<div class="queue-copy"><b>마지막 10장 · 1장씩 순번제</b>' +
+        '<p>한 분씩 차례를 드려요. 차례가 되면 1장만 뽑을 수 있고, 뽑으면 다음 분에게 넘어갑니다.</p></div>' +
+      '</div>';
+
+    if (queue.supported === false) {
+      var leftSec = Math.max(0, Math.ceil((queue.cooldownUntil - Date.now()) / 1000));
+      el.innerHTML = head +
+        '<div class="queue-body">' +
+          '<span class="queue-state' + (leftSec ? ' is-wait' : ' is-mine') + '">' +
+            (leftSec ? '⏳ 다음 뽑기까지 ' + leftSec + '초' : '✅ 지금 1장 뽑을 수 있어요') + '</span>' +
+          '<span class="queue-note">' + (me() ? '연뽑 불가 · 1인 30초 쿨타임' : '연뽑 불가 · 로그인하면 순번이 자동으로 잡혀요') + '</span>' +
+        '</div>';
+      return;
+    }
+    if (queue.supported === null) {
+      el.innerHTML = head + '<p class="queue-note">순번을 확인하는 중…</p>';
+      return;
+    }
+    var d = queue.data || {};
+    if (!d.in_queue) {
+      el.innerHTML = head +
+        '<div class="queue-body">' +
+          '<button class="btn btn-primary btn-sm" type="button" data-action="queue-join">순번 줄 서기</button>' +
+          '<span class="queue-note">' + (d.waiters ? '지금 ' + fmt(d.waiters) + '명 대기 중' : '줄 서면 바로 내 차례가 돼요') + '</span>' +
+        '</div>';
+      return;
+    }
+    if (d.is_turn) {
+      el.innerHTML = head +
+        '<div class="queue-body is-mine">' +
+          '<span class="queue-state is-mine">🎯 내 차례예요 · <b id="queueTimeLeft">' + queueTurnLeft() + '</b>초</span>' +
+          '<button class="btn btn-ghost btn-sm" type="button" data-action="queue-leave">순번 취소</button>' +
+        '</div>' +
+        '<p class="queue-note">번호를 골라 1장 뽑아 주세요. 뽑으면 자동으로 다음 분에게 넘어갑니다.</p>';
+      return;
+    }
+    el.innerHTML = head +
+      '<div class="queue-body">' +
+        '<span class="queue-state is-wait">🕒 내 순번 <b>' + fmt(d.my_position || 0) + '번째</b>' +
+          (d.ahead ? ' · 앞에 ' + fmt(d.ahead) + '명' : '') + '</span>' +
+        '<span class="queue-note">' + (d.turn_ends_at ? '앞사람 차례 <b id="queueTimeLeft">' + queueTurnLeft() + '</b>초 남음' : '곧 시작돼요') + '</span>' +
+        '<button class="btn btn-ghost btn-sm" type="button" data-action="queue-leave">대기 취소</button>' +
+      '</div>';
+  }
+
+  async function queueJoin(board) {
+    if (!board || !queueMode(board) || queue.busy) return;
+    if (!me()) { openAuthModal(); toast('순번은 로그인 후 이용할 수 있어요', 'err'); return; }
+    queue.busy = true;
+    try {
+      var r = await Backend.queueJoin(board.id);
+      if (!r.ok) {
+        if (r.reason === 'missing' || r.reason === 'local') {
+          queue.supported = false;
+          loadCooldown(board);
+          renderQueuePanel(board);
+          toast('지금은 1장씩만 뽑을 수 있어요 · 1인 30초 쿨타임', 'err');
+          queue.busy = false;
+          return;
+        }
+        throw r.error || new Error('순번을 받지 못했어요.');
+      }
+      queue.supported = true;
+      queue.data = r.data || {};
+      queue.error = '';
+      renderQueuePanel(board);
+      toast(queue.data.is_turn ? '내 차례예요 · 1장 뽑아 주세요' : '순번을 받았어요 · 내 차례가 되면 1장 뽑을 수 있어요', 'ok');
+    } catch (e) {
+      toast(errMsg(e), 'err');
+      refreshQueue(board);
+    }
+    queue.busy = false;
+  }
+
+  async function queueLeave(board) {
+    if (!board || queue.busy) return;
+    queue.busy = true;
+    try {
+      await Backend.queueLeave(board.id);
+      await refreshQueue(board);
+      renderQueuePanel(board);
+      toast('순번을 반납했어요');
+    } catch (e) { toast(errMsg(e), 'err'); }
+    queue.busy = false;
+  }
+
+  /* 뽑기 직전 관문 — 순번이 아니면 번호 선택을 막는다 */
+  function queueGate(board) {
+    if (!queueMode(board)) return { ok: true };
+    if (queue.supported === false) {
+      var msLeft = queue.cooldownUntil - Date.now();
+      if (msLeft > 0) return { ok: false, message: '1인 30초 쿨타임이에요 · ' + Math.ceil(msLeft / 1000) + '초 뒤에 다시 뽑을 수 있어요' };
+      return { ok: true };
+    }
+    if (queue.supported === null) return { ok: false, message: '순번을 확인하는 중이에요. 잠시 후 다시 눌러 주세요' };
+    var d = queue.data || {};
+    if (d.is_turn) return { ok: true };
+    if (!d.in_queue) return { ok: false, message: '마지막 ' + fmt(remaining(board)) + '장은 순번제예요. 먼저 순번을 받아 주세요' };
+    return { ok: false, message: '내 차례까지 ' + fmt(d.ahead || 0) + '명 남았어요' };
+  }
+
+  /* 뽑기가 끝나면 차례를 넘긴다 (서버 순번이면 서버가 다음 사람을 지목) */
+  function queueAfterDraw(board) {
+    if (!board || !queueMode(board)) return;
+    var b = board;
+    if (queue.supported === false) {
+      setCooldown(b);
+      renderQueuePanel(b);
+      setTimeout(function () { renderQueuePanel(getBoard(ui.boardId)); }, COOLDOWN_SECONDS * 1000 + 300);
+      return;
+    }
+    Backend.queueLeave(b.id).then(function () {
+      return refreshQueue(getBoard(b.id) || b);
+    }).catch(function () {
+      refreshQueue(getBoard(b.id) || b);
+    }).then(function () {
+      renderQueuePanel(getBoard(ui.boardId));
+    });
+  }
+
+  /* =========================================================
      무작위 연뽑 (v3.9.3) — 5 · 10 · 15 · 20장
      번호를 고르지 않고 남은 번호 중 무작위로 N개를 골라
      한 장씩 차례로 뽑은 뒤 결과를 한 화면에 요약한다.
      ========================================================= */
   var MULTI_COUNTS = [5, 10, 15, 20];
+  var QUEUE_LIMIT = 10;          /* v4.0.9 — 잔여 10장 이하는 1장씩 순번제 */
+  var TURN_SECONDS = 60;         /* 서버 순번 1명당 60초 */
+  var COOLDOWN_SECONDS = 30;     /* 순번 기능이 없는 서버에서 1인 30초 쿨타임 */
 
   function multiState(board) {
     var user = me();
@@ -3300,22 +3560,34 @@
     if (board.status !== 'open' || ms.left <= 0) { el.hidden = true; el.innerHTML = ''; return; }
     el.hidden = false;
 
+    if (ms.left <= QUEUE_LIMIT) {
+      /* 마지막 10장부터는 연뽑(5·10·15·20)을 전부 잠근다 */
+      el.innerHTML = '<div class="md-head">' +
+          '<span class="md-dice" aria-hidden="true">🎟️</span>' +
+          '<div class="md-copy"><b>마지막 ' + fmt(ms.left) + '장 · 1장씩 순번제</b>' +
+            '<p>마지막 10장부터는 <b>1장씩 순번제</b>로만 뽑을 수 있어요. 연뽑은 잠겨 있어요.</p>' +
+          '</div>' +
+        '</div>' +
+        '<p class="md-foot">위 순번 안내에서 차례를 받은 뒤 번호를 골라 1장만 뽑아 주세요.</p>';
+      return;
+    }
+
     var buttons = MULTI_COUNTS.map(function (n) {
       var short = ms.left < n;
       var canCoupon = ms.mine.length >= n;
       var canPoints = ms.price > 0 && ms.have >= ms.price * n;
-      var state = short ? ('잔여 ' + fmt(ms.left) + '장')
-        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : (canPoints ? ('포인트 ' + fmt(ms.price * n) + 'P') : '체험 코드'));
+      var payState = short ? ('잔여 ' + fmt(ms.left) + '장')
+        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : (canPoints ? ('포인트 ' + fmt(ms.price * n) + 'P') : '결제 필요'));
       return '<button class="md-btn' + (short ? ' is-off' : '') + '" type="button" data-action="multi-draw" data-count="' + n + '"' +
         (short ? ' disabled aria-disabled="true"' : '') + '>' +
         '<span class="md-n">' + n + '<em>연뽑</em></span>' +
         '<span class="md-price">' + won(ms.price * n) + '</span>' +
-        '<span class="md-state">' + h(state) + '</span>' +
+        '<span class="md-state">' + h(payState) + '</span>' +
       '</button>';
     }).join('');
 
-    /* 5장도 남지 않았을 때: 남은 번호를 한 번에 뽑는 마지막 버튼 */
-    var restBtn = (ms.left < MULTI_COUNTS[0])
+    /* 잔여가 5장 미만이면 남은 전부 버튼 하나만 — 1장씩 순번제 규칙이 우선 */
+    var restBtn = (ms.left < MULTI_COUNTS[0] || (ms.left < 20 && MULTI_COUNTS.indexOf(ms.left) === -1))
       ? '<button class="md-btn md-rest" type="button" data-action="multi-draw" data-count="' + ms.left + '">' +
           '<span class="md-n">' + ms.left + '<em>연뽑</em></span>' +
           '<span class="md-price">' + won(ms.price * ms.left) + '</span>' +
@@ -3330,7 +3602,7 @@
         '</div>' +
       '</div>' +
       '<div class="md-row">' + buttons + restBtn + '</div>' +
-      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 1장 전용이라 연뽑에는 체험 코드를 써 주세요.</p>';
+      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 1장 전용이에요.</p>';
   }
 
   function openMultiDraw(count) {
@@ -3339,7 +3611,9 @@
     if (board.status !== 'open') { toast('종료된 판이에요', 'err'); return; }
     var left = remaining(board);
     if (left <= 0) { toast('이 판은 전량 소진되었어요', 'err'); return; }
-    var n = Math.min(Math.max(1, Number(count) || MULTI_COUNTS[0]), left);
+    if (left <= QUEUE_LIMIT) { toast('마지막 10장부터는 1장씩 순번제로만 뽑을 수 있어요', 'err'); return; }
+    var n = Number(count) || MULTI_COUNTS[0];
+    if (n > left) { toast('남은 ' + fmt(left) + '장보다 많이 뽑을 수 없어요', 'err'); return; }
     ui.draw = { boardId: board.id, batch: true, count: n, step: 'source', busy: false, results: [], numbers: [], error: '' };
     renderDrawModal();
   }
@@ -3547,6 +3821,15 @@
     var existing = (board.opens || []).filter(function (o) { return o.n === n; })[0];
     if (existing) { showTicketInfo(n); return; }
 
+    /* v4.0.9 — 마지막 10장 순번제: 내 차례에만 1장 뽑기 */
+    var gate = queueGate(board);
+    if (!gate.ok) {
+      toast(gate.message, 'err');
+      var qp = $('#queuePanel');
+      if (qp && !qp.hidden) qp.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
+
     ui.draw = { boardId: board.id, n: n, step: 'source', busy: false };
     renderDrawModal();
   }
@@ -3657,10 +3940,6 @@
       '<p class="field-error" data-role="code-error" role="alert"></p>' +
       '<button class="btn ' + (mine.length ? 'btn-outline' : 'btn-primary') + '" type="submit">코드 확인</button>' +
     '</form>' +
-    '<div class="demo-box">' +
-      '<p><strong>체험용 무료 코드</strong>' + h(state.settings.demoCode) + ' — 결제 없이 뽑기를 미리 체험해 볼 수 있어요.</p>' +
-      '<button class="btn btn-outline btn-sm" type="button" data-action="fill-demo-code">' + h(state.settings.demoCode) + ' 넣기</button>' +
-    '</div>' +
     '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요.</p>';
 
     return html;
@@ -3712,7 +3991,7 @@
       '</div>';
     }
 
-    /* 교환 코드 — 1회용 코드는 1장 전용, 체험 코드는 연뽑 가능 */
+    /* 교환 코드 — 1회용 코드는 1장 전용 (연뽑은 쿠폰·포인트로) */
     html += '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
       '<form class="code-form" data-form="multi-code" novalidate>' +
         '<label class="sr-only" for="multiCodeInput">교환 코드</label>' +
@@ -3720,11 +3999,7 @@
         '<p class="field-error" data-role="code-error" role="alert"></p>' +
         '<button class="btn btn-outline" type="submit">코드로 ' + n + '장 뽑기</button>' +
       '</form>' +
-      '<p class="md-code-note">교환 코드는 <b>1장 전용</b>이에요. ' + n + '장 연뽑은 <b>보유 쿠폰 · 포인트 · 체험 코드</b>로 할 수 있어요.</p>' +
-      '<div class="demo-box">' +
-        '<p><strong>체험용 무료 코드</strong>' + h(state.settings.demoCode) + ' — 체험 코드는 연뽑에도 쓸 수 있어요.</p>' +
-        '<button class="btn btn-outline btn-sm" type="button" data-action="fill-demo-code">' + h(state.settings.demoCode) + ' 넣기</button>' +
-      '</div>' +
+      '<p class="md-code-note">교환 코드는 <b>1장 전용</b>이에요. ' + n + '장 연뽑은 <b>보유 쿠폰 · 포인트</b>로 할 수 있어요.</p>' +
       '<p class="result-meta">한 번 개봉한 번호는 되돌릴 수 없어요. 뽑을 번호는 무작위로 정해지며 뽑기 직전에 확정됩니다.</p>';
 
     return html;
@@ -4046,7 +4321,7 @@
     var pay = d.pay || {};
     var price = Math.max(0, Number(board.price) || 0);
     var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt(price * picked.length) + 'P')
-      : (pay.code ? '체험 코드' : ('뽑기권 ' + picked.length + '장'));
+      : (pay.code ? '교환 코드' : ('뽑기권 ' + picked.length + '장'));
 
     /* 최고 등급 실물 */
     var bestPhys = physical[0] || null;
@@ -5109,6 +5384,7 @@
       d.busy = false;
       paintPeek(d);
       updatePeelText(peelDrag ? peelDrag.p : 0);
+      queueAfterDraw(getBoard(d.boardId) || board);
     } catch (e) {
       if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(errMsg(e), 'err'); return; }
       d.busy = false;
@@ -7084,8 +7360,6 @@
     } else if (info && Backend.mode === 'supabase') {
       info.textContent = 'Supabase 서버에 저장 중입니다. 백업(JSON)은 서버 데이터가 아니라 현재 화면 데이터 기준입니다.';
     }
-    var demoInput = $('form[data-form="change-demo"] input[name="demo"]');
-    if (demoInput && !demoInput.value) demoInput.value = state.settings.demoCode;
     renderYoutubeSettings();
     renderCsSettings();
   }
@@ -8038,10 +8312,6 @@
             '<p class="form-error" data-role="auth-error" role="alert"></p>' +
             '<button class="btn btn-primary btn-block" type="submit">가입하고 시작하기</button>' +
           '</form>') +
-      '<div class="auth-demo demo-only">' +
-        '<p>처음이신가요? 체험 계정으로 바로 둘러볼 수 있어요.</p>' +
-        '<button class="btn btn-outline btn-sm" type="button" data-action="demo-login">체험 계정으로 시작 (쿠지러버)</button>' +
-      '</div>' +
     '</div>';
   }
 
@@ -8091,26 +8361,6 @@
     } catch (e) {
       if (errEl) errEl.textContent = errMsg(e);
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '로그인'; }
-    }
-  }
-
-  async function demoLogin() {
-    try {
-      closeModal();
-      if (Backend.mode === 'local') {
-        var user = state.users.filter(function (u) { return u.id === 'u-demo'; })[0];
-        if (!user) throw new Error('체험 계정이 없습니다.');
-        state.session = { userId: user.id, at: nowISO() };
-        persist();
-        buildLocalViews();
-      } else {
-        await Backend.signIn('demo@kujiking.co.kr', 'demo1234');
-      }
-      renderAll();
-      toast('체험 계정(쿠지러버)으로 로그인했어요 · 뽑기권 3장 지급됨', 'ok');
-      if (ui.view === 'my') renderMy();
-    } catch (e) {
-      toast(errMsg(e), 'err');
     }
   }
 
@@ -8165,8 +8415,6 @@
 
         case 'open-auth': openAuthModal(); break;
         case 'auth-tab': ui.authTab = el.getAttribute('data-tab'); openModal(authModalHTML()); break;
-        case 'demo-login': demoLogin(); break;
-        case 'logout': logout(); break;
         case 'go-my': closeModal(); location.hash = '#/my'; break;
         case 'go-claim':
           closeModal();
@@ -8175,6 +8423,9 @@
           else renderMy();
           break;
         case 'open-code-modal': openCodeModal(); break;
+        case 'open-policy': openPolicyModal(el.getAttribute('data-policy')); break;
+        case 'queue-join': queueJoin(getBoard(ui.boardId)); break;
+        case 'queue-leave': queueLeave(getBoard(ui.boardId)); break;
         case 'open-youtube-live': openYoutubeLive(); break;
         case 'open-kakao': openKakaoInquiry(); break;
         case 'test-kakao': {
@@ -8210,11 +8461,7 @@
           copyText(youtubeLiveSql(ytSqlInput ? ytSqlInput.value.trim() : (state.settings.youtubeLiveUrl || ''), ytSqlCheck ? ytSqlCheck.checked : youtubeLiveEnabled()), 'SQL을 복사했어요');
           break;
         }
-        case 'fill-demo-code': {
-          var input = $('#multiCodeInput') || $('#drawCodeInput') || $('#quickCodeInput');
-          if (input) { input.value = state.settings.demoCode; input.focus(); }
-          break;
-        }
+        case 'logout': logout(); break;
         case 'scroll-grid': {
           if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
           var grid = $('#ticketGrid');
@@ -8434,8 +8681,7 @@
         var value = fieldValue(form, 'code');
         if (!board) { toast('판매 중인 판이 없어요', 'err'); return; }
         var key = normalizeCode(value);
-        var demoOk = key && key === normalizeCode(state.settings.demoCode);
-        var codeOk = demoOk || state.codes.some(function (c) { return normalizeCode(c.code) === key && !c.usedAt; });
+        var codeOk = !!key && state.codes.some(function (c) { return normalizeCode(c.code) === key && !c.usedAt; });
         if (!codeOk) {
           if (!key) toast('교환 코드를 입력해 주세요', 'err');
           else if (state.codes.some(function (c) { return normalizeCode(c.code) === key; })) toast('이미 사용된 코드예요', 'err');
@@ -8464,33 +8710,21 @@
         var k = normalizeCode(raw);
         var err2 = form.querySelector('[data-role="code-error"]');
         if (!k) { if (err2) err2.textContent = '교환 코드를 입력해 주세요.'; return; }
-        var isDemo = k === normalizeCode(state.settings.demoCode);
-        if (!isDemo) {
-          var rec = state.codes.filter(function (c) { return normalizeCode(c.code) === k; })[0];
-          if (Backend.mode === 'local') {
-            if (!rec) { if (err2) err2.textContent = '등록되지 않은 코드예요. 코드를 다시 확인해 주세요.'; return; }
-            if (rec.usedAt) { if (err2) err2.textContent = '이미 사용된 코드예요 (' + formatDateTime(rec.usedAt) + ').'; return; }
-            if (rec.boardId && rec.boardId !== board2.id) { if (err2) err2.textContent = '이 코드는 다른 판 전용이에요.'; return; }
-          }
+        var rec = state.codes.filter(function (c) { return normalizeCode(c.code) === k; })[0];
+        if (Backend.mode === 'local') {
+          if (!rec) { if (err2) err2.textContent = '등록되지 않은 코드예요. 코드를 다시 확인해 주세요.'; return; }
+          if (rec.usedAt) { if (err2) err2.textContent = '이미 사용된 코드예요 (' + formatDateTime(rec.usedAt) + ').'; return; }
+          if (rec.boardId && rec.boardId !== board2.id) { if (err2) err2.textContent = '이 코드는 다른 판 전용이에요.'; return; }
         }
-        enterPeel({ code: raw, demo: isDemo });
+        enterPeel({ code: raw });
         return;
       }
 
       if (type === 'multi-code') {
         var md = ui.draw;
         if (!md || !md.batch) return;
-        var mBoard2 = getBoard(md.boardId);
-        if (!mBoard2) return;
         var mErr = form.querySelector('[data-role="code-error"]');
-        var mRaw = fieldValue(form, 'code');
-        var mKey = normalizeCode(mRaw);
-        if (!mKey) { if (mErr) mErr.textContent = '교환 코드를 입력해 주세요.'; return; }
-        if (mKey !== normalizeCode(state.settings.demoCode)) {
-          if (mErr) mErr.textContent = '교환 코드는 1장 전용이에요. ' + md.count + '장 연뽑은 보유 쿠폰·포인트·체험 코드로 할 수 있어요.';
-          return;
-        }
-        startMultiDraw({ code: mRaw, demo: true });
+        if (mErr) mErr.textContent = '교환 코드는 1장 전용이에요. ' + md.count + '장 연뽑은 보유 쿠폰·포인트로 할 수 있어요.';
         return;
       }
 
@@ -8520,21 +8754,6 @@
             toast('PIN을 변경했어요', 'ok');
           });
         });
-        return;
-      }
-
-      if (type === 'change-demo') {
-        var demoErr = $('#demoFormError');
-        if (demoErr) demoErr.textContent = '';
-        var demoVal = fieldValue(form, 'demo').trim().toUpperCase();
-        if (!/^[A-Z0-9-]{4,24}$/.test(demoVal)) { if (demoErr) demoErr.textContent = '영문·숫자·하이픈 4~24자로 입력해 주세요.'; return; }
-        if (state.codes.some(function (c) { return normalizeCode(c.code) === normalizeCode(demoVal); })) {
-          if (demoErr) demoErr.textContent = '실제 발급된 코드와 겹칩니다.';
-          return;
-        }
-        state.settings.demoCode = demoVal;
-        persist();
-        toast('체험 코드를 변경했어요', 'ok');
         return;
       }
 
@@ -9058,6 +9277,104 @@
     });
   }
 
+  /* =========================================================
+     약관·정책 (PG 심사 · 푸터 링크)
+     ========================================================= */
+  var POLICY_TITLES = {
+    terms: '이용약관',
+    privacy: '개인정보처리방침',
+    refund: '청약철회 · 환불 정책',
+    probability: '확률 공시'
+  };
+
+  function policyHTML(key) {
+    var biz = '<p class="policy-biz">쿠지킹 · 대표 원준철 · 사업자등록번호 719-32-01822 · 서울특별시 성북구 장위로24길 47-15(장위동) · 고객센터 010-8070-1115</p>';
+    if (key === 'privacy') {
+      return '<div class="policy-doc">' +
+        '<h3>1. 수집하는 개인정보</h3>' +
+        '<p>쿠지킹은 회원가입·뽑기·배송을 위해 다음 정보를 수집합니다. 필수: 이메일, 비밀번호(암호화 저장), 닉네임, 휴대폰 번호. 배송 신청 시: 수령인 이름, 연락처, 주소. 자동 수집: 접속 일시, 뽑기·결제 이용 기록, 브라우저 정보.</p>' +
+        '<h3>2. 이용 목적</h3>' +
+        '<p>회원 식별과 본인 확인, 뽑기권(쿠폰) 지급과 사용, 당첨 상품 배송, 구매확인·환불 처리, 고객 문의 응대, 부정 이용과 순번제 방해 행위 방지에 사용합니다.</p>' +
+        '<h3>3. 보유 및 파기</h3>' +
+        '<p>회원 탈퇴 시 수집한 정보를 지체 없이 파기합니다. 다만 전자상거래 등에서의 소비자보호에 관한 법률에 따라 계약·대금결제 기록 5년, 소비자 불만·분쟁 처리 기록 3년, 표시·광고 기록 6개월은 보관합니다. 전자적 파일은 복구할 수 없는 방식으로 삭제합니다.</p>' +
+        '<h3>4. 제3자 제공 및 처리 위탁</h3>' +
+        '<p>배송을 위해 택배사에 수령인 이름·연락처·주소를 제공합니다. 서비스 운영을 위해 Supabase(데이터 보관), GitHub Pages(사이트 호스팅), 네이버 스마트스토어(주문·결제)에 처리를 위탁하며, 위탁 범위를 벗어난 이용은 하지 않습니다.</p>' +
+        '<h3>5. 이용자의 권리</h3>' +
+        '<p>언제든지 자신의 개인정보 열람·정정·삭제·처리정지를 요구할 수 있습니다. 카카오톡 채널 ‘쿠지킹’ 1:1 문의 또는 010-8070-1115로 요청하면 지체 없이 조치합니다.</p>' +
+        '<h3>6. 쿠키</h3>' +
+        '<p>로그인 유지와 순번·쿨타임 기억을 위해 브라우저 저장소(쿠키·로컬스토리지)를 최소한으로 사용합니다. 브라우저 설정에서 삭제할 수 있으나 로그인이 풀릴 수 있습니다.</p>' +
+        '<h3>7. 개인정보 보호 책임자</h3>' +
+        '<p>원준철 · 010-8070-1115 · 카카오톡 채널 ‘쿠지킹’</p>' +
+        biz +
+        '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
+      '</div>';
+    }
+    if (key === 'refund') {
+      return '<div class="policy-doc">' +
+        '<h3>1. 개봉 전 취소</h3>' +
+        '<p>스마트스토어에서 결제한 주문은 배송 전·교환 코드 미사용 상태에서 취소할 수 있습니다. 구매확인으로 지급된 뽑기권은 사용 전이라면 회수 후 환불합니다.</p>' +
+        '<h3>2. 개봉 후 청약철회 제한</h3>' +
+        '<p>본 상품은 무작위 추첨 상품입니다. 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라 소비자의 사용 또는 일부 소비로 재판매가 곤란한 경우 청약철회가 제한됩니다. 교환 코드를 사용해 번호를 개봉한 경우가 이에 해당합니다.</p>' +
+        '<h3>3. 교환·환불되는 경우</h3>' +
+        '<p>상품의 하자, 오배송, 공개한 등급·상품과 다른 상품이 지급된 경우에는 개봉 여부와 관계없이 교환 또는 환불해 드립니다. 수령 후 7일 이내에 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 알려 주세요.</p>' +
+        '<h3>4. 배송비</h3>' +
+        '<p>기본 배송비 3,500원이며, 보관함에서 3건 이상 묶음(합배송) 신청 시 무료입니다. 제주·도서산간은 3,000원이 추가됩니다. 단순 변심에 의한 반품은 왕복 배송비를 부담합니다.</p>' +
+        '<h3>5. 처리 기간</h3>' +
+        '<p>접수 후 3영업일 이내에 회신하고, 환불이 확정되면 7일 이내에 결제 수단으로 환급합니다.</p>' +
+        '<h3>6. 굿즈 포인트</h3>' +
+        '<p>P상으로 적립된 굿즈 포인트는 현금으로 환급되지 않으며 다른 회원에게 양도할 수 없습니다.</p>' +
+        biz +
+        '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
+      '</div>';
+    }
+    if (key === 'probability') {
+      return '<div class="policy-doc">' +
+        '<h3>1. 등급별 확률</h3>' +
+        '<p>모든 판은 등급별 수량과 전체 장수를 공개합니다. 각 등급의 확률은 <b>해당 등급 수량 ÷ 판 전체 장수</b>이며, 판 상세의 ‘등급별 수량 · 확률’ 표에서 바로 확인할 수 있습니다. 라스트원상은 확률 추첨이 아니라 마지막 1장을 뽑은 분께 추가로 지급됩니다.</p>' +
+        '<h3>2. 판 구성</h3>' +
+        '<p>실물 등급은 등급마다 1개씩, 나머지 번호는 P상(굿즈 포인트 1,200P)으로 구성됩니다. P상은 실물 대신 포인트가 즉시 적립되며 꽝은 없습니다.</p>' +
+        '<h3>3. 봉인과 검증</h3>' +
+        '<p>판을 만들 때 무작위 시드를 생성하고 SHA-256 해시를 판매 전에 공개합니다. 번호별 결과는 SHA-256(시드:번호) 값을 정렬해 고정하며, 판이 끝나면 시드를 공개합니다. 누구나 <a href="#/fairness">공정성 검증</a> 페이지에서 해시와 번호별 결과를 다시 계산해 확인할 수 있습니다.</p>' +
+        '<h3>4. 마지막 10장 순번제</h3>' +
+        '<p>잔여 10장부터는 여러 명이 동시에 몰리지 않도록 1장씩 순번제로 진행합니다. 연뽑(5·10·15·20장)은 잔여 10장 이하에서 사용할 수 없습니다.</p>' +
+        biz +
+        '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
+      '</div>';
+    }
+    return '<div class="policy-doc">' +
+      '<h3>제1조 (목적)</h3>' +
+      '<p>이 약관은 쿠지킹(이하 “회사”)이 운영하는 온라인 쿠지 서비스 kujiking.co.kr의 이용 조건과 절차, 회사와 회원의 권리·의무를 정합니다.</p>' +
+      '<h3>제2조 (용어)</h3>' +
+      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 구매확인으로 지급되는 쿠폰, “교환 코드”는 결제 후 발급되는 1회용 코드, “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
+      '<h3>제3조 (서비스 내용)</h3>' +
+      '<p>회사는 스마트스토어에서 뽑기권을 판매하고, 회원이 사이트에서 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
+      '<h3>제4조 (이용계약)</h3>' +
+      '<p>만 19세 이상 이용할 수 있으며, 미성년자는 법정대리인의 동의 후 이용해야 합니다. 타인의 정보를 도용하거나 1인이 여러 계정으로 참여하는 행위는 제한될 수 있습니다.</p>' +
+      '<h3>제5조 (결제와 뽑기권)</h3>' +
+      '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 구매확인 요청을 회사가 승인하면 요청 수량만큼 뽑기권이 지급되며, 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
+      '<h3>제6조 (청약철회)</h3>' +
+      '<p>교환 코드를 사용해 번호를 개봉하기 전에는 주문을 취소할 수 있습니다. 개봉 후에는 무작위 추첨 상품의 성질상 청약철회가 제한되며, 자세한 내용은 청약철회·환불 정책을 따릅니다.</p>' +
+      '<h3>제7조 (금지행위)</h3>' +
+      '<p>자동화 프로그램·매크로로 접속하거나, 순번제·동시 구매 방지를 우회하거나, 다른 회원의 이용을 방해하는 행위를 금지합니다. 적발 시 이용 제한 또는 계정 정지될 수 있습니다.</p>' +
+      '<h3>제8조 (서비스 변경·중단)</h3>' +
+      '<p>시스템 점검, 상품 소진, 천재지변 등 부득이한 사유로 서비스가 일시 중단될 수 있으며, 회사는 가능한 한 사전에 공지합니다.</p>' +
+      '<h3>제9조 (책임)</h3>' +
+      '<p>피규어·소품은 제조·조립 과정의 개체 차이가 있을 수 있습니다. 이미 공개한 수량이 모두 소진된 판은 판매를 종료합니다.</p>' +
+      '<h3>제10조 (분쟁)</h3>' +
+      '<p>이 약관은 대한민국 법률에 따르며, 분쟁은 회사 소재지 관할 법원에서 해결합니다.</p>' +
+      biz +
+      '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
+    '</div>';
+  }
+
+  function openPolicyModal(key) {
+    var title = POLICY_TITLES[key] || POLICY_TITLES.terms;
+    openModal('<h2 class="modal-title" id="modalTitle">' + h(title) + '</h2>' +
+      '<p class="modal-sub">쿠지킹 · 2026년 11월 25일 시행</p>' +
+      policyHTML(key),
+      { wide: true, resetScroll: true, noAutofocus: true });
+  }
+
   function openCodeModal() {
     var board = getBoard(ui.boardId) || firstBoard();
     openModal('<h2 class="modal-title" id="modalTitle">교환 코드 입력</h2>' +
@@ -9068,10 +9385,6 @@
         '<p class="field-error" data-role="code-error" role="alert"></p>' +
         '<button class="btn btn-primary" type="submit">코드 확인</button>' +
       '</form>' +
-      '<div class="demo-box demo-only">' +
-        '<p><strong>체험용 무료 코드</strong>' + h(state.settings.demoCode) + ' — 결제 없이 뽑기를 미리 체험해 볼 수 있어요.</p>' +
-        '<button class="btn btn-outline btn-sm" type="button" data-action="fill-demo-code">' + h(state.settings.demoCode) + ' 넣기</button>' +
-      '</div>' +
       (board ? '<p class="result-meta">사용할 판 · ' + h(board.title) + '</p>' : ''));
   }
 
@@ -9111,7 +9424,7 @@
         if (!ok) return;
         if (Backend.mode !== 'local') { toast('Supabase 모드에서는 JSON 복원을 사용할 수 없어요', 'err'); return; }
         state = Object.assign(emptyState(), incoming);
-        state.settings = Object.assign({ demoCode: 'DEMO-KUJI', pinHash: '' }, state.settings || {});
+        state.settings = Object.assign({ pinHash: '' }, state.settings || {});
         normalizeLocalState(state);
         var jobs = state.boards.map(function (b) {
           if (!b.seed) b.seed = randomSeed();
