@@ -3339,3 +3339,40 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
   #categoryChips .chip{flex:0 0 auto}
   #catRow{align-items:center}
 }
+
+/* =========================================================
+   v4.2.0 — 판 상세 하단 고정 액션바 (스마트스토어 구매 / 구매확인·뽑기)
+   ========================================================= */
+.store-bar{
+  position:fixed;left:0;right:0;bottom:0;z-index:95;
+  padding:9px 16px calc(9px + env(safe-area-inset-bottom,0px));
+  background:rgba(255,253,246,.94);
+  border-top:2px solid var(--ink);
+  box-shadow:0 -8px 24px rgba(23,18,14,.10);
+  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
+}
+.store-bar-inner{display:flex;gap:9px;width:100%;max-width:640px;margin:0 auto}
+.store-bar-btn{
+  flex:1 1 0;display:inline-flex;align-items:center;justify-content:center;gap:7px;
+  min-height:52px;padding:12px 10px;border:2px solid var(--ink);border-radius:14px;
+  font-weight:900;font-size:16px;letter-spacing:-.03em;line-height:1.15;
+  text-align:center;white-space:nowrap;text-decoration:none;
+  transition:transform .1s ease,box-shadow .1s ease;
+}
+.store-bar-btn:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+.store-bar-buy{background:#03C75A;color:#fff;box-shadow:0 4px 0 #019A46;text-shadow:0 1px 2px rgba(0,0,0,.18)}
+.store-bar-n{
+  flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;
+  width:19px;height:19px;border-radius:5px;background:#fff;color:#03C75A;
+  font-size:13px;font-weight:900;line-height:1;letter-spacing:0;
+}
+.store-bar-draw{background:#ff4f8b;color:#fff;box-shadow:0 4px 0 #d62a66;text-shadow:0 1px 2px rgba(0,0,0,.16)}
+.store-bar-draw.is-off{background:var(--paper);color:var(--muted);box-shadow:0 4px 0 var(--line-strong);text-shadow:none;opacity:.9;pointer-events:none}
+/* 고정바가 페이지 맨 아래 내용·푸터를 가리지 않도록 본문 아래 여백 확보 */
+body.has-store-bar .board-page{padding-bottom:calc(108px + env(safe-area-inset-bottom,0px))}
+body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-bottom,0px))}
+@media (max-width:420px){
+  .store-bar{padding-left:12px;padding-right:12px}
+  .store-bar-btn{font-size:14.5px;min-height:50px;gap:6px}
+  .store-bar-n{width:17px;height:17px;font-size:12px}
+}

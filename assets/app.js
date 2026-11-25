@@ -120,7 +120,9 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.1.9';
+  var COVER_VER = '4.2.0';
+  /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
+  var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
   var POINT_IMG = 'assets/products/point/p.jpg';
   function coverSrc(url) {
@@ -430,7 +432,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' },
+      settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {} },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
@@ -1308,7 +1310,8 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '' }, s.settings || {});
+    s.settings = Object.assign({ pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {} }, s.settings || {});
+    if (!s.settings.boardStoreUrls || typeof s.settings.boardStoreUrls !== 'object') s.settings.boardStoreUrls = {};
     if ('demoCode' in s.settings) delete s.settings.demoCode;
     s.users = s.users || [];
     s.coupons = s.coupons || [];
@@ -1540,7 +1543,7 @@
       state.boards = boards;
       state.loadError = '';
 
-      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice']);
+      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls']);
       if (!setRes.error && setRes.data) {
         var settingsMap = {};
         setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
@@ -1550,6 +1553,13 @@
         }
         if (typeof settingsMap.kakao_openchat_url === 'string' && settingsMap.kakao_openchat_url.trim()) state.settings.kakaoOpenchatUrl = settingsMap.kakao_openchat_url;
         if (typeof settingsMap.shipping_fee_notice === 'string') state.settings.shippingFeeNotice = settingsMap.shipping_fee_notice;
+        /* 판별 스토어 링크 맵 {"board_id": "https://..."} — 값이 깨져 있어도 사이트는 그대로 뜬다 */
+        if (typeof settingsMap.board_store_urls === 'string' && settingsMap.board_store_urls.trim()) {
+          try {
+            var storeMap = JSON.parse(settingsMap.board_store_urls);
+            if (storeMap && typeof storeMap === 'object' && !Array.isArray(storeMap)) state.settings.boardStoreUrls = storeMap;
+          } catch (e) { console.warn('[settings] board_store_urls 파싱 실패', e); }
+        }
       }
 
       if (myId) {
@@ -2561,6 +2571,7 @@
     $$('[data-view]').forEach(function (el) {
       el.classList.toggle('active', el.getAttribute('data-view') === ui.view);
     });
+    if (ui.view !== 'board') document.body.classList.remove('has-store-bar');
     $$('.main-nav a').forEach(function (a) {
       a.classList.toggle('active', a.getAttribute('data-nav') === ui.view);
     });
@@ -2605,6 +2616,64 @@
   function couponsFor(board) {
     return availableCoupons().filter(function (c) { return !c.boardId || c.boardId === board.id; })
       .sort(function (a, b) { return (a.boardId ? 0 : 1) - (b.boardId ? 0 : 1); });
+  }
+
+  /* ---------- 판별 스토어 구매 링크 (판 상세 하단 고정바) ---------- */
+  /* 입력값을 새 창으로 열 수 있는 http(s) 주소로 바꿔다. 비었거나 잘못되면 '' */
+  function storeTarget(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (!/^https?:\/\//i.test(s)) s = 'https://' + s;
+    var url;
+    try { url = new URL(s); } catch (e) { return ''; }
+    if (!/^https?:$/.test(url.protocol)) return '';
+    var host = url.hostname.toLowerCase();
+    if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host)) return '';
+    return url.href;
+  }
+
+  /* 이 판의 스토어 주소 — 관리자가 넣은 값 → 기본 스마트스토어 상품 순서 */
+  function storeUrlFor(board) {
+    var map = state.settings.boardStoreUrls || {};
+    var custom = board && board.id ? storeTarget(map[board.id]) : '';
+    return custom || DEFAULT_STORE_URL;
+  }
+
+  /* app_settings 의 board_store_urls 한 줄(JSON 맵)에 판별 링크를 넣거나 지운다. */
+  async function saveBoardStoreUrl(boardId, rawUrl) {
+    if (!boardId) return;
+    var url = storeTarget(rawUrl);
+    var map = Object.assign({}, state.settings.boardStoreUrls || {});
+    if (url) map[boardId] = url; else delete map[boardId];
+    if (Backend.mode === 'local') {
+      state.settings.boardStoreUrls = map;
+      persist();
+      return;
+    }
+    var res = await Backend.sb.from('app_settings').upsert([
+      { key: 'board_store_urls', value: JSON.stringify(map) }
+    ], { onConflict: 'key' });
+    if (res.error) throw res.error;
+    state.settings.boardStoreUrls = map;
+  }
+
+  function renderBoardStoreBar(board) {
+    var bar = $('#storeBar');
+    if (!bar || !board) return;
+    var left = remaining(board);
+    var buy = $('#storeBarBuy');
+    if (buy) {
+      buy.href = storeUrlFor(board);
+      buy.setAttribute('aria-label', board.title + ' 스마트스토어에서 구매 (새 창)');
+    }
+    var draw = $('#storeBarDraw');
+    if (draw) {
+      var soldOut = left === 0 || board.status === 'closed';
+      draw.textContent = soldOut ? (left === 0 ? '전량 소진' : '판매 종료') : '코드 입력하고 뽑기';
+      draw.setAttribute('aria-disabled', soldOut ? 'true' : 'false');
+      draw.classList.toggle('is-off', soldOut);
+    }
+    document.body.classList.add('has-store-bar');
   }
 
   /* ---------- 유튜브 라이브 ---------- */
@@ -3146,12 +3215,14 @@
   function renderBoard() {
     var board = getBoard(ui.boardId) || firstBoard();
     if (!board) {
+      document.body.classList.remove('has-store-bar');
       var hero = $('#boardHero');
       if (hero) hero.innerHTML = '<div class="empty" style="padding:40px"><p>열린 쿠지판이 없어요.</p><a class="btn btn-primary" href="#/admin">판 만들기</a></div>';
       return;
     }
     ui.boardId = board.id;
     renderBoardHero(board);
+    renderBoardStoreBar(board);
     renderCouponCard(board);
     renderBoardStatus(board);
     renderTicketGrid(board);
@@ -8480,6 +8551,12 @@
             '<span class="field-hint">비워두면 카테고리 색상 커버가 표시됩니다. 3:4 세로형이 가장 잘 맞아요.</span>' +
             '<div class="cover-preview" id="coverPreview" hidden><img alt="커버 미리보기"></div>' +
           '</div>' +
+          '<label class="field span-2"><span>스토어 구매 링크 (URL)</span>' +
+            '<input name="storeUrl" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" value="' +
+              h(board && board.id ? (storeTarget((state.settings.boardStoreUrls || {})[board.id]) || '') : '') +
+              '" placeholder="' + h(DEFAULT_STORE_URL) + '">' +
+            '<span class="field-hint">이 링크가 판 상세 하단 <b>스마트스토어에서 구매</b> 버튼으로 열립니다. 비우면 기본 주소(' + h(DEFAULT_STORE_URL) + ')를 씁니다.</span>' +
+          '</label>' +
         '</div>' +
         '<div class="tier-editor" id="tierEditor">' +
           '<div class="tier-editor-head"><span>등급</span><span>상품명</span><span>수량</span><span>지급 포인트(P)</span><span>구분</span><span></span></div>' +
@@ -8592,6 +8669,7 @@
       lastOneImage: fieldValue(form, 'lastOneImage').trim(),
       lastOneDesc: fieldValue(form, 'lastOneDesc').trim(),
       cover: fieldValue(form, 'cover').trim(),
+      storeUrl: fieldValue(form, 'storeUrl').trim(),
       manual: readManualForm(form),
       tiers: readTierRows(),
       seed: fieldValue(form, 'seed').trim()
@@ -8599,6 +8677,8 @@
     if (!data.title) return fail('판 제목을 입력해 주세요.');
     if (!(data.price > 0)) return fail('가격을 확인해 주세요.');
     if (!(data.tickets >= 1 && data.tickets <= MAX_TICKETS)) return fail('전체 장수는 1 ~ ' + MAX_TICKETS + '장 사이로 입력해 주세요.');
+    if (data.storeUrl && !storeTarget(data.storeUrl)) return fail('스토어 구매 링크 주소를 확인해 주세요. 예: ' + DEFAULT_STORE_URL);
+    data.storeUrl = storeTarget(data.storeUrl);
     if (!data.tiers.length) return fail('등급을 하나 이상 추가해 주세요.');
     var grades = {};
     for (var i = 0; i < data.tiers.length; i++) {
@@ -8622,11 +8702,18 @@
 
     var proceed = async function () {
       try {
+        var boardId = ui.editingBoardId;
         var saved = await Backend.saveBoard(Object.assign({ id: ui.editingBoardId }, data));
+        var savedId = (saved && saved.id) || boardId;
+        var storeErr = null;
+        try {
+          await saveBoardStoreUrl(savedId, data.storeUrl);
+        } catch (se) { storeErr = se; }
         ui.editingBoardId = null;
         closeModal();
         renderAll();
         toast(existing ? '판을 수정했어요' : '새 판을 만들었어요', 'ok');
+        if (storeErr) toast('스토어 링크는 저장하지 못했어요: ' + errMsg(storeErr), 'err');
         if (ui.view === 'admin') renderAdmin();
       } catch (e) {
         fail(errMsg(e));
@@ -8839,6 +8926,22 @@
           break;
         }
         case 'logout': logout(); break;
+        case 'store-bar-draw': {
+          var sbBoard = getBoard(ui.boardId);
+          if (!sbBoard) break;
+          if (remaining(sbBoard) === 0) { toast('이 판은 전량 소진되었어요', 'err'); break; }
+          if (sbBoard.status === 'closed') { toast('이 판은 판매가 종료되었어요', 'err'); break; }
+          /* 이미 이 판에 쓸 뽑기권이 있으면 바로 번호 고르기로, 없으면 코드 입력창 */
+          if (me() && couponsFor(sbBoard).length) {
+            if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
+            var sbGrid = $('#ticketGrid');
+            if (sbGrid) sbGrid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            toast('뽑기권이 있어요. 번호를 고르면 바로 뽑을 수 있어요.', 'ok');
+            break;
+          }
+          openCodeModal();
+          break;
+        }
         case 'scroll-grid': {
           if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
           var grid = $('#ticketGrid');
