@@ -3965,11 +3965,13 @@
     var pointRows = rows.filter(isPointPrize);
     var ptsTotal = pointRows.reduce(function (s, r) { return s + (Number(r.points) || 0); }, 0);
     var lastWin = rows.filter(function (r) { return r.lastOneWon || r.isLast || String(r.grade || '').toUpperCase() === 'LAST'; })[0];
-    var missing = Math.max(0, (d.count || rows.length) - rows.length);
+    /* 라스트원 보너스 행은 뽑은 장수에서 뺐다 (N연뽑 = N장) */
+    var picked = rows.filter(function (r) { return String(r.grade || '').toUpperCase() !== 'LAST'; });
+    var missing = Math.max(0, (d.count || picked.length) - picked.length);
     var pay = d.pay || {};
     var price = Math.max(0, Number(board.price) || 0);
-    var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt(price * rows.length) + 'P')
-      : (pay.code ? '체험 코드' : ('뽑기권 ' + rows.length + '장'));
+    var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt(price * picked.length) + 'P')
+      : (pay.code ? '체험 코드' : ('뽑기권 ' + picked.length + '장'));
 
     /* 최고 등급 실물 */
     var bestPhys = physical[0] || null;
@@ -4028,11 +4030,11 @@
 
     return '<div class="batch-wrap">' +
       '<p class="batch-kicker">MULTI DRAW · 무작위 ' + (d.count || rows.length) + '연뽑</p>' +
-      '<h2 class="batch-title" id="modalTitle">' + (rows.length > 1 ? rows.length + '장 뽑기 완료!' : '1장 뽑기 완료!') + '</h2>' +
+      '<h2 class="batch-title" id="modalTitle">' + (picked.length > 1 ? picked.length + '장 뽑기 완료!' : '1장 뽑기 완료!') + '</h2>' +
       '<p class="batch-sub">' + h(board.title) + ' · ' + h(payLabel) + ' 사용</p>' +
       hero + otherHTML + ptsBox +
       (lastWin ? lastOneBannerHTML(lastWin, board, { big: true }) : '') +
-      '<div class="batch-all"><span class="batch-all-head">뽑은 번호 ' + rows.length + '장</span>' +
+      '<div class="batch-all"><span class="batch-all-head">뽑은 번호 ' + picked.length + '장' + (lastWin ? ' + 라스트원상' : '') + '</span>' +
         '<ul class="batch-cards">' + cards + '</ul></div>' +
       (missing ? '<p class="batch-warn">⚠ ' + missing + '장은 다른 분이 먼저 뽑아 진행하지 못했어요. 이미 뽑힌 ' + rows.length + '장의 결과는 그대로 보관함에 담겼습니다.</p>' : '') +
       '<p class="remaining-line">남은 번호 <b>' + fmt(remaining(board)) + '</b>장' + (remaining(board) === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
