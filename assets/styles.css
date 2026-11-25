@@ -3332,3 +3332,10 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
 @media (max-width:760px){
   .page.container,.board-page.container{padding-left:16px;padding-right:16px}
 }
+/* 모바일: 카테고리 칩을 한 줄 가로 스크롤로 (카테고리가 많아도 홈이 길어지지 않게) */
+@media (max-width:760px){
+  #categoryChips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  #categoryChips::-webkit-scrollbar{display:none}
+  #categoryChips .chip{flex:0 0 auto}
+  #catRow{align-items:center}
+}
