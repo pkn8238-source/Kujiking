@@ -513,7 +513,10 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .data-table td{padding:12px;border-bottom:1px solid var(--line);vertical-align:middle;font-weight:600}
 .data-table tbody tr:hover{background:#fffcf0}
 .data-table td.num{font-variant-numeric:tabular-nums}
-.code-cell{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);background:var(--cream);border-radius:5px;padding:.15em .45em}
+.code-cell{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-soft);background:var(--cream);border-radius:5px;padding:.15em .45em;white-space:nowrap}
+/* 코드 목록은 열이 많아(코드·판·장수·상태·발급·사용) 좁은 화면에서 가로 스크롤되게 둔다 */
+.data-table#codesTable{min-width:680px}
+.data-table#codesTable td:nth-child(3){white-space:nowrap}
 .empty{display:flex;flex-direction:column;align-items:center;gap:12px;padding:44px 20px;text-align:center;color:var(--muted)}
 .empty-icon{display:inline-flex;color:var(--muted)}
 .empty p{font-size:14px;font-weight:600}

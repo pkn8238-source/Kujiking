@@ -7804,9 +7804,9 @@
         : '—';
       return '<tr>' +
         '<td><span class="code-cell">' + h(c.code) + '</span></td>' +
-        '<td>' + h(b ? b.title : '모든 판') + '</td>' +
-        '<td>' + qtyCell + '</td>' +
         '<td>' + status + '</td>' +
+        '<td>' + qtyCell + '</td>' +
+        '<td>' + h(b ? b.title : '모든 판') + '</td>' +
         '<td class="num">' + formatDateTime(c.createdAt) + '</td>' +
         '<td class="num">' + usedCell + '</td>' +
         '<td style="text-align:right;white-space:nowrap">' +
