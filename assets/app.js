@@ -1091,6 +1091,31 @@
     for (var i = 0; i < board.tiers.length; i++) if (board.tiers[i].grade === grade) return board.tiers[i];
     return null;
   }
+
+  /* ---------- P상 안내 문구 정리 (v4.2.6) ----------
+     포인트는 뽑기 결제가 아니라 굿즈 교환에 쓴다. DB에 예전 문구('한 판 무료')가
+     남아 있어도 화면에는 '굿즈샵에서 원하는 굿즈로 교환'으로만 보이게 바꿔 준다.
+     (서버 문구는 첨부 SQL 의 update 문이 같은 내용으로 고친다) */
+  var POINT_DESC_TAIL = ' 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환';
+  function pointDescFor(tier) {
+    var p = Number(tier && tier.points) || 1200;
+    return '실물 대신 굿즈 포인트 ' + fmt(p) + 'P' + POINT_DESC_TAIL;
+  }
+  function scrubPointCopy(board) {
+    if (!board) return board;
+    (board.tiers || []).forEach(function (t) {
+      if (String(t && t.grade || '').toUpperCase() !== 'P') return;
+      if (/한\s*판\s*무료/.test(String(t.desc || ''))) t.desc = pointDescFor(t);
+    });
+    var m = board.manual;
+    if (m && Array.isArray(m.notes)) {
+      m.notes = m.notes.map(function (n) {
+        if (!/한\s*판\s*무료|한\s*판을\s*한\s*번\s*더\s*뽑을/.test(String(n))) return n;
+        return 'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 모은 포인트는 굿즈샵에서 원하는 굿즈로 교환할 수 있어요.';
+      });
+    }
+    return board;
+  }
   function hasPointTier(board) {
     return (board.tiers || []).some(function (t) {
       return !!t.pointOnly || String(t.grade).toUpperCase() === 'P' || Number(t.points_awarded || 0) > 0;
@@ -1563,6 +1588,7 @@
       }
       state.boards = boards;
       state.loadError = '';
+      if (Array.isArray(state.boards)) state.boards.forEach(scrubPointCopy);
 
       /* 굿즈샵 — 굿즈 목록은 공개 읽기(활성·품절 포함), 주문은 로그인 회원 본인 것만 */
       var goodsRes = await sb.from('goods_items')
@@ -2505,6 +2531,7 @@
 
   function buildLocalViews() {
     var uidNow = state.session ? state.session.userId : null;
+    (state.boards || []).forEach(scrubPointCopy);
     if (Backend.mode === 'local') {
       state.me = uidNow ? userById(uidNow) : null;
       state.myCoupons = state.coupons.filter(function (c) { return c.userId === uidNow; })
