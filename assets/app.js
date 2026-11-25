@@ -120,7 +120,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.0.7';
+  var COVER_VER = '4.0.8';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -7488,6 +7488,19 @@
     return attempt();
   }
 
+  /* Supabase 서버(pg_net)가 대신 받아오는 길 — CORS·프록시 상태와 무관해서 가장 믿을 만하다.
+     SQL 의 admin_fetch_url() 이 없으면 조용히 포기하고 공개 프록시로 넘어간다. */
+  function fetchKujiHtmlFromServer(target) {
+    if (Backend.mode !== 'supabase' || !Backend.sb) return Promise.resolve('');
+    return withTimeout(Backend.sb.rpc('admin_fetch_url', { p_url: target }), 14000, 'timeout')
+      .then(function (res) {
+        if (res && !res.error && typeof res.data === 'string' && res.data.length > 200 &&
+            /itemCol|aboutCol|メンテナンス|maintenance/i.test(res.data)) return res.data;
+        return '';
+      })
+      .catch(function () { return ''; });
+  }
+
   function absImageUrl(u, base) {
     var v = String(u || '').trim();
     if (!v) return '';
@@ -7674,7 +7687,9 @@
     if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '불러오는 중…'; }
     setKujiStatus('공식 페이지를 불러오는 중이에요…');
     try {
-      var html = await fetchKujiHtml(target);
+      var html = await fetchKujiHtmlFromServer(target);
+      if (!html) html = await fetchKujiHtml(target);
+      if (/メンテナンス|maintenance/i.test(html) && !/itemCol|aboutCol/i.test(html)) throw new Error('maintenance');
       var parsed = parseKujiHtml(html, target);
       if (!parsed.tiers.length) throw new Error('no-tiers');
       applyKujiToForm(form, parsed);

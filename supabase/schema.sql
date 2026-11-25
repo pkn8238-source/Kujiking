@@ -1010,6 +1010,66 @@ create policy "kujiking_board_images_delete" on storage.objects
   for delete to authenticated
   using (bucket_id = 'board-images' and public.is_admin());
 
+-- ---------------------------------------------------------
+-- [2-1] (선택) 1kuji 페이지를 Supabase 서버가 대신 받아오는 함수
+--       브라우저는 CORS 때문에 1kuji.com 을 직접 읽을 수 없습니다.
+--       pg_net 확장이 켜져 있으면 서버가 읽어서 넘겨주므로 공개 프록시 없이도 자동 채우기가 됩니다.
+--       · 확장이 없거나 생성에 실패해도 아래 DO 블록이 건너뛰므로 나머지 SQL 은 그대로 적용됩니다.
+--       · 함수가 없으면 사이트는 공개 프록시로 대신 시도합니다.
+--       · 1kuji.com 주소만 받도록 막아 두었습니다(다른 주소 대신 읽기 방지).
+-- ---------------------------------------------------------
+do $kk$
+begin
+  begin
+    create extension if not exists pg_net with schema extensions;
+  exception when others then
+    raise notice 'pg_net 확장을 켜지 못했습니다(건너뜀): %', sqlerrm;
+  end;
+
+  begin
+    execute $fn$
+      create or replace function public.admin_fetch_url(p_url text)
+      returns text
+      language plpgsql security definer set search_path = public, extensions
+      as $body$
+      declare
+        v_id   bigint;
+        v_body text;
+        i      integer;
+      begin
+        if not public.is_admin() then
+          raise exception '관리자만 사용할 수 있습니다.';
+        end if;
+        if p_url !~* '^https://([a-z0-9-]+\.)*1kuji\.com/' then
+          raise exception '1kuji.com 주소만 불러올 수 있습니다.';
+        end if;
+
+        select net.http_get(url := p_url, timeout_milliseconds := 10000) into v_id;
+
+        for i in 1..24 loop
+          perform pg_sleep(0.25);
+          select r.content into v_body
+            from net._http_response r
+           where r.id = v_id
+             and r.content is not null
+             and r.error_msg is null
+           limit 1;
+          if v_body is not null then
+            return v_body;
+          end if;
+        end loop;
+        return null;
+      end;
+      $body$;
+    $fn$;
+    execute 'grant execute on function public.admin_fetch_url(text) to authenticated';
+    raise notice 'admin_fetch_url 준비 완료';
+  exception when others then
+    raise notice 'admin_fetch_url 생성 건너뜀: %', sqlerrm;
+  end;
+end
+$kk$;
+
 create or replace function public.admin_clear_all_boards()
 returns jsonb
 language plpgsql security definer set search_path = public, extensions
