@@ -3172,3 +3172,46 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
 @media (prefers-reduced-motion: reduce){
   .last-win,.last-win::after,.last-soon-flag{animation:none}
 }
+
+/* =========================================================
+   v4.0.6 — 관리자 간편 등록 (사진 올리기 · 1kuji 링크 · 전체 비우기)
+   ========================================================= */
+.upload-wrap{display:flex;gap:6px;align-items:center;min-width:0}
+.upload-wrap input[type="text"]{
+  flex:1;min-width:0;min-height:38px;padding:6px 10px;
+  border:2px solid var(--line-strong);border-radius:8px;font-size:12.5px;font-weight:600;
+}
+.upload-btn{flex:0 0 auto;white-space:nowrap;font-size:12px;padding:7px 9px}
+.upload-file{display:none !important}
+
+.kuji-import{
+  margin:0 0 16px;padding:12px 14px;border:2px dashed var(--line-strong);
+  border-radius:14px;background:#fff9e6;
+}
+.kuji-import-head{display:flex;flex-direction:column;gap:2px;margin-bottom:8px}
+.kuji-import-head b{font-size:13px;font-weight:900}
+.kuji-import-head span{font-size:11.5px;color:var(--muted);font-weight:600;line-height:1.45}
+.kuji-import-row{display:flex;gap:6px;align-items:center}
+.kuji-import-row input{
+  flex:1;min-width:0;min-height:40px;padding:7px 10px;
+  border:2px solid var(--line-strong);border-radius:9px;font-size:13px;font-weight:600;
+}
+.kuji-import-row .btn{flex:0 0 auto}
+.kuji-import-status{margin:7px 0 0;font-size:11.5px;font-weight:700;color:var(--ink-soft);line-height:1.5}
+.kuji-import-status:empty{display:none}
+.kuji-import-status.is-bad{color:var(--red-deep)}
+
+.admin-danger-card{border-color:var(--red-deep)}
+.admin-danger-note{margin:0 0 10px;font-size:12px;font-weight:600;color:var(--muted);line-height:1.55}
+
+.board-empty{padding:46px 22px}
+.board-empty h3{font-size:17px;font-weight:900;margin:8px 0 6px}
+.board-empty p{font-size:13px;color:var(--muted);font-weight:600;line-height:1.65}
+.board-empty .small{margin-top:10px;font-size:11.5px;word-break:break-all}
+.board-empty.is-error .empty-icon{color:var(--red-deep)}
+
+@media (max-width:760px){
+  .upload-btn{font-size:11.5px;padding:6px 8px}
+  .kuji-import{padding:11px 12px}
+  .kuji-import-row input{font-size:12.5px}
+}

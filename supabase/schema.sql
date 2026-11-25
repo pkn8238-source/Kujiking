@@ -977,3 +977,72 @@ begin
   insert into public.tickets (board_id, n) select v_id, g.n from generate_series(1, 60) as g(n);
 end;
 $$;
+
+-- ---------------------------------------------------------
+-- 10. 사진 저장소 board-images + 모든 판 전체 비우기 (v4.0.6)
+--     (attachments/2026-11-25/kujiking_setup_all.txt 와 같은 내용)
+-- ---------------------------------------------------------
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('board-images', 'board-images', true, 6291456,
+        array['image/jpeg', 'image/png', 'image/webp'])
+on conflict (id) do update
+  set public             = true,
+      file_size_limit    = excluded.file_size_limit,
+      allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "kujiking_board_images_read"   on storage.objects;
+create policy "kujiking_board_images_read" on storage.objects
+  for select using (bucket_id = 'board-images');
+
+drop policy if exists "kujiking_board_images_insert" on storage.objects;
+create policy "kujiking_board_images_insert" on storage.objects
+  for insert to authenticated
+  with check (bucket_id = 'board-images' and public.is_admin());
+
+drop policy if exists "kujiking_board_images_update" on storage.objects;
+create policy "kujiking_board_images_update" on storage.objects
+  for update to authenticated
+  using (bucket_id = 'board-images' and public.is_admin())
+  with check (bucket_id = 'board-images' and public.is_admin());
+
+drop policy if exists "kujiking_board_images_delete" on storage.objects;
+create policy "kujiking_board_images_delete" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'board-images' and public.is_admin());
+
+create or replace function public.admin_clear_all_boards()
+returns jsonb
+language plpgsql security definer set search_path = public, extensions
+as $$
+declare
+  v_boards     integer := 0;
+  v_draws      integer := 0;
+  v_deliveries integer := 0;
+  v_claims     integer := 0;
+  v_coupons    integer := 0;
+begin
+  if not public.is_admin() then
+    raise exception '관리자만 사용할 수 있습니다.';
+  end if;
+
+  select count(*) into v_boards     from public.boards;
+  select count(*) into v_draws      from public.draws;
+  select count(*) into v_deliveries from public.deliveries;
+  select count(*) into v_claims     from public.purchase_claims;
+  select count(*) into v_coupons    from public.coupons where used_at is null and board_id is not null;
+
+  delete from public.deliveries;
+  delete from public.draws;
+  delete from public.tickets;
+  delete from public.purchase_claims;
+  delete from public.coupons where used_at is null and board_id is not null;
+  delete from public.boards;
+
+  return jsonb_build_object(
+    'boards', v_boards, 'draws', v_draws, 'deliveries', v_deliveries,
+    'claims', v_claims, 'coupons', v_coupons
+  );
+end;
+$$;
+
+grant execute on function public.admin_clear_all_boards() to authenticated;

@@ -120,7 +120,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.0.5';
+  var COVER_VER = '4.0.6';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -128,7 +128,7 @@
   /* 판 상품 폴더의 세트 라인업 배너 — 등록된 값이 없으면 등급 이미지 경로에서 추론 */
   function lineupSrcOf(board) {
     if (!board) return '';
-    var direct = board.lineupImage || '';
+    var direct = board.lineupImage || (manualOf(board).image || '');
     if (direct) return direct;
     var imgs = (board.tiers || []).map(function (t) { return t && t.image; }).filter(Boolean);
     for (var i = 0; i < imgs.length; i++) {
@@ -433,7 +433,7 @@
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
       adminMembers: [], adminClaims: [], adminDeliveries: [],
-      adminLoaded: false, adminError: null,
+      adminLoaded: false, adminError: null, loadError: '',
       updatedAt: nowISO()
     };
   }
@@ -1496,6 +1496,7 @@
           price: b.price, tickets: b.ticket_count, tiers: tiers,
           lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
           lastOneImage: b.last_one_image || '', lastOneDesc: b.last_one_desc || '', manual: b.manual || null,
+          lineupImage: (b.manual && b.manual.image) || '',
           lastOneWinnerId: b.last_one_winner_id || '', lastOneWinnerName: b.last_one_winner_name || '',
           lastOneWonAt: b.last_one_won_at || '',
           seed: b.seed, seedHash: b.seed_hash,
@@ -1528,6 +1529,7 @@
         }
       }
       state.boards = boards;
+      state.loadError = '';
 
       var setRes = await sb.from('app_settings').select('key,value').in('key', ['demo_code', 'youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice']);
       if (!setRes.error && setRes.data) {
@@ -1998,9 +2000,61 @@
         persist();
         return;
       }
+      var cpRes = await this.sb.from('coupons').delete().eq('board_id', id).is('used_at', null);
+      if (cpRes.error) throw cpRes.error;
       var res = await this.sb.from('boards').delete().eq('id', id);
       if (res.error) throw res.error;
       await this.refreshData();
+    },
+
+    /* 모든 판·판매 기록을 0건으로 — 테스트 판 정리용 (관리자 전용)
+       서버 함수 admin_clear_all_boards() 가 있으면 그것을 쓰고,
+       없으면 관리자 RLS 권한으로 직접 지운다. */
+    async clearAllBoards() {
+      if (this.mode === 'local') {
+        var counts = {
+          boards: state.boards.length,
+          draws: state.draws.length,
+          deliveries: state.deliveries.length,
+          claims: state.claims.length
+        };
+        state.boards = [];
+        state.draws = [];
+        state.deliveries = [];
+        state.claims = [];
+        /* 판에 묶인 미사용 뽑기권은 주인을 잃으므로 함께 정리 (모든 판 뽑기권은 유지) */
+        state.coupons = state.coupons.filter(function (c) { return !(c.boardId && !c.usedAt); });
+        persist();
+        buildLocalViews();
+        return counts;
+      }
+      var rpc = await this.sb.rpc('admin_clear_all_boards');
+      if (!rpc.error) {
+        await this.refreshData();
+        return rpc.data || {};
+      }
+      var detail = String(rpc.error.code || '') + ' ' + String(rpc.error.message || '');
+      if (!/PGRST202|Could not find the function|schema cache|does not exist/i.test(detail)) {
+        throw new Error(rpc.error.message || '전체 비우기에 실패했어요.');
+      }
+      /* 서버 함수가 아직 없을 때: 관리자 권한으로 자식 행부터 직접 삭제 */
+      var steps = [
+        { table: 'deliveries', col: 'id' },
+        { table: 'draws', col: 'id' },
+        { table: 'tickets', col: 'id' },
+        { table: 'purchase_claims', col: 'id' }
+      ];
+      for (var i = 0; i < steps.length; i++) {
+        var del = await this.sb.from(steps[i].table).delete().not(steps[i].col, 'is', null);
+        if (del.error) throw new Error(steps[i].table + ' 삭제 실패: ' + (del.error.message || ''));
+      }
+      /* 판에 묶인 미사용 뽑기권은 판이 사라지면 '모든 판' 뽑기권으로 바뀌어 버리므로 먼저 지운다 */
+      var cpDel = await this.sb.from('coupons').delete().is('used_at', null).not('board_id', 'is', null);
+      if (cpDel.error) throw new Error('coupons 삭제 실패: ' + (cpDel.error.message || ''));
+      var bdDel = await this.sb.from('boards').delete().not('id', 'is', null);
+      if (bdDel.error) throw new Error('boards 삭제 실패: ' + (bdDel.error.message || ''));
+      await this.refreshData();
+      return { mode: 'direct' };
     },
 
     /* 판매 기록 초기화 — 티켓·보관함(draws)·배송요청을 0건으로, 판은 다시 판매 중으로 */
@@ -2074,6 +2128,8 @@
 
     subscribe() {
       if (!this.sb) return;
+      if (this._subscribed) return;
+      this._subscribed = true;
       var self = this;
       var timer = null;
       var kick = function () {
@@ -2940,16 +2996,35 @@
 
     renderFilters();
     renderLiveTicker();
+    var filterBar = $('.filter-bar');
+    if (filterBar) filterBar.hidden = !state.boards.length;
 
     var list = $('#boardList');
     if (!list) return;
     var filtered = filteredBoards();
     if (!filtered.length) {
-      list.innerHTML = '<div class="card empty filter-empty">' +
-        '<span class="empty-icon">' + icon('ticket') + '</span>' +
-        '<p>이 조건의 판은 아직 준비 중이에요.<br>다른 카테고리나 금액을 골라보세요.</p>' +
-        '<button class="btn btn-outline" data-action="reset-filter">전체 판 보기</button>' +
-        '</div>';
+      if (!state.boards.length) {
+        /* 판이 하나도 없을 때 — 데모 판을 되살리지 않고 깔끔한 빈 화면 */
+        list.innerHTML = state.loadError
+          ? '<div class="card empty board-empty is-error">' +
+              '<span class="empty-icon">' + icon('alert') + '</span>' +
+              '<h3>판을 불러오지 못했어요</h3>' +
+              '<p>서버에 잠시 연결하지 못했습니다. 아래 버튼을 눌러 다시 시도해 주세요.</p>' +
+              '<div class="btn-row" style="justify-content:center"><button type="button" class="btn btn-primary" data-action="reconnect-backend">다시 연결</button></div>' +
+              '<p class="small muted" data-role="load-error">' + h(state.loadError) + '</p>' +
+            '</div>'
+          : '<div class="card empty board-empty">' +
+              '<span class="empty-icon">' + icon('ticket') + '</span>' +
+              '<h3>진행 중인 뽑기판이 없어요</h3>' +
+              '<p>새 판을 준비하고 있어요. 곧 첫 쿠지가 열립니다.<br>뽑기권(쿠폰)과 교환 코드는 그대로 사용할 수 있어요.</p>' +
+            '</div>';
+      } else {
+        list.innerHTML = '<div class="card empty filter-empty">' +
+          '<span class="empty-icon">' + icon('ticket') + '</span>' +
+          '<p>이 조건의 판은 아직 준비 중이에요.<br>다른 카테고리나 금액을 골라보세요.</p>' +
+          '<button class="btn btn-outline" data-action="reset-filter">전체 판 보기</button>' +
+          '</div>';
+      }
     } else {
       list.innerHTML = filtered.map(boardCardHTML).join('');
     }
@@ -6798,7 +6873,8 @@
     var list = $('#adminBoardList');
     if (!list) return;
     if (!state.boards.length) {
-      list.innerHTML = '<div class="empty"><p>아직 만든 판이 없어요.</p></div>';
+      list.innerHTML = '<div class="empty"><p>아직 만든 판이 없어요.<br><span class="muted small">+ 새 판 만들기로 첫 판을 만들어 보세요.</span></p>' +
+        '<div class="btn-row" style="justify-content:center;margin-top:10px"><button type="button" class="btn btn-primary btn-sm" data-action="new-board">+ 새 판 만들기</button></div></div>';
       return;
     }
     list.innerHTML = state.boards.map(function (b) {
@@ -6814,6 +6890,7 @@
         '</div>' +
         '<div class="admin-board-actions">' +
           '<button class="btn btn-outline btn-sm" data-action="edit-board" data-id="' + h(b.id) + '">수정</button>' +
+          '<button class="btn btn-outline btn-sm" data-action="duplicate-board" data-id="' + h(b.id) + '">📋 복제</button>' +
           '<button class="btn btn-outline btn-sm" data-action="reset-board" data-id="' + h(b.id) + '">🔄 판매 초기화</button>' +
           '<button class="btn btn-danger-ghost btn-sm" data-action="delete-board" data-id="' + h(b.id) + '">삭제</button>' +
         '</div>' +
@@ -7231,6 +7308,447 @@
       '</form>');
   }
 
+  /* =========================================================
+     13-0. 사진 올리기 · 1kuji 자동 채우기 (관리자 판 편집 도우미)
+     ========================================================= */
+  var IMG_BUCKET = 'board-images';
+  var IMG_MAX_SIDE = 1200;
+  var IMG_QUALITY = 0.88;
+  var IMG_MAX_BYTES = 12 * 1024 * 1024;
+
+  function boardFormOf(el) {
+    return (el && el.closest) ? el.closest('form[data-form="board-form"]') : null;
+  }
+
+  function uploadTarget(form, key, el) {
+    if (!form) return null;
+    if (key === 'cover') return form.querySelector('input[name="cover"]');
+    if (key === 'lastone') return form.querySelector('input[name="lastOneImage"]');
+    if (key === 'lineup') return form.querySelector('input[name="manualImage"]');
+    if (key === 'tier') {
+      var row = (el && el.closest) ? el.closest('.tier-row') : null;
+      return row ? row.querySelector('input[name="image"]') : null;
+    }
+    return null;
+  }
+
+  function loadImageFromBlob(blob) {
+    return new Promise(function (resolve, reject) {
+      var url = URL.createObjectURL(blob);
+      var img = new Image();
+      img.onload = function () { URL.revokeObjectURL(url); resolve(img); };
+      img.onerror = function () { URL.revokeObjectURL(url); reject(new Error('이미지를 읽을 수 없어요')); };
+      img.src = url;
+    });
+  }
+
+  /* 긴 변 1200px · JPEG 0.88 로 줄인다 (아이폰 원본은 3~5MB라 그대로 올리면 느리고 무겁다) */
+  function shrinkImage(blob, maxSide, quality) {
+    return loadImageFromBlob(blob).then(function (img) {
+      var w = img.naturalWidth || img.width;
+      var hh = img.naturalHeight || img.height;
+      if (!w || !hh) throw new Error('이미지를 읽을 수 없어요');
+      var scale = Math.min(1, (maxSide || IMG_MAX_SIDE) / Math.max(w, hh));
+      var tw = Math.max(1, Math.round(w * scale));
+      var th = Math.max(1, Math.round(hh * scale));
+      var canvas = document.createElement('canvas');
+      canvas.width = tw;
+      canvas.height = th;
+      var ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, tw, th);
+      ctx.drawImage(img, 0, 0, tw, th);
+      return new Promise(function (resolve, reject) {
+        canvas.toBlob(function (out) {
+          if (out) resolve(out);
+          else reject(new Error('사진을 변환할 수 없어요'));
+        }, 'image/jpeg', quality || IMG_QUALITY);
+      });
+    });
+  }
+
+  function isBucketMissing(err) {
+    var m = String((err && (err.message || err.error_description)) || err || '');
+    return /bucket/i.test(m) && /not\s*found|not\s*exist|no\s*such/i.test(m);
+  }
+
+  function uploadImageBlob(blob) {
+    var sb = Backend.sb;
+    if (Backend.mode !== 'supabase' || !sb || !sb.storage) return Promise.reject(new Error('no-supabase'));
+    var name = 'boards/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
+    return sb.storage.from(IMG_BUCKET)
+      .upload(name, blob, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' })
+      .then(function (res) {
+        if (res.error) throw res.error;
+        var pub = sb.storage.from(IMG_BUCKET).getPublicUrl(name);
+        if (!pub || !pub.data || !pub.data.publicUrl) throw new Error('사진 주소를 만들지 못했어요');
+        return pub.data.publicUrl;
+      });
+  }
+
+  function imageErrorToast(err) {
+    if (err && err.message === 'no-supabase') { toast('사진 올리기는 서버 연결에서만 됩니다. 주소를 직접 입력해 주세요.', 'err'); return; }
+    if (isBucketMissing(err)) { toast('SQL을 먼저 실행해 주세요 (board-images 버킷 필요)', 'err'); return; }
+    var m = String((err && err.message) || err || '');
+    if (/row-level security|policy|permission|not authorized|403/i.test(m)) { toast('사진 저장 권한이 없어요. 관리자 로그인을 확인해 주세요', 'err'); return; }
+    toast('사진을 올리지 못했어요. ' + errMsg(err), 'err');
+  }
+
+  /* 입력칸에 들어 있는 주소로 미리보기를 다시 그린다 */
+  function refreshBoardImages(form) {
+    if (!form) return;
+    updateCoverPreview(form);
+    [['lastOneImage', 'lastOnePreview'], ['manualImage', 'lineupPreview']].forEach(function (pair) {
+      var input = form.querySelector('input[name="' + pair[0] + '"]');
+      var box = form.querySelector('#' + pair[1]);
+      if (!input || !box) return;
+      var img = box.querySelector('img');
+      var v = input.value.trim();
+      box.hidden = !v;
+      if (img) { if (v) img.src = v; else img.removeAttribute('src'); }
+    });
+    $$('input[name="image"]', form).forEach(function (input) {
+      var row = input.closest('.tier-row');
+      var prev = row ? row.querySelector('[data-role="tier-thumb"]') : null;
+      if (!prev) return;
+      var v = input.value.trim();
+      prev.innerHTML = v ? '<img src="' + h(v) + '" alt="">' : '';
+    });
+  }
+
+  function handleUploadFile(el) {
+    var file = el.files && el.files[0];
+    el.value = '';
+    if (!file) return;
+    if (!/^image\//.test(file.type || '')) { toast('사진 파일만 올릴 수 있어요', 'err'); return; }
+    if (file.size > IMG_MAX_BYTES) { toast('사진이 너무 커요 (12MB 이하로 골라주세요)', 'err'); return; }
+    var form = boardFormOf(el);
+    var key = el.getAttribute('data-upload');
+    var target = uploadTarget(form, key, el);
+    if (!target) return;
+    var wrap = el.closest('.upload-wrap') || el.closest('.cover-row') || el.closest('.field');
+    var btn = wrap ? wrap.querySelector('.upload-btn') : null;
+    var label = btn ? btn.textContent : '';
+    if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '올리는 중…'; }
+    shrinkImage(file).then(uploadImageBlob).then(function (url) {
+      target.value = url;
+      refreshBoardImages(form);
+      toast('사진을 올렸어요', 'ok');
+    }).catch(imageErrorToast).then(function () {
+      if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = label || '📷 올리기'; }
+    });
+  }
+
+  /* ---------- 1kuji.com 링크로 판 자동 채우기 ----------
+     브라우저에서 1kuji.com 을 직접 부를 수 없어(CORS) 공개 프록시를 차례로 시도한다. */
+  var KUJI_PROXY = [
+    function (u) { return 'https://api.allorigins.win/raw?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://corsproxy.io/?url=' + encodeURIComponent(u); },
+    function (u) { return 'https://api.codetabs.com/v1/proxy?quest=' + encodeURIComponent(u); }
+  ];
+
+  function fetchWithTimeout(url, ms) {
+    return new Promise(function (resolve, reject) {
+      var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        if (ctl) { try { ctl.abort(); } catch (e) { /* 무시 */ } }
+        reject(new Error('시간 초과'));
+      }, ms || 14000);
+      fetch(url, { credentials: 'omit', cache: 'no-store', signal: ctl ? ctl.signal : undefined })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.text();
+        })
+        .then(function (t) { clearTimeout(timer); resolve(t); }, function (e) { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  function fetchBlobWithTimeout(url, ms) {
+    return new Promise(function (resolve, reject) {
+      var ctl = (typeof AbortController === 'function') ? new AbortController() : null;
+      var timer = setTimeout(function () {
+        if (ctl) { try { ctl.abort(); } catch (e) { /* 무시 */ } }
+        reject(new Error('시간 초과'));
+      }, ms || 15000);
+      fetch(url, { credentials: 'omit', cache: 'force-cache', signal: ctl ? ctl.signal : undefined })
+        .then(function (r) {
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          return r.blob();
+        })
+        .then(function (b) {
+          clearTimeout(timer);
+          if (!/^image\//.test(b.type || '')) reject(new Error('이미지가 아니에요'));
+          else resolve(b);
+        }, function (e) { clearTimeout(timer); reject(e); });
+    });
+  }
+
+  function fetchKujiHtml(target) {
+    var i = 0;
+    function attempt() {
+      if (i >= KUJI_PROXY.length) return Promise.reject(new Error('proxy'));
+      var url = KUJI_PROXY[i++](target);
+      return fetchWithTimeout(url, 15000).then(function (txt) {
+        if (!txt || txt.length < 500 || !/itemCol|aboutCol|1kuji/i.test(txt)) throw new Error('empty');
+        return txt;
+      }).catch(function () { return attempt(); });
+    }
+    return attempt();
+  }
+
+  function fetchKujiImageBlob(url) {
+    return fetchBlobWithTimeout(url, 12000).catch(function () {
+      var i = 0;
+      function attempt() {
+        if (i >= KUJI_PROXY.length) return Promise.reject(new Error('image-proxy'));
+        return fetchBlobWithTimeout(KUJI_PROXY[i++](url), 15000).catch(function () { return attempt(); });
+      }
+      return attempt();
+    });
+  }
+
+  function absImageUrl(u, base) {
+    var v = String(u || '').trim();
+    if (!v) return '';
+    if (v.indexOf('//') === 0) return 'https:' + v;
+    if (v.charAt(0) === '/') return 'https://1kuji.com' + v;
+    if (!/^https?:/i.test(v)) {
+      try { return new URL(v, base || 'https://1kuji.com/').href; } catch (e) { return v; }
+    }
+    return v;
+  }
+
+  function parseKujiHtml(html, baseUrl) {
+    var doc = new DOMParser().parseFromString(html, 'text/html');
+    function tx(el) { return el ? String(el.textContent || '').replace(/\s+/g, ' ').trim() : ''; }
+    function meta(sel) { var m = doc.querySelector(sel); return m ? (m.getAttribute('content') || '') : ''; }
+
+    var title = tx(doc.querySelector('#aboutCol h2')) || tx(doc.querySelector('.aboutCol h2')) ||
+      meta('meta[property="og:title"]') || tx(doc.querySelector('title'));
+    title = title.replace(/｜.*$/, '').replace(/^一番くじ\s*/, '').trim();
+
+    var coverEl = doc.querySelector('.mvCol img') || doc.querySelector('section.mvCol img') || doc.querySelector('.mainVisual img');
+    var cover = absImageUrl(coverEl && (coverEl.getAttribute('src') || coverEl.getAttribute('data-src')), baseUrl);
+
+    var about = doc.querySelector('#aboutCol .detail') || doc.querySelector('.aboutCol .detail');
+    var aboutText = about ? String(about.textContent || '') : '';
+    var priceHit = /1回\s*([0-9,]+)\s*円/.exec(aboutText);
+    var price = priceHit ? priceHit[1].replace(/,/g, '') : '';
+    var dateHit = /(\d{4})年\s*(\d{1,2})月\s*(\d{1,2})日/.exec(aboutText);
+    var release = dateHit
+      ? (dateHit[1] + '.' + ('0' + dateHit[2]).slice(-2) + '.' + ('0' + dateHit[3]).slice(-2))
+      : '';
+
+    var items = $$('.itemColList', doc).map(function (box) {
+      var name = tx(box.querySelector('.itemColDetailHead h4.name')) || tx(box.querySelector('h4.name'));
+      var imgEl = box.querySelector('.itemColGallery ul.slider-item img') || box.querySelector('.itemColGallery img');
+      var img = absImageUrl(imgEl && (imgEl.getAttribute('src') || imgEl.getAttribute('data-src')), baseUrl);
+      var data = $$('ul.data li', box).map(tx).filter(Boolean);
+      var desc = tx(box.querySelector('p.detail'));
+      var gradeHit = /^([A-Z])賞/.exec(name);
+      var isLast = /ラストワン/.test(name);
+      var label = name.replace(/^ラストワン賞\s*/, '').replace(/^[A-Z]賞\s*/, '').trim();
+      return { name: name, grade: gradeHit ? gradeHit[1] : '', isLast: isLast, label: label, image: img, data: data, desc: desc };
+    }).filter(function (it) { return it.name; });
+
+    return {
+      title: title,
+      cover: cover,
+      price: price,
+      release: release,
+      items: items,
+      tiers: items.filter(function (it) { return it.grade && !it.isLast; }),
+      lastOne: items.filter(function (it) { return it.isLast; })[0] || null
+    };
+  }
+
+  var KUJI_CATEGORY_HINTS = [
+    ['원피스', /ワンピース|ONE\s*PIECE/i],
+    ['귀멸의 칼날', /鬼滅|キメツ/i],
+    ['주술회전', /呪術|ジュジュツ/i],
+    ['나의 히어로 아카데미아', /ヒロアカ|僕のヒーローアカデミア/i],
+    ['치이카와', /ちいかわ|チイカワ/i],
+    ['드래곤볼', /ドラゴンボール|DRAGON\s*BALL/i],
+    ['헌터×헌터', /HUNTER|ハンター/i],
+    ['죠죠의 기묘한 모험', /ジョジョ|JOJO/i],
+    ['약사의 혼잣말', /薬屋|薬師/i],
+    ['산리오', /サンリオ|SANRIO/i]
+  ];
+  function guessKujiCategory(text) {
+    var s = String(text || '');
+    for (var i = 0; i < KUJI_CATEGORY_HINTS.length; i++) {
+      if (KUJI_CATEGORY_HINTS[i][1].test(s)) return KUJI_CATEGORY_HINTS[i][0];
+    }
+    return '';
+  }
+
+  function setKujiStatus(text, bad) {
+    var el = $('#kujiStatus');
+    if (!el) return;
+    el.textContent = text || '';
+    el.classList.toggle('is-bad', !!bad);
+  }
+
+  function kujiSizeOf(it) {
+    var data = it.data || [];
+    for (var i = 0; i < data.length; i++) {
+      var mm = /サイズ[:：]\s*(.+)$/.exec(String(data[i]));
+      if (mm) return mm[1].trim();
+    }
+    return '';
+  }
+  function kujiItemSummary(it) {
+    var size = kujiSizeOf(it);
+    return (it.label + (size ? ' (' + size + ')' : '')).trim();
+  }
+
+  /* 파싱 결과를 폼에 채운다 — 실물 등급은 각 1장, 전체 장수는 등급 수×20장, 나머지는 P상 */
+  function applyKujiToForm(form, parsed) {
+    if (!form) return;
+    var cat = guessKujiCategory(parsed.title + ' ' + parsed.items.map(function (i) { return i.label; }).join(' '));
+    var titleEl = form.querySelector('input[name="title"]');
+    if (titleEl && parsed.title) {
+      var nice = cat ? ('[' + cat + '] ' + parsed.title) : parsed.title;
+      titleEl.value = nice.slice(0, 60);
+    }
+
+    var catEl = form.querySelector('select[name="category"]');
+    if (catEl && cat) catEl.value = cat;
+
+    var priceEl = form.querySelector('input[name="price"]');
+    if (priceEl) priceEl.value = 12000;
+
+    if (parsed.cover) {
+      var coverEl = form.querySelector('input[name="cover"]');
+      if (coverEl) coverEl.value = parsed.cover;
+      var preset = form.querySelector('[data-role="cover-preset"]');
+      if (preset) preset.value = '';
+    }
+
+    if (parsed.lastOne) {
+      var lo = parsed.lastOne;
+      var loLabel = form.querySelector('input[name="lastOneLabel"]');
+      if (loLabel) loLabel.value = ('라스트원상 · ' + lo.label).slice(0, 60);
+      var loImg = form.querySelector('input[name="lastOneImage"]');
+      if (loImg) loImg.value = lo.image || '';
+      var loDesc = form.querySelector('input[name="lastOneDesc"]');
+      if (loDesc) loDesc.value = (kujiSizeOf(lo) || lo.desc || '').slice(0, 60);
+    }
+
+    var real = parsed.tiers.slice(0, GRADES.length);
+    var total = Math.min(MAX_TICKETS, Math.max(real.length, real.length * 20));
+    var tiers = real.map(function (it) {
+      var size = kujiSizeOf(it);
+      var descText = size || (it.data || []).map(function (d) { return String(d).replace(/^■/, ''); }).join(' · ');
+      return {
+        grade: it.grade,
+        label: String(it.label || '').slice(0, 40),
+        count: 1,
+        points: 0,
+        image: it.image,
+        desc: String(descText || it.desc || '').slice(0, 60)
+      };
+    });
+    var pCount = total - real.length;
+    if (pCount > 0) tiers.push({ grade: 'P', label: '굿즈 포인트 1,200P', count: pCount, points: 1200, pointOnly: true });
+
+    var ticketsEl = form.querySelector('input[name="tickets"]');
+    if (ticketsEl) ticketsEl.value = total;
+    var rows = form.querySelector('#tierRows');
+    if (rows) rows.innerHTML = tierRowsHTML(tiers);
+
+    var specs = [{ k: '제조사', v: '반다이 스피리츠 (BANDAI SPIRITS)' }];
+    if (parsed.release) specs.push({ k: '일본 발매', v: parsed.release });
+    if (parsed.price) specs.push({ k: '일본 가격', v: '1회 ' + parsed.price + '엔' });
+    specs.push({ k: '등급', v: real.map(function (t) { return t.grade; }).join('·') + '상 ' + real.length + '종 + 라스트원' });
+    var specEl = form.querySelector('textarea[name="manualSpecs"]');
+    if (specEl) specEl.value = specs.map(function (s) { return s.k + ': ' + s.v; }).join('\n');
+
+    var lineupEl = form.querySelector('textarea[name="manualLineup"]');
+    if (lineupEl) {
+      lineupEl.value = parsed.items.slice(0, 20).map(function (it) {
+        return (it.isLast ? '라스트원상 ' : it.grade + '상 ') + kujiItemSummary(it);
+      }).join('\n');
+    }
+
+    refreshBoardImages(form);
+    updateTierSummary();
+  }
+
+  function collectKujiImages(parsed) {
+    var jobs = [];
+    if (parsed.cover) jobs.push({ url: parsed.cover, sel: 'input[name="cover"]' });
+    if (parsed.lastOne && parsed.lastOne.image) jobs.push({ url: parsed.lastOne.image, sel: 'input[name="lastOneImage"]' });
+    parsed.tiers.slice(0, GRADES.length).forEach(function (t, i) {
+      if (t.image) jobs.push({ url: t.image, sel: '#tierRows .tier-row:nth-child(' + (i + 1) + ') input[name="image"]' });
+    });
+    return jobs;
+  }
+
+  /* 1kuji 사진을 우리 저장소로 옮긴다 — 실패한 장은 1kuji 주소를 그대로 쓴다 */
+  function mirrorKujiImages(form, jobs) {
+    if (!jobs || !jobs.length) return;
+    if (Backend.mode !== 'supabase') {
+      setKujiStatus('사진은 1kuji 주소로 연결했어요 (서버 저장은 Supabase 연결에서만 됩니다).');
+      return;
+    }
+    var total = jobs.length;
+    var done = 0;
+    var saved = 0;
+    var step = function () {
+      if (!form || !form.isConnected) return;
+      if (!jobs.length) {
+        setKujiStatus('사진 ' + saved + '/' + total + '장을 서버에 저장했어요. 내용을 확인하고 저장을 눌러주세요.');
+        return;
+      }
+      var job = jobs.shift();
+      setKujiStatus('사진을 서버에 저장하는 중… ' + (done + 1) + '/' + total);
+      fetchKujiImageBlob(job.url).then(shrinkImage).then(uploadImageBlob).then(function (url) {
+        var input = form.querySelector(job.sel);
+        if (input && input.value.trim() === job.url) {
+          input.value = url;
+          refreshBoardImages(form);
+        }
+        saved++;
+      }).catch(function () { /* 한 장 실패는 넘어간다 */ }).then(function () {
+        done++;
+        step();
+      });
+    };
+    step();
+  }
+
+  async function kujiImportFlow() {
+    var form = $('form[data-form="board-form"]');
+    var input = $('#kujiSrc');
+    if (!form || !input) return;
+    var raw = String(input.value || '').trim();
+    if (!raw) { setKujiStatus('1kuji.com 상품 주소를 붙여넣어 주세요.', 1); return; }
+    var target = /^https?:\/\//i.test(raw) ? raw : 'https://' + raw.replace(/^\/+/, '');
+    var host = '';
+    try { host = new URL(target).hostname.toLowerCase(); } catch (e) { host = ''; }
+    if (!/(^|\.)1kuji\.com$/.test(host)) {
+      setKujiStatus('1kuji.com 상품 주소만 불러올 수 있어요. 예: https://1kuji.com/products/chiikawa4', 1);
+      return;
+    }
+    input.value = target;
+    var btn = $('[data-action="kuji-import"]');
+    if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '불러오는 중…'; }
+    setKujiStatus('공식 페이지를 불러오는 중이에요…');
+    try {
+      var html = await fetchKujiHtml(target);
+      var parsed = parseKujiHtml(html, target);
+      if (!parsed.tiers.length) throw new Error('no-tiers');
+      applyKujiToForm(form, parsed);
+      if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '불러오기'; }
+      setKujiStatus('등급 ' + parsed.tiers.length + '종 + 라스트원을 채웠어요. 내용을 확인하고 저장을 눌러주세요.');
+      mirrorKujiImages(form, collectKujiImages(parsed));
+    } catch (e) {
+      if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = '불러오기'; }
+      setKujiStatus('불러오지 못했어요. 1kuji.com이 점검 중이거나 주소가 달라졌을 수 있어요. 잠시 후 다시 시도하거나 직접 입력해 주세요.', 1);
+    }
+  }
+
   /* ---------- 판 편집 ---------- */
   function tierRowsHTML(tiers) {
     return tiers.map(function (t) {
@@ -7249,38 +7767,59 @@
           '<span class="tier-thumb-prev" data-role="tier-thumb">' +
             (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="">' : '') +
           '</span>' +
-          '<input name="image" type="text" value="' + h(t.image || '') + '" placeholder="이미지 경로 (assets/products/…/tier_a.jpg)" data-role="tier-image">' +
+          '<div class="upload-wrap">' +
+            '<input name="image" type="text" value="' + h(t.image || '') + '" placeholder="사진 올리기 또는 주소 입력" data-role="tier-image">' +
+            '<button type="button" class="btn btn-outline btn-sm upload-btn" data-action="pick-image" data-upload="tier">📷 올리기</button>' +
+            '<input type="file" accept="image/*" class="upload-file" data-upload="tier" hidden>' +
+          '</div>' +
           '<input name="desc" type="text" maxlength="60" value="' + h(t.desc || '') + '" placeholder="상품 설명 (약 20cm · MASTERLISE 피규어)">' +
         '</div>' +
       '</div>';
     }).join('');
   }
 
-  function updateCoverPreview(form) {
-    var box = form.querySelector('#coverPreview');
-    if (!box) return;
-    var input = form.querySelector('input[name="cover"]');
-    var img = box.querySelector('img');
-    var v = input ? input.value.trim() : '';
-    if (!v) { box.hidden = true; if (img) img.removeAttribute('src'); return; }
-    box.hidden = false;
-    if (img) img.src = v;
-  }
-
-  function openBoardEditor(boardId) {
-    var board = boardId ? getBoard(boardId) : null;
-    ui.editingBoardId = board ? board.id : null;
-    var tiers = board ? board.tiers : [
-      { grade: 'A', label: '', count: 1, points: 30000 },
-      { grade: 'B', label: '', count: 2, points: 18000 },
-      { grade: 'C', label: '', count: 2, points: 12000 },
-      { grade: 'D', label: '', count: 5, points: 8000 },
-      { grade: 'E', label: '', count: 10, points: 4000 }
+  function openBoardEditor(boardId, opts) {
+    opts = opts || {};
+    var editing = boardId ? getBoard(boardId) : null;
+    var board = editing;
+    if (!board && opts.duplicate) {
+      try { board = JSON.parse(JSON.stringify(opts.duplicate)); } catch (e) { board = Object.assign({}, opts.duplicate); }
+      board.id = null;
+      board.seed = '';
+      board.seedHash = '';
+      board.status = 'open';
+      board.opens = [];
+      board.lastOneWinnerId = '';
+      board.lastOneWinnerName = '';
+      board.lastOneWonAt = '';
+      board.title = (String(board.title || '') + ' 복사').slice(0, 60);
+    }
+    var dupMode = !!board && !editing;
+    ui.editingBoardId = editing ? editing.id : null;
+    var tiers = (board && board.tiers && board.tiers.length) ? board.tiers : [
+      { grade: 'A', label: '', count: 1, points: 0 },
+      { grade: 'B', label: '', count: 1, points: 0 },
+      { grade: 'C', label: '', count: 1, points: 0 },
+      { grade: 'D', label: '', count: 1, points: 0 },
+      { grade: 'E', label: '', count: 1, points: 0 },
+      { grade: 'P', label: '굿즈 포인트 1,200P', count: 95, points: 1200, pointOnly: true }
     ];
     var m = board ? manualOf(board) : {};
     var html = '' +
-      '<h2 class="modal-title" id="modalTitle">' + (board ? '판 수정' : '새 판 만들기') + '</h2>' +
-      '<p class="modal-sub">카테고리와 금액을 정하고, 등급 수량의 합계를 전체 장수와 맞춰 주세요.</p>' +
+      '<h2 class="modal-title" id="modalTitle">' + (editing ? '판 수정' : (dupMode ? '판 복제' : '새 판 만들기')) + '</h2>' +
+      '<p class="modal-sub">' + (editing
+        ? '내용을 고치면 손님 화면에 바로 반영됩니다. 진행 중인 판의 장수·등급은 바꿀 수 없어요.'
+        : '카테고리와 금액을 정하고, 등급 수량의 합계를 전체 장수와 맞춰 주세요.') + '</p>' +
+      (editing ? '' :
+        '<div class="kuji-import">' +
+          '<div class="kuji-import-head"><b>🔗 일본 공식 링크 자동 채우기</b>' +
+            '<span>1kuji.com 상품 주소를 붙여넣으면 제목·등급·사진·라스트원을 자동으로 채웁니다.</span></div>' +
+          '<div class="kuji-import-row">' +
+            '<input id="kujiSrc" type="url" inputmode="url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://1kuji.com/products/…">' +
+            '<button type="button" class="btn btn-primary btn-sm" data-action="kuji-import">불러오기</button>' +
+          '</div>' +
+          '<p class="kuji-import-status" id="kujiStatus"></p>' +
+        '</div>') +
       '<form data-form="board-form" novalidate>' +
         '<div class="form-grid">' +
           '<label class="field span-2"><span>판 제목</span><input name="title" type="text" maxlength="60" required value="' + h(board ? board.title : '') + '" placeholder="예: [원피스] 루피 기어5 피규어 쿠지"></label>' +
@@ -7288,18 +7827,30 @@
             CATEGORIES.map(function (c) { return '<option' + ((board ? board.category : '원피스') === c ? ' selected' : '') + '>' + h(c) + '</option>'; }).join('') +
           '</select></label>' +
           '<label class="field"><span>1장 가격 (원)</span><input name="price" type="number" min="100" step="100" value="' + Number(board ? board.price : 12000) + '"></label>' +
-          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 20) + '"></label>' +
+          '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 100) + '"></label>' +
           '<label class="field"><span>판매 상태</span><select name="status">' +
             '<option value="open"' + (!board || board.status === 'open' ? ' selected' : '') + '>판매 중</option>' +
             '<option value="closed"' + (board && board.status === 'closed' ? ' selected' : '') + '>종료</option>' +
           '</select></label>' +
           '<label class="field span-2"><span>라스트원상</span><input name="lastOneLabel" type="text" maxlength="60" value="' + h(board ? board.lastOneLabel : '라스트원상 · 메탈릭 컬러 피규어') + '"></label>' +
-          '<label class="field"><span>라스트원 이미지 경로</span><input name="lastOneImage" type="text" value="' + h(board ? (board.lastOneImage || '') : '') + '" placeholder="assets/products/…/last_one.jpg"></label>' +
-          '<label class="field"><span>라스트원 설명</span><input name="lastOneDesc" type="text" maxlength="60" value="' + h(board ? (board.lastOneDesc || '') : '') + '" placeholder="약 21cm · 근두운에 오른 부자 피규어"></label>' +
+          '<div class="field span-2">' +
+            '<span>라스트원 이미지</span>' +
+            '<div class="upload-wrap">' +
+              '<input name="lastOneImage" type="text" value="' + h(board ? (board.lastOneImage || '') : '') + '" placeholder="📷 올리기 또는 주소 입력">' +
+              '<button type="button" class="btn btn-outline btn-sm upload-btn" data-action="pick-image" data-upload="lastone">📷 올리기</button>' +
+              '<input type="file" accept="image/*" class="upload-file" data-upload="lastone" hidden>' +
+            '</div>' +
+            '<div class="cover-preview" id="lastOnePreview" hidden><img alt="라스트원 미리보기"></div>' +
+          '</div>' +
+          '<label class="field span-2"><span>라스트원 설명</span><input name="lastOneDesc" type="text" maxlength="60" value="' + h(board ? (board.lastOneDesc || '') : '') + '" placeholder="약 21cm · 근두운에 오른 부자 피규어"></label>' +
           '<div class="field span-2">' +
             '<span>커버 이미지</span>' +
             '<div class="cover-row">' +
-              '<input name="cover" type="text" value="' + h(board ? (board.cover || '') : '') + '" placeholder="assets/board_onepiece.jpg 또는 https://…">' +
+              '<input name="cover" type="text" value="' + h(board ? (board.cover || '') : '') + '" placeholder="📷 올리기 또는 주소 입력">' +
+              '<button type="button" class="btn btn-outline btn-sm upload-btn" data-action="pick-image" data-upload="cover">📷 올리기</button>' +
+              '<input type="file" accept="image/*" class="upload-file" data-upload="cover" hidden>' +
+            '</div>' +
+            '<div class="cover-row" style="margin-top:8px">' +
               '<select class="input input-sm" data-role="cover-preset" aria-label="커버 이미지 선택">' +
                 '<option value="">기본(카테고리 컬러)</option>' +
                 COVER_PRESETS.map(function (c) {
@@ -7308,7 +7859,7 @@
                 '<option value="__url">직접 URL 입력…</option>' +
               '</select>' +
             '</div>' +
-            '<span class="field-hint">비워두면 카테고리 색상 커버가 표시됩니다. 이미지는 3:4 세로형이 가장 잘 맞아요.</span>' +
+            '<span class="field-hint">비워두면 카테고리 색상 커버가 표시됩니다. 3:4 세로형이 가장 잘 맞아요.</span>' +
             '<div class="cover-preview" id="coverPreview" hidden><img alt="커버 미리보기"></div>' +
           '</div>' +
         '</div>' +
@@ -7317,17 +7868,29 @@
           '<div id="tierRows">' + tierRowsHTML(tiers) + '</div>' +
           '<div class="tier-summary"><span>등급 수량 합계 <b id="tierSumLabel">0</b> / <b id="ticketTotalLabel">0</b>장</span><span id="tierSumState"></span></div>' +
         '</div>' +
-        '<div class="btn-row tight"><button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button>' +
-          '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add-point">+ P상(포인트) 추가</button></div>' +
+        '<div class="btn-row tight">' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add">+ 등급 추가</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="tier-add-point">+ P상(포인트) 추가</button>' +
+          '<button type="button" class="btn btn-outline btn-sm" data-action="tier-fill-point">P상 자동 계산</button>' +
+        '</div>' +
         '<div class="manual-editor">' +
           '<div class="manual-editor-head"><span>상품 설명서</span><small>판 상세 하단에 그대로 표시됩니다.</small></div>' +
+          '<div class="field">' +
+            '<span>세트 라인업 이미지 (선택)</span>' +
+            '<div class="upload-wrap">' +
+              '<input name="manualImage" type="text" value="' + h(m.image || '') + '" placeholder="비우면 등급 이미지에서 자동">' +
+              '<button type="button" class="btn btn-outline btn-sm upload-btn" data-action="pick-image" data-upload="lineup">📷 올리기</button>' +
+              '<input type="file" accept="image/*" class="upload-file" data-upload="lineup" hidden>' +
+            '</div>' +
+            '<div class="cover-preview" id="lineupPreview" hidden><img alt="라인업 미리보기"></div>' +
+          '</div>' +
           '<label class="field"><span>요약</span><textarea name="manualSummary" rows="2" placeholder="상품 소개 2~3문장">' + h(m.summary || '') + '</textarea></label>' +
           '<label class="field"><span>사양 (한 줄에 “항목: 값”)</span><textarea name="manualSpecs" rows="4" placeholder="제조사: 반다이 스피리츠&#10;일본 발매: 2026.10.17">' + h((m.specs || []).map(function (x) { return x.k + ': ' + x.v; }).join('\n')) + '</textarea></label>' +
           '<label class="field"><span>실제 라인업 (한 줄에 1개)</span><textarea name="manualLineup" rows="4" placeholder="A상 손오공 MASTERLISE (약 20cm)">' + h((m.lineup || []).join('\n')) + '</textarea></label>' +
           '<label class="field"><span>유의사항 (한 줄에 1개)</span><textarea name="manualNotes" rows="3" placeholder="랜덤 지급 안내 등">' + h((m.notes || []).join('\n')) + '</textarea></label>' +
         '</div>' +
         '<label class="field" style="margin-top:14px"><span>시드 (비우면 자동 생성)</span>' +
-          '<div class="seed-row"><input name="seed" type="text" value="' + h(board ? board.seed : '') + '" placeholder="자동 생성">' +
+          '<div class="seed-row"><input name="seed" type="text" value="' + h(editing ? editing.seed : '') + '" placeholder="자동 생성">' +
           '<button type="button" class="btn btn-outline btn-sm" data-action="seed-regen">새로 생성</button></div>' +
         '</label>' +
         '<p class="field-error" data-role="board-error" role="alert"></p>' +
@@ -7338,7 +7901,7 @@
       '</form>';
     openModal(html, { wide: true });
     updateTierSummary();
-    updateCoverPreview($('form[data-form="board-form"]'));
+    refreshBoardImages($('form[data-form="board-form"]'));
   }
 
   function readTierRows() {
@@ -7370,9 +7933,10 @@
       summary: fieldValue(form, 'manualSummary').trim(),
       specs: specs,
       lineup: lines('manualLineup'),
-      notes: lines('manualNotes')
+      notes: lines('manualNotes'),
+      image: fieldValue(form, 'manualImage').trim()
     };
-    if (!manual.summary && !specs.length && !manual.lineup.length && !manual.notes.length) return null;
+    if (!manual.summary && !specs.length && !manual.lineup.length && !manual.notes.length && !manual.image) return null;
     return manual;
   }
 
@@ -7796,8 +8360,20 @@
 
         case 'new-board': openBoardEditor(null); break;
         case 'edit-board': openBoardEditor(id); break;
+        case 'duplicate-board': openBoardEditor(null, { duplicate: getBoard(id) }); break;
         case 'reset-board': resetBoardFlow(id); break;
         case 'delete-board': deleteBoardFlow(id); break;
+        case 'clear-all-boards': clearAllBoardsFlow(); break;
+        case 'pick-image': {
+          var form0 = boardFormOf(el);
+          var scope = el.closest('.field') || el.closest('.tier-row') || form0;
+          var fileInput = scope ? scope.querySelector('input[type="file"][data-upload="' + el.getAttribute('data-upload') + '"]') : null;
+          if (fileInput) fileInput.click();
+          break;
+        }
+        case 'kuji-import': kujiImportFlow(); break;
+        case 'tier-fill-point': fillPointTier(); break;
+        case 'reconnect-backend': reconnectBackend(); break;
 
         case 'copy-hash': { var b = getBoard(ui.fairnessBoardId) || state.boards[0]; if (b) copyText(b.seedHash, '봉인 해시를 복사했어요'); break; }
         case 'copy-seed': { var b2 = getBoard(ui.fairnessBoardId) || state.boards[0]; if (b2) copyText(b2.seed, '시드를 복사했어요'); break; }
@@ -8204,6 +8780,10 @@
     });
 
     document.addEventListener('change', function (e) {
+      if (e.target && e.target.matches && e.target.matches('input[type="file"][data-upload]')) {
+        handleUploadFile(e.target);
+        return;
+      }
       if (e.target.id === 'fairBoardSelect') {
         ui.fairnessBoardId = e.target.value;
         var vr = $('#verifyResult'); if (vr) vr.hidden = true;
@@ -8233,6 +8813,11 @@
     });
 
     document.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' && e.target && e.target.id === 'kujiSrc') {
+        e.preventDefault();
+        kujiImportFlow();
+        return;
+      }
       if (e.key === 'Escape' && modalRoot && !modalRoot.hidden) {
         if (document.getElementById('postcodeLayer')) { closePostcodeLayer(); return; }
         if (confirmResolve) { var r = confirmResolve; confirmResolve = null; closeModal(); r(false); }
@@ -8355,8 +8940,92 @@
     );
   }
 
-  async function deleteBoardFlow(id) {
-    var b = getBoard(id);
+  /* P상 수량 자동 계산 — 전체 장수 − 실물 등급 합계 (1,200P) */
+  function fillPointTier() {
+    if (!$('#tierRows')) return;
+    var total = Number(($('form[data-form="board-form"] input[name="tickets"]') || {}).value || 0);
+    var rows = readTierRows();
+    var realSum = rows.filter(function (r) { return String(r.grade).toUpperCase() !== 'P' && !r.pointOnly; })
+      .reduce(function (s, r) { return s + (isNaN(r.count) ? 0 : r.count); }, 0);
+    if (!(total > 0)) { toast('전체 장수를 먼저 입력해 주세요.', 'err'); return; }
+    var need = total - realSum;
+    if (need < 0) { toast('실물 등급 합계(' + fmt(realSum) + '장)가 전체 장수보다 많아요.', 'err'); return; }
+    var pRow = $$('#tierRows .tier-row').filter(function (row) {
+      var sel = row.querySelector('select[name="grade"]');
+      return sel && String(sel.value).toUpperCase() === 'P';
+    })[0];
+    if (pRow) {
+      var cnt = pRow.querySelector('input[name="count"]');
+      if (cnt) cnt.value = need;
+      var pts = pRow.querySelector('input[name="points"]');
+      if (pts && !Number(pts.value)) pts.value = 1200;
+      var chk = pRow.querySelector('input[name="pointOnly"]');
+      if (chk) chk.checked = true;
+    } else if (need > 0) {
+      $('#tierRows').insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: '굿즈 포인트 1,200P', count: need, points: 1200, pointOnly: true }]));
+    }
+    updateTierSummary();
+    toast(need > 0 ? ('P상 ' + fmt(need) + '장(1,200P)으로 맞췄어요') : 'P상이 필요 없어요 (남는 장수 0장)', 'ok');
+  }
+
+  /* 🗑️ 모든 판 전체 비우기 — 두 번 확인 후 실행 */
+  async function clearAllBoardsFlow() {
+    var ok1 = await confirmDialog({
+      title: '🗑️ 모든 판 전체 비우기',
+      message: '<b>판 ' + fmt(state.boards.length) + '개</b>와 판매 기록·보관함·배송 요청·구매확인 요청을 모두 지웁니다.' +
+        '<br><span class="muted small">회원 계정과 굿즈 포인트는 그대로 남습니다. 이 작업은 되돌릴 수 없어요.</span>',
+      confirmLabel: '계속',
+      danger: true
+    });
+    if (!ok1) return;
+    var ok2 = await confirmDialog({
+      title: '정말 전부 지울까요?',
+      message: '손님 화면에서도 판이 모두 사라집니다.<br><br><b>정말로 전체 비우기를 실행할까요?</b>' +
+        '<br><span class="muted small">마지막 확인입니다. 되돌릴 수 없어요.</span>',
+      confirmLabel: '전체 비우기 실행',
+      danger: true
+    });
+    if (!ok2) return;
+    try {
+      toast('전체 비우는 중…');
+      await Backend.clearAllBoards();
+      mapCache.clear();
+      buildLocalViews();
+      renderAll();
+      renderAdmin();
+      toast('모든 판과 기록을 비웠어요. 이제 새 판을 만들면 됩니다.', 'ok');
+    } catch (e) { toast(errMsg(e), 'err'); }
+  }
+
+  /* 서버에 다시 연결 (빈 화면에서 재시도) */
+  async function reconnectBackend() {
+    var btn = $('[data-action="reconnect-backend"]');
+    if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '다시 연결 중…'; }
+    try {
+      await Backend.init();
+      if (Backend.mode === 'supabase') {
+        state = emptyState();
+        await Backend.refreshData();
+        Backend.fallbackReason = '';
+        Backend.fallbackDetail = '';
+        Backend.justFellBack = false;
+        state.loadError = '';
+        renderAll();
+        route();
+        toast('서버에 연결했어요', 'ok');
+      } else {
+        state.loadError = '아직 서버에 연결하지 못했어요. 잠시 후 다시 눌러주세요.';
+        renderAll();
+        toast('아직 연결하지 못했어요', 'err');
+      }
+    } catch (e) {
+      state.loadError = errMsg(e);
+      renderAll();
+      toast(errMsg(e), 'err');
+    }
+  }
+
+  async function deleteBoardFlow(id) {    var b = getBoard(id);
     if (!b) return;
     var linked = state.codes.filter(function (c) { return c.boardId === b.id; }).length;
     var ok = await confirmDialog({
@@ -8551,14 +9220,22 @@
       try {
         await Backend.refreshData();
       } catch (e) {
-        console.warn('[쿠지킹] 서버 데이터 로드 실패 → 데모 모드로 전환', e);
-        Backend.mode = 'local';
-        Backend.justFellBack = true;
-        Backend.fallbackReason = Backend.fallbackReason || Backend.classify(e);
-        Backend.fallbackDetail = Backend.fallbackDetail || ((e && e.message) || String(e || ''));
-        window.KUJIKING.mode = 'local';
-        state = await loadLocalState();
-        buildLocalViews();
+        console.warn('[쿠지킹] 서버 데이터 로드 실패', e);
+        if (Backend.config && Backend.config.SUPABASE_URL && Backend.config.SUPABASE_ANON_KEY) {
+          /* 서버는 설정돼 있는데 데이터만 못 읽은 경우 —
+             가짜 데모 판 8개를 되살리지 않고 빈 화면 + 다시 연결 버튼을 보여준다. */
+          state.loadError = errMsg(e);
+          Backend.fallbackReason = Backend.fallbackReason || Backend.classify(e);
+          Backend.fallbackDetail = Backend.fallbackDetail || ((e && e.message) || String(e || ''));
+        } else {
+          Backend.mode = 'local';
+          Backend.justFellBack = true;
+          Backend.fallbackReason = Backend.fallbackReason || Backend.classify(e);
+          Backend.fallbackDetail = Backend.fallbackDetail || ((e && e.message) || String(e || ''));
+          window.KUJIKING.mode = 'local';
+          state = await loadLocalState();
+          buildLocalViews();
+        }
       }
     }
 

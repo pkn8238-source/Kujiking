@@ -386,3 +386,69 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 - `@supports not (aspect-ratio)` 폴백으로 예전 브라우저에서는 기존 최소 높이를 유지합니다.
 
 파일: `assets/styles.css`(v4.0.3 블록)
+
+## 15. 관리자 간편 등록 — 1kuji 링크 · 사진 올리기 (v4.0.6 · 2026-11-25)
+
+관리자가 **아이폰에서 1분 안에 새 판을 만드는 것**이 목표입니다. `[관리자] → 판 관리 → 새 판 만들기`.
+
+### 🔗 1kuji.com 공식 링크 자동 채우기
+
+- 모달 맨 위에 주소칸 + `불러오기` 버튼. `https://1kuji.com/products/chiikawa4` 같은 상품 주소를 붙여넣으면
+  제목·커버·라스트원상·등급(A賞~) 이름/사진/크기·일본 발매일/가격이 **자동으로 채워집니다**.
+- 브라우저에서 1kuji.com 을 직접 부를 수 없어(CORS) 공개 프록시를 순서대로 시도합니다:
+  `api.allorigins.win/raw` → `corsproxy.io/?url=` → `api.codetabs.com/v1/proxy?quest=`.
+  한 곳이 실패하면 다음으로 넘어가고, 모두 실패하면 안내 문구를 띄웁니다.
+- 파싱: `#aboutCol h2`(제목) · `.mvCol img`(커버) · `#aboutCol .detail`(발매일·`1回◯◯円`) ·
+  `.itemColList`(등급별 `h4.name` · `.itemColGallery` 첫 이미지 · `ul.data` 크기 · `p.detail`).
+- 채운 뒤 실제 등급 사진은 **우리 저장소(`board-images`)로 복사**를 시도하고(성공한 장만 교체),
+  실패하면 1kuji 주소를 그대로 씁니다. 진행 상황은 주소칸 아래 한 줄로 표시됩니다.
+- 규칙은 쿠지킹 기준을 그대로 적용: **실물 등급 각 1장 · 전체 장수 = 등급 수 × 20 · 나머지는 P상 1,200P**.
+
+### 📷 앨범에서 사진 올리기
+
+- 커버 · 라스트원 · 라인업 · **등급마다** `📷 올리기` 버튼(`<input type="file" accept="image/*">`)이 있습니다.
+- 고른 사진은 캔버스에서 **긴 변 1200px · JPEG 0.88** 로 줄여(`shrinkImage`) 업로드합니다
+  (아이폰 원본 3~5MB → 보통 100~250KB).
+- 저장 위치: Supabase Storage 버킷 `board-images` (`boards/…jpg`, public URL). 입력칸에 주소가 채워지고
+  바로 썸네일 미리보기가 뜹니다.
+- 버킷이 아직 없으면 `SQL을 먼저 실행해 주세요 (board-images 버킷 필요)` 토스트를 띄웁니다.
+- 라인업 이미지는 `manual.image` 로 저장되어 판 상세의 세트 라인업 배너(`lineupSrcOf`)에 쓰입니다.
+
+### 📋 복제 · P상 자동 계산
+
+- 판 목록의 **📋 복제** → 등급 구성·가격·설명서를 그대로 채운 `판 복제` 모달(제목에 ` 복사`, 새 시드).
+  사진과 제목만 바꿔 저장하면 됩니다.
+- 등급 편집의 **P상 자동 계산** → `전체 장수 − 실물 등급 합계` 를 P상(1,200P) 수량으로 채웁니다.
+  P상 행이 없으면 새로 만들고, 남는 장수가 없으면 0장으로 맞춥니다.
+
+### 🗑️ 모든 판 전체 비우기
+
+- `[관리자] → 판 관리` 맨 아래 빨간 카드. **두 번 확인** 후 실행합니다.
+- 지우는 것: 배송요청 → 보관함(draws) → 티켓 → 구매확인 요청 → 판에 묶인 미사용 뽑기권 → 판.
+  남기는 것: 회원 계정·굿즈 포인트·모든 판 공용 뽑기권. (판 전용 뽑기권을 남기면 판이 사라지며
+  '모든 판' 권으로 바뀌어 새 판에서 공짜로 쓸 수 있기 때문에 함께 지웁니다.)
+- 서버 함수 `admin_clear_all_boards()` 가 있으면 그것을 쓰고, 없으면 관리자 RLS 권한으로 직접 삭제합니다.
+
+### 빈 화면 (데모 판 부활 방지)
+
+- Supabase `boards` 가 0건이면 홈에 **`진행 중인 뽑기판이 없어요`** 빈 화면을 보여줍니다(필터바 숨김).
+- 서버는 설정돼 있는데 데이터를 못 읽은 경우에는 예전처럼 **데모 판 8개로 떨어지지 않고**
+  `판을 불러오지 못했어요` + `다시 연결` 버튼을 보여줍니다. (데모 시드는 Supabase 설정이 아예 없을 때만)
+
+파일: `assets/app.js`(`kujiImportFlow` · `parseKujiHtml` · `applyKujiToForm` · `mirrorKujiImages` ·
+`handleUploadFile` · `shrinkImage` · `fillPointTier` · `clearAllBoardsFlow` · `Backend.clearAllBoards`),
+`assets/styles.css`(v4.0.6 블록), `index.html`(전체 비우기 카드)
+
+## 16. 통합 SQL 한 번 붙여넣기 (v4.0.6)
+
+`attachments/2026-11-25/kujiking_setup_all.txt` 하나로 아래가 전부 설치됩니다.
+
+| 블록 | 내용 |
+|---|---|
+| [1] | 라스트원 컬럼 · `draw_ticket` · `admin_reset_board` (기존 `kujiking_last_one.sql`) |
+| [2] | Storage 버킷 `board-images` + 정책(공개 읽기 / 관리자만 쓰기) |
+| [3] | `admin_clear_all_boards()` (security definer + `public.is_admin()` 검사) |
+| [4] | 지금 바로 테스트 판·기록 비우기 (배송→보관함→티켓→구매확인→판) |
+| [5] | 결과 확인 집계 쿼리 |
+
+재실행해도 안전(idempotent)합니다.
