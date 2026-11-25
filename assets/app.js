@@ -15,7 +15,7 @@
   var SESSION_KEY = 'kujiking.session.v2';
   var ADMIN_KEY = 'kujiking.admin.session.v2';
   var APP_TAG = 'kujiking';
-  var STATE_VERSION = 5;   // v5: 실물 등급 각 1개 + P상(굿즈 포인트 1,200P) 구성으로 재시드
+  var STATE_VERSION = 6;   // v6: 포인트로 뽑기 제거 + 굿즈샵(goods_items·goods_orders) 추가로 재시드
   var MAX_TICKETS = 500;
 
   /* ---------- 스토어 · 카카오톡 채널 링크 (2026-11-24 개설) ---------- */
@@ -89,6 +89,7 @@
     lastGen: null,
     genQty: 1,               /* 관리자: 코드 1개당 뽑기권 장수 */
     editingBoardId: null,
+    goodsEditingId: null,     /* 관리자 굿즈 관리 — 수정 중인 굿즈 */
     authTab: 'login',
     memberQuery: '',
     grantUserId: null,
@@ -122,7 +123,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.5';
+  var COVER_VER = '4.2.6';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -436,9 +437,10 @@
       v: STATE_VERSION,
       settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {} },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
+      goodsItems: [], goodsOrders: [],
       session: null,
-      me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [],
-      adminMembers: [], adminClaims: [], adminDeliveries: [],
+      me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [], myGoodsOrders: [],
+      adminMembers: [], adminClaims: [], adminDeliveries: [], adminGoodsOrders: [],
       adminLoaded: false, adminError: null, loadError: '',
       updatedAt: nowISO()
     };
@@ -487,7 +489,7 @@
           image: 'assets/products/dragonball-saiyan/tier_j.jpg',
           desc: '약 24cm · 전 9종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
       lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
@@ -563,7 +565,7 @@
           image: 'assets/products/hunter-chimera-ant/tier_i.jpg',
           desc: '약 5~47cm · 전 10종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
       lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
@@ -647,7 +649,7 @@
           image: 'assets/products/jojo-rivals/tier_l.jpg',
           desc: '약 6~14cm · 전 13종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 228, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
       lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
@@ -722,7 +724,7 @@
           image: 'assets/products/apothecary-secret/tier_h.jpg',
           desc: '약 13cm · 전 5종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 마오마오 피규어',
       lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
@@ -793,7 +795,7 @@
           image: 'assets/products/chiikawa/tier_h.jpg',
           desc: '파우치 약 22cm · 타월 약 25~60cm / 전 6종 중 1종' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 함께 포근포근♪ 목욕 후 쿠션',
       lastOneImage: 'assets/products/chiikawa/last_one.jpg',
@@ -864,7 +866,7 @@
           image: 'assets/products/kimetsu/tier_h.jpg',
           desc: '약 5.5cm · 전 22종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 도마 MASTERLISE 라스트원 ver.',
       lastOneImage: 'assets/products/kimetsu/last_one.jpg',
@@ -941,7 +943,7 @@
           image: 'assets/products/jujutsu/tier_j.jpg',
           desc: '약 6cm · 전 17종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 고조 사토루 MASTERLISE',
       lastOneImage: 'assets/products/jujutsu/last_one.jpg',
@@ -1017,7 +1019,7 @@
           image: 'assets/products/myhero/tier_i.jpg',
           desc: '메모·엽서 3장·학생증풍 카드 5장 / 전 8종' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 10번 모이면 한 판 무료' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
       ],
       lastOneLabel: '라스트원상 · 미도리야 이즈쿠 -10th ANNIVERSARY- MASTERLISE',
       lastOneImage: 'assets/products/myhero/last_one.jpg',
@@ -1287,6 +1289,19 @@
       at: new Date(now - 3600000 * 9).toISOString(), decidedAt: null
     });
 
+    /* 굿즈샵 예시 (v4.2.6) — 관리자 [굿즈 관리]에서 실제 상품으로 바꿔 쓴다 */
+    s.goodsItems = [
+      { id: 'gi-seed-1', name: '치이카와 아크릴 스탠드', points: 1200, stock: 8,
+        image: 'assets/products/chiikawa/tier_c.jpg', description: '높이 10cm · 아크릴 스탠드',
+        active: true, sort: 0, createdAt: new Date(now - 86400000 * 2).toISOString(), updatedAt: new Date(now - 86400000 * 2).toISOString() },
+      { id: 'gi-seed-2', name: '쿠지킹 로고 머그컵', points: 3000, stock: 4,
+        image: 'assets/products/point/p.jpg', description: '350ml · 도자기 머그컵',
+        active: true, sort: 1, createdAt: new Date(now - 86400000 * 2).toISOString(), updatedAt: new Date(now - 86400000 * 2).toISOString() },
+      { id: 'gi-seed-3', name: '미니 피규어 랜덤 키링', points: 5000, stock: 3,
+        image: 'assets/products/xmas-chiikawa/tier_a.jpg', description: '약 6cm · 랜덤 1종',
+        active: true, sort: 2, createdAt: new Date(now - 86400000 * 2).toISOString(), updatedAt: new Date(now - 86400000 * 2).toISOString() }
+    ];
+
     return s;
   }
 
@@ -1321,6 +1336,8 @@
     s.claims = s.claims || [];
     s.deliveries = s.deliveries || [];
     s.codes = s.codes || [];
+    s.goodsItems = s.goodsItems || [];
+    s.goodsOrders = s.goodsOrders || [];
     s.boards.forEach(function (b) {
       if (!Array.isArray(b.opens)) b.opens = [];
       if (!b.category) b.category = '자체 스페셜';
@@ -1386,6 +1403,8 @@
       claims: src.claims,
       deliveries: src.deliveries,
       codes: src.codes,
+      goodsItems: src.goodsItems || [],
+      goodsOrders: src.goodsOrders || [],
       session: src.session,
       updatedAt: nowISO()
     };
@@ -1545,6 +1564,20 @@
       state.boards = boards;
       state.loadError = '';
 
+      /* 굿즈샵 — 굿즈 목록은 공개 읽기(활성·품절 포함), 주문은 로그인 회원 본인 것만 */
+      var goodsRes = await sb.from('goods_items')
+        .select('id,name,points,stock,image_url,description,active,sort,created_at,updated_at')
+        .order('sort', { ascending: true }).order('created_at', { ascending: false });
+      if (goodsRes.error) {
+        /* 굿즈 SQL을 아직 실행하지 않은 DB여도 사이트는 그대로 뜨게 한다 */
+        if (!/PGRST205|Could not find the table|does not exist|schema cache/i.test(String(goodsRes.error.code || '') + ' ' + String(goodsRes.error.message || ''))) {
+          console.warn('[goods] 굿즈 목록을 불러오지 못했습니다', goodsRes.error);
+        }
+        state.goodsItems = [];
+      } else {
+        state.goodsItems = (goodsRes.data || []).map(mapGoodsItem);
+      }
+
       var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls']);
       if (!setRes.error && setRes.data) {
         var settingsMap = {};
@@ -1589,13 +1622,16 @@
         var dlRes = await sb.from('deliveries').select('*').eq('user_id', myId).order('requested_at', { ascending: false });
         state.myDeliveries = (dlRes.data || []).map(mapDelivery);
 
+        var goRes = await sb.from('goods_orders').select('*').eq('user_id', myId).order('created_at', { ascending: false });
+        state.myGoodsOrders = goRes.error ? [] : (goRes.data || []).map(mapGoodsOrder);
+
         state.coupons = state.myCoupons;
         state.draws = state.myDraws;
         state.claims = state.myClaims;
         state.deliveries = state.myDeliveries;
       } else {
         state.me = null;
-        state.myCoupons = []; state.myDraws = []; state.myClaims = []; state.myDeliveries = [];
+        state.myCoupons = []; state.myDraws = []; state.myClaims = []; state.myDeliveries = []; state.myGoodsOrders = [];
         state.coupons = []; state.draws = []; state.claims = []; state.deliveries = [];
       }
     },
@@ -1638,6 +1674,10 @@
         row.phone = d.profiles ? d.profiles.phone : '';
         return row;
       });
+      var goRes = await sb.from('goods_orders')
+        .select('*, profiles:user_id(nickname,phone)')
+        .order('created_at', { ascending: false }).limit(300);
+      state.adminGoodsOrders = goRes.error ? [] : (goRes.data || []).map(mapGoodsOrder);
       var codeRes = await sb.from('exchange_codes').select('code,board_id,created_at,used_at,used_n,qty').order('created_at', { ascending: false }).limit(500);
       /* qty 컬럼이 아직 없는 DB(마이그레이션 전)에서도 코드 목록이 사라지지 않도록 한 번 더 */
       if (codeRes.error) {
@@ -1747,21 +1787,13 @@
         p_board_id: args.boardId,
         p_ticket_no: args.n,
         p_coupon_id: args.couponId || null,
-        p_code: args.code || null,
-        p_use_points: !!args.usePoints
+        p_code: args.code || null
       };
       var res = await this.sb.rpc('draw_ticket', body);
-      /* 서버 함수가 아직 v3.5(4인자)라면: 포인트 뽑기가 아닐 땐 기존 인자로 한 번 더 시도해 뽑기가 막히지 않게 한다 */
+      /* v4.2.6 — 포인트 뽑기는 없앴다. 서버 함수가 p_use_points 를 기본값 없이 요구하는
+         구버전이면 false 로 한 번 더 시도해 뽑기가 막히지 않게 한다. */
       if (res.error && /PGRST202|p_use_points|Could not find the function/i.test(String(res.error.code || '') + ' ' + String(res.error.message || ''))) {
-        if (args.usePoints) {
-          throw new Error('포인트로 뽑기는 서버 준비가 필요해요. 관리자 페이지의 안내대로 supabase/upgrade_points_draw.sql 을 한 번 실행해 주세요.');
-        }
-        res = await this.sb.rpc('draw_ticket', {
-          p_board_id: body.p_board_id,
-          p_ticket_no: body.p_ticket_no,
-          p_coupon_id: body.p_coupon_id,
-          p_code: body.p_code
-        });
+        res = await this.sb.rpc('draw_ticket', Object.assign({}, body, { p_use_points: false }));
       }
       if (res.error) throw new Error(res.error.message || '뽑기에 실패했어요.');
       var r = res.data || {};
@@ -1892,6 +1924,135 @@
       if (res.error) throw res.error;
       await this.refreshData();
       return res.data && res.data.points;
+    },
+
+    /* ---------- 굿즈샵 (v4.2.6) ---------- */
+    /* 포인트로 굿즈 교환 — 서버 RPC 한 트랜잭션 안에서
+       포인트 차감 + 재고 -1 + 주문 생성이 같이 처리된다. */
+    async redeemGoods(itemId, info) {
+      if (this.mode === 'local') {
+        if (!state.me) throw new Error('굿즈를 교환하려면 로그인이 필요합니다.');
+        var item = getGoodsItem(itemId);
+        if (!item || item.active === false) throw new Error('판매가 끝난 굿즈입니다.');
+        if (item.stock <= 0) throw new Error('품절된 굿즈입니다.');
+        var u = userById(state.me.id);
+        if (!u) throw new Error('회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
+        var bal = Number(u.points) || 0;
+        if (bal < item.points) throw new Error('포인트가 부족합니다. (필요 ' + fmt(item.points) + 'P · 보유 ' + fmt(bal) + 'P)');
+        u.points = bal - item.points;
+        item.stock = item.stock - 1;
+        item.updatedAt = nowISO();
+        var order = {
+          id: uid('go'), userId: u.id, itemId: item.id, itemName: item.name,
+          itemImage: item.image, points: item.points,
+          recipient: info.recipient, phone: info.phone, postcode: info.postcode || '',
+          address: info.address, memo: info.memo || '',
+          carrier: '', tracking: '', status: '요청', createdAt: nowISO(), shippedAt: null
+        };
+        state.goodsOrders.unshift(order);
+        state.me = u;
+        persist();
+        buildLocalViews();
+        return { order: order, pointsBalance: u.points, stock: item.stock };
+      }
+      var res = await this.sb.rpc('redeem_goods_item', {
+        p_item_id: itemId, p_recipient: info.recipient, p_phone: info.phone,
+        p_postcode: info.postcode || '', p_address: info.address, p_memo: info.memo || null
+      });
+      if (res.error) throw new Error(res.error.message || '굿즈 교환에 실패했어요.');
+      await this.refreshData();
+      return res.data || {};
+    },
+    /* 관리자: 굿즈 등록·수정 (id가 있으면 수정) */
+    async saveGoodsItem(payload) {
+      var row = {
+        name: String(payload.name || '').trim(),
+        points: Math.max(1, Math.round(Number(payload.points) || 0)),
+        stock: Math.max(0, Math.round(Number(payload.stock) || 0)),
+        image_url: payload.image || null,
+        description: (payload.description || '').trim() || null,
+        active: payload.active !== false
+      };
+      if (this.mode === 'local') {
+        /* 로컬 상태는 화면용 이름(image)으로 저장한다 (서버 행은 image_url) */
+        var local = {
+          name: row.name, points: row.points, stock: row.stock,
+          image: payload.image || '', description: row.description || '', active: row.active !== false
+        };
+        if (payload.id) {
+          var it = getGoodsItem(payload.id);
+          if (!it) throw new Error('굿즈를 찾을 수 없습니다.');
+          Object.assign(it, local, { updatedAt: nowISO() });
+          persist();
+          buildLocalViews();
+          return it;
+        }
+        var made = Object.assign({ id: uid('gi'), sort: 0, createdAt: nowISO(), updatedAt: nowISO() }, local);
+        state.goodsItems.unshift(made);
+        persist();
+        buildLocalViews();
+        return made;
+      }
+      if (payload.id) {
+        row.updated_at = nowISO();
+        var up = await this.sb.from('goods_items').update(row).eq('id', payload.id).select('*').single();
+        if (up.error) throw up.error;
+        await this.refreshData();
+        return up.data ? mapGoodsItem(up.data) : null;
+      }
+      var ins = await this.sb.from('goods_items').insert(row).select('*').single();
+      if (ins.error) throw ins.error;
+      await this.refreshData();
+      return ins.data ? mapGoodsItem(ins.data) : null;
+    },
+
+    /* 관리자: 재고만 빠르게 조정 (+1 / -1) */
+    async setGoodsStock(id, stock) {
+      var next = Math.max(0, Math.round(Number(stock) || 0));
+      if (this.mode === 'local') {
+        var it = getGoodsItem(id);
+        if (!it) throw new Error('굿즈를 찾을 수 없습니다.');
+        it.stock = next;
+        it.updatedAt = nowISO();
+        persist();
+        buildLocalViews();
+        return it;
+      }
+      var res = await this.sb.from('goods_items').update({ stock: next, updated_at: nowISO() }).eq('id', id);
+      if (res.error) throw res.error;
+      await this.refreshData();
+    },
+
+    async deleteGoodsItem(id) {
+      if (this.mode === 'local') {
+        state.goodsItems = state.goodsItems.filter(function (g) { return g.id !== id; });
+        persist();
+        buildLocalViews();
+        return;
+      }
+      var res = await this.sb.from('goods_items').delete().eq('id', id);
+      if (res.error) throw res.error;
+      await this.refreshData();
+    },
+
+    /* 관리자: 굿즈 주문 출고 처리 (운송장 등록) */
+    async shipGoodsOrder(id, carrier, tracking) {
+      if (this.mode === 'local') {
+        var o = state.goodsOrders.filter(function (x) { return x.id === id; })[0];
+        if (!o) throw new Error('굿즈 주문을 찾을 수 없습니다.');
+        o.carrier = carrier;
+        o.tracking = tracking;
+        o.status = '출고완료';
+        o.shippedAt = nowISO();
+        persist();
+        buildLocalViews();
+        return;
+      }
+      var res = await this.sb.from('goods_orders')
+        .update({ status: '출고완료', carrier: carrier, tracking: tracking, shipped_at: nowISO() })
+        .eq('id', id);
+      if (res.error) throw res.error;
+      await this.loadAdmin();
     },
 
     /* ---------- 관리자 ---------- */
@@ -2263,6 +2424,8 @@
           .on('postgres_changes', { event: '*', schema: 'public', table: 'draws' }, kick)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, kick)
           .on('postgres_changes', { event: '*', schema: 'public', table: 'purchase_claims' }, kick)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_items' }, kick)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_orders' }, kick)
           .subscribe();
       } catch (e) { console.warn('[쿠지킹] 실시간 구독 실패', e); }
     }
@@ -2283,6 +2446,47 @@
       postcode: d.postcode, address: d.address, memo: d.memo, carrier: d.carrier,
       tracking: d.tracking, status: d.status, requestedAt: d.requested_at, shippedAt: d.shipped_at
     };
+  }
+
+  /* ---------- 굿즈샵 (v4.2.6) ---------- */
+  function mapGoodsItem(g) {
+    return {
+      id: g.id, name: g.name || '', points: Number(g.points) || 0,
+      stock: Math.max(0, Number(g.stock) || 0), image: g.image_url || '',
+      description: g.description || '', active: g.active !== false,
+      sort: Number(g.sort) || 0, createdAt: g.created_at, updatedAt: g.updated_at
+    };
+  }
+  function mapGoodsOrder(o) {
+    return {
+      id: o.id, userId: o.user_id, itemId: o.item_id, itemName: o.item_name || '',
+      itemImage: o.item_image || '', points: Number(o.points) || 0,
+      recipient: o.recipient || '', phone: o.phone || '', postcode: o.postcode || '',
+      address: o.address || '', memo: o.memo || '', carrier: o.carrier || '',
+      tracking: o.tracking || '', status: o.status || '요청',
+      createdAt: o.created_at, shippedAt: o.shipped_at,
+      nickname: (o.profiles && o.profiles.nickname) || ''
+    };
+  }
+  /* 교환 가능한 굿즈만 (관리자 화면에서는 숨김 포함 전체) */
+  function goodsItemsForShop() {
+    return (state.goodsItems || []).filter(function (g) { return g.active !== false; });
+  }
+  function getGoodsItem(id) {
+    for (var i = 0; i < (state.goodsItems || []).length; i++) if (state.goodsItems[i].id === id) return state.goodsItems[i];
+    return null;
+  }
+  function goodsOrderStatusLabel(s) {
+    return { '요청': '교환 완료 · 배송 준비', '출고완료': '출고 완료', '취소': '취소' }[s] || s || '-';
+  }
+  /* 굿즈 SQL을 아직 실행하지 않은 DB에서 나는 오류를 알아보기 쉬운 안내로 바꾼다 */
+  function goodsErrText(e) {
+    var m = errMsg(e);
+    var raw = m + ' ' + String((e && (e.code || e.message)) || '');
+    if (/PGRST205|PGRST202|Could not find the table|Could not find the function|schema cache|does not exist/i.test(raw)) {
+      return '굿즈 기능 준비가 필요해요. Supabase SQL Editor에서 kujiking_goods_shop.sql(첨부한 kujiking_goods_shop.txt)을 한 번 실행해 주세요.';
+    }
+    return m;
   }
 
   function grantLocalCoupons(userId, boardId, qty, note) {
@@ -2311,6 +2515,8 @@
         .sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
       state.myDeliveries = state.deliveries.filter(function (d) { return d.userId === uidNow; })
         .sort(function (a, b) { return new Date(b.requestedAt) - new Date(a.requestedAt); });
+      state.myGoodsOrders = state.goodsOrders.filter(function (o) { return o.userId === uidNow; })
+        .sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); });
 
       state.adminMembers = state.users.map(function (u) {
         return Object.assign({}, u, {
@@ -2327,6 +2533,11 @@
         .map(function (d) {
           var u = userById(d.userId);
           return Object.assign({}, d, { nickname: u ? u.nickname : '', phone: u ? u.phone : '' });
+        });
+      state.adminGoodsOrders = state.goodsOrders.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); })
+        .map(function (o) {
+          var u = userById(o.userId);
+          return Object.assign({}, o, { nickname: u ? u.nickname : '' });
         });
     }
   }
@@ -2370,19 +2581,8 @@
       rec.usedN = args.n;
       rec.usedBy = state.me ? state.me.id : null;
       source = 'code';
-    } else if (args.usePoints || args.withPoints) {
-      /* 굿즈 포인트로 뽑기 (v3.6): 판 가격만큼 회원 포인트를 차감한다 */
-      if (!state.me) throw new Error('포인트로 뽑으려면 로그인이 필요합니다.');
-      var meU = userById(state.me.id);
-      if (!meU) throw new Error('회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
-      var priceP = Number(board.price) || 0;
-      var balP = Number(meU.points) || 0;
-      if (priceP <= 0) throw new Error('이 판은 포인트로 뽑을 수 없습니다.');
-      if (balP < priceP) throw new Error('굿즈 포인트가 부족합니다. (필요 ' + fmt(priceP) + 'P · 보유 ' + fmt(balP) + 'P)');
-      meU.points = balP - priceP;
-      source = 'points';
     } else {
-      throw new Error('쿠폰 · 교환 코드 · 굿즈 포인트 중 하나가 필요합니다.');
+      throw new Error('뽑기권(쿠폰) 또는 교환 코드가 필요합니다.');
     }
 
     var map = await getMapping(board);
@@ -2624,6 +2824,7 @@
     var seg = parts[0] || 'home';
     if (seg === 'board') return { view: 'board', id: parts[1] || null };
     if (seg === 'my') return { view: 'my', id: null };
+    if (seg === 'goods') return { view: 'goods', id: null };
     if (seg === 'winners') return { view: 'winners', id: parts[1] || null };
     if (seg === 'fairness') return { view: 'fairness', id: parts[1] || null };
     if (seg === 'admin') return { view: 'admin', id: null };
@@ -2666,6 +2867,7 @@
     if (ui.view === 'home') return renderHome();
     if (ui.view === 'board') return renderBoard();
     if (ui.view === 'my') return renderMy();
+    if (ui.view === 'goods') return renderGoods();
     if (ui.view === 'winners') return renderWinners();
     if (ui.view === 'fairness') return renderFairness();
     if (ui.view === 'admin') return renderAdmin();
@@ -3724,9 +3926,8 @@
     var buttons = MULTI_COUNTS.map(function (n) {
       var short = ms.left < n;
       var canCoupon = ms.mine.length >= n;
-      var canPoints = ms.price > 0 && ms.have >= ms.price * n;
       var payState = short ? ('잔여 ' + fmt(ms.left) + '장')
-        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : (canPoints ? ('포인트 ' + fmt(ms.price * n) + 'P') : '결제 필요'));
+        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : '뽑기권 필요');
       return '<button class="md-btn' + (short ? ' is-off' : '') + '" type="button" data-action="multi-draw" data-count="' + n + '"' +
         (short ? ' disabled aria-disabled="true"' : '') + '>' +
         '<span class="md-n">' + n + '<em>연뽑</em></span>' +
@@ -3751,7 +3952,7 @@
         '</div>' +
       '</div>' +
       '<div class="md-row">' + buttons + restBtn + '</div>' +
-      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 코드에 담긴 장수만큼 뽑기권이 한 번에 들어와요.</p>';
+      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 교환 코드는 코드에 담긴 장수만큼 뽑기권이 한 번에 들어와요.</p>';
   }
 
   function openMultiDraw(count) {
@@ -3948,7 +4149,7 @@
       '<li>라스트원상은 한 판의 마지막 1장을 뽑은 분께 추가로 지급됩니다.</li>' +
       '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
-      '<li>굿즈 포인트로도 뽑을 수 있습니다. 뽑으면 이 판 가격(' + won(board.price) + ')만큼 회원 포인트에서 차감됩니다.</li>' +
+      '<li>뽑기는 <b>뽑기권(쿠폰)</b> 또는 <b>교환 코드</b>로만 할 수 있습니다. 모은 굿즈 포인트(P)는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 굿즈로 교환합니다.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
@@ -4035,10 +4236,6 @@
   function drawSourceHTML(board, d) {
     var user = me();
     var mine = couponsFor(board);
-    var price = Math.max(0, Number(board.price) || 0);
-    var have = user ? Number(user.points || 0) : 0;
-    var gap = Math.max(0, price - have);
-    var canPoints = !!user && price > 0 && have >= price;
     var html = '<h2 class="modal-title" id="modalTitle">' + d.n + '번 뽑기</h2>' +
       '<p class="modal-sub">' + h(board.title) + ' · ' + won(board.price) + '</p>';
 
@@ -4062,28 +4259,10 @@
       '</div>';
     }
 
-    /* 굿즈 포인트로 뽑기 — 로그인 회원이면 항상 보이고, 잔액이 모자라면 안내와 함께 잠근다 */
-    if (user) {
-      html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
-        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
-        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: ' + fmt(have) + 'P)</em></b></div>' +
-        '<p class="pay-desc">' + (canPoints
-          ? '보관함 상품을 포인트로 바꾼 잔액으로 바로 뽑을 수 있어요. 뽑으면 <b>' + fmt(price) + 'P</b>가 차감됩니다.'
-          : '<b class="pay-gap">' + fmt(gap) + 'P</b> 부족해요. 내 보관함에서 당첨 상품을 <b>포인트 전환</b>하면 바로 뽑을 수 있어요.') + '</p>' +
-        (canPoints
-          ? '<button class="btn btn-gold btn-block" data-action="draw-points">포인트로 뽑기 (' + fmt(price) + 'P 사용)</button>'
-          : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>') +
-        '</div>';
-    } else {
-      html += '<div class="pay-option is-points is-off">' +
-        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
-        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: 0P)</em></b></div>' +
-        '<p class="pay-desc">로그인하면 보유 굿즈 포인트로도 뽑을 수 있어요. 하위 등급을 포인트로 바꿔 모을 수 있습니다.</p>' +
-        '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>' +
-        '</div>';
-    }
-
-    html += '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+    /* v4.2.6 — 포인트로 뽑기는 없어졌다. 뽑기는 뽑기권(쿠폰)·교환 코드로만.
+       모은 포인트는 [굿즈] 메뉴에서 실물 굿즈로 교환한다. */
+    html += '<p class="pay-points-note">굿즈 포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. 모은 P는 <a class="inline-link" href="#/goods">굿즈</a>에서 확인하세요.</p>' +
+      '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
       '<form class="code-form" data-form="draw-code" novalidate>' +
       '<label class="sr-only" for="drawCodeInput">교환 코드</label>' +
       '<input id="drawCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
@@ -4102,7 +4281,6 @@
     var n = d.count;
     var need = ms.price * n;
     var canCoupon = ms.mine.length >= n;
-    var canPoints = ms.price > 0 && ms.have >= need;
     var html = '<h2 class="modal-title" id="modalTitle">무작위 ' + n + '연뽑</h2>' +
       '<p class="modal-sub">' + h(board.title) + ' · 1장 ' + won(ms.price) + ' · <b>' + n + '장 ' + won(need) + '</b></p>' +
       '<div class="md-how"><span class="md-how-dice" aria-hidden="true">🎲</span>' +
@@ -4121,29 +4299,9 @@
           : '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인 / 회원가입</button>')) +
     '</div>';
 
-    /* 굿즈 포인트 */
-    if (ms.user) {
-      html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
-        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
-        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(need) + 'P · 보유: ' + fmt(ms.have) + 'P)</em></b></div>' +
-        '<p class="pay-desc">' + (canPoints
-          ? '<b>' + n + '장</b>을 뽑으면 <b>' + fmt(need) + 'P</b>가 차감됩니다.'
-          : '<b class="pay-gap">' + fmt(Math.max(0, need - ms.have)) + 'P</b> 부족해요. 내 보관함에서 당첨 상품을 포인트로 바꾸면 바로 뽑을 수 있어요.') + '</p>' +
-        (canPoints
-          ? '<button class="btn btn-gold btn-block" data-action="multi-points">포인트로 ' + n + '장 뽑기 (' + fmt(need) + 'P)</button>'
-          : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>') +
-      '</div>';
-    } else {
-      html += '<div class="pay-option is-points is-off">' +
-        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
-        '<b class="pay-need">포인트로 뽑기 <em>(필요: ' + fmt(need) + 'P)</em></b></div>' +
-        '<p class="pay-desc">로그인하면 보유 포인트로 <b>' + n + '장</b>을 한 번에 뽑을 수 있어요.</p>' +
-        '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>' +
-      '</div>';
-    }
-
-    /* 교환 코드 — 1회용 코드는 1장 전용 (연뽑은 쿠폰·포인트로) */
-    html += '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+    /* v4.2.6 — 포인트로 뽑기는 없어졌다. 연뽑도 뽑기권(쿠폰)·교환 코드로만. */
+    html += '<p class="pay-points-note">포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. <a class="inline-link" href="#/goods">굿즈 보러 가기</a></p>' +
+      '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
       '<form class="code-form" data-form="multi-code" novalidate>' +
         '<label class="sr-only" for="multiCodeInput">교환 코드</label>' +
         '<input id="multiCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
@@ -4470,9 +4628,7 @@
     var picked = rows.filter(function (r) { return String(r.grade || '').toUpperCase() !== 'LAST'; });
     var missing = Math.max(0, (d.count || picked.length) - picked.length);
     var pay = d.pay || {};
-    var price = Math.max(0, Number(board.price) || 0);
-    var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt(price * picked.length) + 'P')
-      : (pay.code ? '교환 코드' : ('뽑기권 ' + picked.length + '장'));
+    var payLabel = pay.code ? '교환 코드' : ('뽑기권 ' + picked.length + '장');
 
     /* 최고 등급 실물 */
     var bestPhys = physical[0] || null;
@@ -5855,7 +6011,7 @@
         '</span>' +
       '</div>' +
       '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
-      '<p class="result-meta">' + (d.usePoints ? '굿즈 포인트 ' + fmt(board.price) + 'P 사용' : (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || '')))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
+      '<p class="result-meta">' + (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || ''))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
   }
 
@@ -5872,7 +6028,6 @@
       boardId: d.boardId, n: d.n, step: 'peel',
       couponId: opts.couponId || null,
       code: opts.code || null,
-      usePoints: !!opts.usePoints,
       demo: !!opts.demo, busy: true, ready: false, revealing: false, result: null
     };
     renderDrawModal();
@@ -5888,8 +6043,7 @@
       var res = await Backend.draw({
         boardId: board.id, n: d.n,
         couponId: d.couponId || null,
-        code: d.code || null,
-        usePoints: !!d.usePoints
+        code: d.code || null
       });
       var tuned = tierOf(board, res.grade);
       if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
@@ -5940,7 +6094,6 @@
     d.pay = {
       couponIds: pay.couponIds ? pay.couponIds.slice(0, d.count) : null,
       code: pay.code || null,
-      usePoints: !!pay.usePoints,
       demo: !!pay.demo
     };
     d.demo = !!pay.demo;
@@ -5974,8 +6127,7 @@
         var res = await Backend.draw({
           boardId: board.id, n: no,
           couponId: pay.couponIds ? (pay.couponIds[i] || null) : null,
-          code: pay.code || null,
-          usePoints: !!pay.usePoints
+          code: pay.code || null
         });
         var tuned = tierOf(board, res.grade);
         if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
@@ -6841,16 +6993,12 @@
     if (mp) mp.textContent = fmt(next) + 'P';
   }
 
-  /* P상 당첨 카드: 실물 배송이 없으므로 보관함 안내 대신 포인트 적립 안내를 보여준다 */
+  /* P상 당첨 카드: 실물 배송이 없으므로 보관함 안내 대신 포인트 적립 안내를 보여준다
+     v4.2.6 — 포인트로 뽑기는 없어졌다. 모은 P는 굿즈샵에서 굿즈로 교환한다. */
   function pointResultHTML(board, d, r) {
     var pts = Number(r.points) || 0;
     var user = me();
     var bal = user ? (Number(user.points) || 0) : 0;
-    var price = Math.max(1000, Number(board.price) || 12000);
-    var perFree = pts > 0 ? Math.max(1, Math.round(price / pts)) : 10;
-    var pct = Math.min(100, Math.round(bal / price * 100));
-    var need = Math.max(0, price - bal);
-    var full = bal >= price;
 
     var sparks = '';
     for (var i = 0; i < 12; i++) {
@@ -6860,13 +7008,11 @@
 
     var wallet = user
       ? '<div class="pc-wallet"><span>보유 포인트</span><b>' + fmt(bal) + 'P</b></div>' +
-        '<div class="pc-progress' + (full ? ' is-full' : '') + '">' +
-          '<div class="pc-progress-head"><span>' + (full ? '한 판 무료 준비 완료!' : '한 판 무료까지 ' + fmt(need) + 'P') + '</span>' +
-            '<b>' + fmt(bal) + ' / ' + fmt(price) + 'P</b></div>' +
-          '<span class="pc-bar"><i style="width:' + pct + '%"></i></span>' +
-          '<small>P상 ' + perFree + '번 = ' + fmt(price) + 'P = 한 판 무료</small>' +
+        '<div class="pc-goods">' +
+          '<span class="pc-goods-copy">모은 P로 <b>굿즈샵에서 원하는 굿즈</b>와 교환하세요.</span>' +
+          '<button class="btn btn-gold btn-sm" data-action="go-goods">굿즈 보러 가기</button>' +
         '</div>'
-      : '<div class="pc-guest">로그인하지 않아 포인트가 계정에 쌓이지 않았어요. 로그인하고 뽑으면 적립된 포인트로 다음 뽑기가 가능합니다.</div>';
+      : '<div class="pc-guest">로그인하지 않아 포인트가 계정에 쌓이지 않았어요. 로그인하고 뽑으면 적립된 포인트로 굿즈를 교환할 수 있어요.</div>';
 
     return '<div class="result-wrap is-point">' +
       '<div class="pc-stage" id="revealStage">' +
@@ -6874,11 +7020,11 @@
         '<div class="pc-coin" aria-hidden="true"><b>P</b><i>상</i></div>' +
         '<p class="pc-kicker">POINT PRIZE · P상</p>' +
         '<h3 class="pc-title">굿즈 포인트 <em>+' + fmt(pts) + 'P</em> 적립!</h3>' +
-        '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모아서 다시 뽑기에 사용할 수 있어요.</p>' +
+        '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모은 P는 굿즈샵에서 실물 굿즈로 교환할 수 있어요.</p>' +
         wallet +
         '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
         lastOneBannerHTML(r, board) +
-        '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : (r.source === 'points' ? ' · 굿즈 포인트 사용' : '')) + '</p>' +
+        '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : '') + '</p>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
         '</div>' +
@@ -7052,6 +7198,183 @@
   }
 
   /* =========================================================
+     9-5. 굿즈샵 (v4.2.6)
+     ---------------------------------------------------------
+     뽑기에서 모은 P(굿즈 포인트)로 실물 굿즈를 교환한다.
+     손님: #/goods 목록 → '포인트로 교환하기' → 배송지 확인 → 교환
+     관리자: [굿즈 관리] 등록/수정/삭제, [배송 · 출고]에서 굿즈 송장 등록
+     ========================================================= */
+  function goodsImageOf(item) {
+    var src = item && item.image ? item.image : POINT_IMG;
+    return coverSrc(src);
+  }
+
+  function renderGoods() {
+    var grid = $('#goodsGrid');
+    if (!grid) return;
+    var user = me();
+    var bal = user ? Number(user.points || 0) : 0;
+
+    var balEl = $('#goodsBalance');
+    if (balEl) {
+      balEl.innerHTML = '<span class="goods-bal-caption">나의 굿즈 포인트</span>' +
+        (user
+          ? '<strong class="goods-bal-num">' + fmt(bal) + '<em>P</em></strong>' +
+            '<span class="goods-bal-links"><a href="#/board">뽑기판</a><i>·</i><a href="#/my">포인트 전환</a></span>'
+          : '<strong class="goods-bal-num is-guest">로그인 필요</strong>' +
+            '<button class="btn btn-outline btn-sm" data-action="open-auth">로그인 / 회원가입</button>');
+    }
+
+    var items = goodsItemsForShop();
+    if (!items.length) {
+      grid.innerHTML = '<div class="card empty goods-empty"><span class="empty-icon">' + icon('box') + '</span>' +
+        '<p>아직 등록된 굿즈가 없어요.<br>곧 뽑기 상품이 아닌 굿즈로 채워 둘게요.</p>' +
+        '<a class="btn btn-outline btn-sm" href="#/board">뽑기판 열기</a></div>';
+      return;
+    }
+
+    grid.innerHTML = items.map(goodsCardHTML).join('');
+  }
+
+  function goodsCardHTML(item) {
+    var user = me();
+    var bal = user ? Number(user.points || 0) : 0;
+    var soldOut = item.stock <= 0;
+    var short = Math.max(0, item.points - bal);
+    var can = !!user && !soldOut && short === 0;
+
+    var action;
+    if (soldOut) {
+      action = '<button class="btn btn-outline btn-block btn-sm" type="button" disabled aria-disabled="true">품절</button>';
+    } else if (!user) {
+      action = '<button class="btn btn-gold btn-block" data-action="open-auth">로그인하고 교환</button>';
+    } else if (can) {
+      action = '<button class="btn btn-gold btn-block" data-action="goods-redeem" data-id="' + h(item.id) + '">포인트로 교환하기</button>';
+    } else {
+      action = '<button class="btn btn-outline btn-block btn-sm" type="button" disabled aria-disabled="true">' + fmt(short) + 'P 더 필요해요</button>';
+    }
+
+    return '<article class="goods-card' + (soldOut ? ' is-soldout' : '') + '">' +
+      '<div class="goods-thumb">' +
+        '<img src="' + h(goodsImageOf(item)) + '" alt="' + h(item.name) + '" loading="lazy">' +
+        (soldOut ? '<span class="goods-soldout-tag">SOLD OUT</span>' : (item.stock <= 3 ? '<span class="goods-few-tag">품절임박</span>' : '')) +
+      '</div>' +
+      '<div class="goods-body">' +
+        '<span class="goods-stock">' + (soldOut ? '재고 없음' : '남은 수량 ' + fmt(item.stock) + '개') + '</span>' +
+        '<h3 class="goods-name">' + h(item.name) + '</h3>' +
+        (item.description ? '<p class="goods-desc">' + h(item.description) + '</p>' : '') +
+        '<p class="goods-points"><span class="goods-p-mark">P</span><b>' + fmt(item.points) + '</b><em>P</em></p>' +
+        action +
+      '</div>' +
+    '</article>';
+  }
+
+  /* 저장된 배송지 — 최근 굿즈 주문 → 최근 경품 배송 순서로 채운다 */
+  function goodsLastAddress() {
+    var user = me();
+    var o = (state.myGoodsOrders || [])[0];
+    var d = (state.myDeliveries || [])[0];
+    var src = o || d || null;
+    return {
+      recipient: (src && src.recipient) || (user ? user.nickname : '') || '',
+      phone: (src && src.phone) || (user ? user.phone : '') || '',
+      postcode: (src && src.postcode) || '',
+      address: (src && src.address) || '',
+      memo: ''
+    };
+  }
+
+  function openGoodsRedeemModal(itemId) {
+    var item = getGoodsItem(itemId);
+    if (!item) return;
+    var user = me();
+    if (!user) { openAuthModal('login'); toast('로그인하면 포인트로 굿즈를 교환할 수 있어요', 'err'); return; }
+    if (item.active === false) { toast('판매가 끝난 굿즈예요', 'err'); return; }
+    if (item.stock <= 0) { toast('품절된 굿즈예요', 'err'); renderGoods(); return; }
+    var bal = Number(user.points || 0);
+    if (bal < item.points) { toast('포인트가 ' + fmt(item.points - bal) + 'P 부족해요', 'err'); return; }
+
+    var addr = goodsLastAddress();
+    var after = bal - item.points;
+    openModal(
+      '<h2 class="modal-title" id="modalTitle">포인트로 교환</h2>' +
+      '<p class="modal-sub">' + h(item.name) + ' · <b>' + fmt(item.points) + 'P</b></p>' +
+      '<div class="goods-redeem-head">' +
+        '<span class="goods-redeem-thumb"><img src="' + h(goodsImageOf(item)) + '" alt=""></span>' +
+        '<div class="goods-redeem-info">' +
+          '<span class="goods-redeem-row"><em>교환 포인트</em><b>' + fmt(item.points) + 'P</b></span>' +
+          '<span class="goods-redeem-row"><em>보유 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
+          '<span class="goods-redeem-row is-after"><em>교환 후 잔액</em><b>' + fmt(after) + 'P</b></span>' +
+        '</div>' +
+      '</div>' +
+      '<p class="goods-redeem-note">배송지로 바로 보내 드려요. 교환한 포인트는 되돌릴 수 없어요.</p>' +
+      '<form data-form="goods-redeem" novalidate data-id="' + h(item.id) + '">' +
+        '<label class="field"><span>받는 사람</span><input name="recipient" type="text" maxlength="20" required value="' + h(addr.recipient) + '"></label>' +
+        '<label class="field"><span>연락처</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required value="' + h(addr.phone) + '" placeholder="010-0000-0000"></label>' +
+        '<div class="field field-postcode"><span>우편번호 (선택)</span>' +
+          '<div class="postcode-row">' +
+            '<input name="postcode" type="text" inputmode="numeric" maxlength="6" value="' + h(addr.postcode) + '" placeholder="예: 05510" autocomplete="postal-code">' +
+            '<button type="button" class="btn btn-outline btn-sm postcode-btn" data-action="open-postcode">🔍 주소 검색</button>' +
+          '</div>' +
+        '</div>' +
+        '<label class="field"><span>주소</span><input name="address" type="text" maxlength="140" required value="' + h(addr.address) + '" placeholder="🔍 주소 검색을 누르거나 직접 입력" autocomplete="street-address"></label>' +
+        '<label class="field"><span>배송 요청사항 (선택)</span><input name="memo" type="text" maxlength="80" placeholder="예: 문 앞에 놓아주세요"></label>' +
+        shipNoticeBoxHTML('ship-note-goods') +
+        '<p class="form-error" data-role="goods-error" role="alert"></p>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
+          '<button type="submit" class="btn btn-gold">' + fmt(item.points) + 'P로 교환하기</button>' +
+        '</div>' +
+      '</form>');
+  }
+
+  function openGoodsDoneModal(order, item) {
+    openModal(
+      '<div class="goods-done">' +
+        '<span class="goods-done-mark" aria-hidden="true">🎁</span>' +
+        '<h2 class="modal-title" id="modalTitle" style="padding-right:0">교환 완료!</h2>' +
+        '<p class="modal-sub">' + h((item && item.name) || order.itemName || '굿즈') + '</p>' +
+        '<div class="goods-done-card">' +
+          '<span class="goods-redeem-row"><em>사용한 포인트</em><b>' + fmt(order.points) + 'P</b></span>' +
+          '<span class="goods-redeem-row"><em>남은 포인트</em><b>' + fmt(order.pointsBalance != null ? order.pointsBalance : (me() ? me().points : 0)) + 'P</b></span>' +
+          '<span class="goods-redeem-row"><em>받는 곳</em><b>' + h(order.address || '-') + '</b></span>' +
+        '</div>' +
+        '<p class="result-meta">주문 내역은 내 보관함 &gt; 굿즈 주문에서 확인할 수 있어요. 출고되면 운송장이 표시됩니다.</p>' +
+        '<div class="modal-actions">' +
+          '<button class="btn btn-outline" data-action="go-my-goods">주문 내역 보기</button>' +
+          '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
+        '</div>' +
+      '</div>', { noAutofocus: false });
+  }
+
+  /* 내 보관함 · 굿즈 주문 */
+  function renderMyGoodsOrders() {
+    var el = $('#myGoodsOrders');
+    if (!el) return;
+    var rows = state.myGoodsOrders || [];
+    if (!rows.length) {
+      el.innerHTML = '<div class="card empty"><span class="empty-icon">' + icon('gift') + '</span>' +
+        '<p>아직 교환한 굿즈가 없어요.<br>뽑기에서 모은 포인트로 실물 굿즈를 바꿔 보세요.</p>' +
+        '<a class="btn btn-gold" href="#/goods">굿즈 보러 가기</a></div>';
+      return;
+    }
+    el.innerHTML = rows.map(function (o) {
+      var img = o.itemImage || POINT_IMG;
+      var done = o.status === '출고완료';
+      return '<article class="gorder-card card' + (done ? ' is-done' : '') + '">' +
+        '<span class="gorder-thumb"><img src="' + h(coverSrc(img)) + '" alt="" loading="lazy"></span>' +
+        '<div class="gorder-body">' +
+          '<div class="gorder-top"><span class="status-pill ' + (done ? 'st-shipped' : 'st-request') + '">' + h(goodsOrderStatusLabel(o.status)) + '</span>' +
+            '<span class="gorder-date">' + formatDateTime(o.createdAt) + '</span></div>' +
+          '<h3>' + h(o.itemName || '굿즈') + '</h3>' +
+          '<p class="gorder-meta"><b>' + fmt(o.points) + 'P</b> 사용 · ' + h(o.recipient) + ' · ' + h(o.address) + '</p>' +
+          (o.tracking ? '<p class="inv-track">' + h(o.carrier || '택배') + ' <b>' + h(o.tracking) + '</b></p>' : '<p class="gorder-meta muted small">출고되면 운송장이 표시돼요.</p>') +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+
+  /* =========================================================
      10. 내 보관함
      ========================================================= */
   function renderMy() {
@@ -7090,6 +7413,8 @@
     if (cc) cc.textContent = coupons.length;
     var ic = $('#myItemCount');
     if (ic) ic.textContent = (state.myDraws || []).filter(function (d) { return d.itemStatus === '보관중'; }).length;
+    var gc = $('#myGoodsCount');
+    if (gc) gc.textContent = (state.myGoodsOrders || []).length;
 
     $$('.my-tab').forEach(function (t) {
       t.classList.toggle('active', t.getAttribute('data-my-tab') === ui.myTab);
@@ -7100,6 +7425,7 @@
 
     renderMyCoupons();
     renderMyInventory();
+    renderMyGoodsOrders();
     renderMyClaims();
     renderMyHistory();
   }
@@ -7532,6 +7858,7 @@
 
     if (ui.adminTab === 'members') renderMembersTab();
     if (ui.adminTab === 'boards') renderBoardsTab();
+    if (ui.adminTab === 'goods') renderGoodsTab();
     if (ui.adminTab === 'shipping') renderShippingTab();
     if (ui.adminTab === 'codes') renderCodesTab();
     if (ui.adminTab === 'settings') renderSettingsTab();
@@ -7699,6 +8026,7 @@
   function renderShippingTab() {
     var el = $('#deliveryList');
     if (!el) return;
+    renderGoodsOrders();
     var rows = (state.adminDeliveries || []).slice().sort(function (a, b) {
       if (a.status === b.status) return new Date(b.requestedAt) - new Date(a.requestedAt);
       return a.status === '출고완료' ? 1 : -1;
@@ -7726,6 +8054,121 @@
         (done
           ? '<p class="delivery-track">' + icon('truck') + ' ' + h(d.carrier || '택배') + ' <b>' + h(d.tracking || '') + '</b> · ' + formatDateTime(d.shippedAt) + '</p>'
           : '<form class="delivery-form" data-form="ship" data-id="' + h(d.id) + '">' +
+              '<select name="carrier" class="input input-sm">' +
+                ['CJ대한통운', '우체국택배', '한진택배', '롯데택배', '로젠택배', 'GS25 편의점택배'].map(function (c) {
+                  return '<option>' + c + '</option>';
+                }).join('') +
+              '</select>' +
+              '<input name="tracking" class="input input-sm" type="text" placeholder="운송장 번호" required>' +
+              '<button class="btn btn-primary btn-sm" type="submit">출고 완료</button>' +
+            '</form>') +
+      '</article>';
+    }).join('');
+  }
+
+  /* ---------- 관리자: 굿즈 관리 탭 (v4.2.6) ---------- */
+  function renderGoodsTab() {
+    renderGoodsAdminList();
+    syncGoodsForm();
+  }
+
+  /* 수정 중인 굿즈를 폼에 채운다 (새 등록이면 비운다) */
+  function syncGoodsForm() {
+    var form = document.querySelector('form[data-form="goods-form"]');
+    if (!form) return;
+    var editing = ui.goodsEditingId ? getGoodsItem(ui.goodsEditingId) : null;
+    if (ui.goodsEditingId && !editing) ui.goodsEditingId = null;
+    var setVal = function (name, v) {
+      var input = form.querySelector('[name="' + name + '"]');
+      if (input && document.activeElement !== input) input.value = v == null ? '' : v;
+    };
+    setVal('id', editing ? editing.id : '');
+    setVal('name', editing ? editing.name : '');
+    setVal('points', editing ? editing.points : '');
+    setVal('stock', editing ? editing.stock : '1');
+    setVal('description', editing ? editing.description : '');
+    setVal('image', editing ? editing.image : '');
+    var submit = form.querySelector('button[type="submit"]');
+    if (submit) submit.textContent = editing ? '수정 저장' : '등록하기';
+    var cancel = form.querySelector('[data-action="goods-form-reset"]');
+    if (cancel) cancel.hidden = !editing;
+    var title = $('#goodsFormTitle');
+    if (title) title.textContent = editing ? '굿즈 수정' : '굿즈 등록';
+    refreshGoodsImage(form);
+  }
+
+  function refreshGoodsImage(form) {
+    if (!form) return;
+    var input = form.querySelector('input[name="image"]');
+    var box = $('#goodsPhotoPrev');
+    if (!box) return;
+    var v = input ? input.value.trim() : '';
+    box.innerHTML = v ? '<img src="' + h(coverSrc(v)) + '" alt="">' : '<span aria-hidden="true">📷</span>';
+    box.classList.toggle('is-empty', !v);
+  }
+
+  function renderGoodsAdminList() {
+    var el = $('#goodsAdminList');
+    if (!el) return;
+    var items = state.goodsItems || [];
+    var countEl = $('#goodsAdminCount');
+    if (countEl) countEl.textContent = fmt(items.length) + '개';
+    if (!items.length) {
+      el.innerHTML = '<div class="empty"><p>등록된 굿즈가 없어요. 위에서 사진·상품명·포인트·재고만 넣으면 바로 올라갑니다.</p></div>';
+      return;
+    }
+    el.innerHTML = items.map(function (g) {
+      return '<article class="gadmin-row' + (String(ui.goodsEditingId) === String(g.id) ? ' is-editing' : '') + '">' +
+        '<span class="gadmin-thumb">' + (g.image ? '<img src="' + h(coverSrc(g.image)) + '" alt="" loading="lazy">' : '<b aria-hidden="true">🎁</b>') + '</span>' +
+        '<div class="gadmin-body">' +
+          '<b>' + h(g.name) + '</b>' +
+          '<span class="gadmin-meta"><strong>' + fmt(g.points) + 'P</strong> · 재고 ' + fmt(g.stock) + '개' + (g.active === false ? ' · 숨김' : '') + '</span>' +
+          (g.description ? '<em>' + h(g.description) + '</em>' : '') +
+        '</div>' +
+        '<div class="gadmin-acts">' +
+          '<div class="gadmin-stock">' +
+            '<button type="button" data-action="goods-stock" data-id="' + h(g.id) + '" data-delta="-1" aria-label="재고 1개 줄이기">−</button>' +
+            '<b>' + fmt(g.stock) + '</b>' +
+            '<button type="button" data-action="goods-stock" data-id="' + h(g.id) + '" data-delta="1" aria-label="재고 1개 늘리기">+</button>' +
+          '</div>' +
+          '<button class="btn btn-outline btn-sm" type="button" data-action="goods-edit" data-id="' + h(g.id) + '">수정</button>' +
+          '<button class="btn btn-danger-ghost btn-sm" type="button" data-action="goods-delete" data-id="' + h(g.id) + '">삭제</button>' +
+        '</div>' +
+      '</article>';
+    }).join('');
+  }
+
+  /* ---------- 관리자: 배송·출고 > 굿즈 배송 ---------- */
+  function renderGoodsOrders() {
+    var el = $('#goodsOrderList');
+    if (!el) return;
+    var rows = (state.adminGoodsOrders || []).slice().sort(function (a, b) {
+      if (a.status === b.status) return new Date(b.createdAt) - new Date(a.createdAt);
+      return a.status === '출고완료' ? 1 : -1;
+    });
+    var badge = $('#goodsOrderCount');
+    if (badge) badge.textContent = fmt(rows.filter(function (o) { return o.status !== '출고완료'; }).length) + '건 대기';
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty"><p>굿즈 교환 주문이 없어요. 손님이 포인트로 굿즈를 교환하면 이곳에 표시됩니다.</p></div>';
+      return;
+    }
+    el.innerHTML = rows.map(function (o) {
+      var done = o.status === '출고완료';
+      return '<article class="delivery-card goods-order' + (done ? ' is-done' : '') + '">' +
+        '<div class="delivery-head">' +
+          '<span class="status-pill ' + (done ? 'st-shipped' : 'st-request') + '">' + (done ? '출고 완료' : '출고 대기') + '</span>' +
+          '<b>' + h(o.itemName || '굿즈') + '</b>' +
+          '<span class="badge" style="background:#fff3cf">' + fmt(o.points) + 'P 교환</span>' +
+          '<span class="muted small">' + h(o.nickname || '회원') + ' · ' + formatDateTime(o.createdAt) + '</span>' +
+        '</div>' +
+        '<div class="delivery-body">' +
+          '<div><span class="muted small">받는 사람</span><p><b>' + h(o.recipient) + '</b> · ' + h(o.phone) + '</p></div>' +
+          '<div><span class="muted small">주소</span><p>' + (o.postcode ? '(' + h(o.postcode) + ') ' : '') + h(o.address) + '</p></div>' +
+          (o.memo ? '<div><span class="muted small">요청사항</span><p>' + h(o.memo) + '</p></div>' : '') +
+        '</div>' +
+        (done
+          ? '<p class="delivery-track">' + icon('truck') + ' ' + h(o.carrier || '택배') + ' <b>' + h(o.tracking || '') + '</b> · ' + formatDateTime(o.shippedAt) + '</p>'
+          : '<form class="delivery-form" data-form="goods-ship" data-id="' + h(o.id) + '">' +
               '<select name="carrier" class="input input-sm">' +
                 ['CJ대한통운', '우체국택배', '한진택배', '롯데택배', '로젠택배', 'GS25 편의점택배'].map(function (c) {
                   return '<option>' + c + '</option>';
@@ -8124,7 +8567,7 @@
   var IMG_MAX_BYTES = 12 * 1024 * 1024;
 
   function boardFormOf(el) {
-    return (el && el.closest) ? el.closest('form[data-form="board-form"]') : null;
+    return (el && el.closest) ? el.closest('form[data-form="board-form"], form[data-form="goods-form"]') : null;
   }
 
   function uploadTarget(form, key, el) {
@@ -8132,6 +8575,7 @@
     if (key === 'cover') return form.querySelector('input[name="cover"]');
     if (key === 'lastone') return form.querySelector('input[name="lastOneImage"]');
     if (key === 'lineup') return form.querySelector('input[name="manualImage"]');
+    if (key === 'goods') return form.querySelector('input[name="image"]');
     if (key === 'tier') {
       var row = (el && el.closest) ? el.closest('.tier-row') : null;
       return row ? row.querySelector('input[name="image"]') : null;
@@ -8179,10 +8623,10 @@
     return /bucket/i.test(m) && /not\s*found|not\s*exist|no\s*such/i.test(m);
   }
 
-  function uploadImageBlob(blob) {
+  function uploadImageBlob(blob, folder) {
     var sb = Backend.sb;
     if (Backend.mode !== 'supabase' || !sb || !sb.storage) return Promise.reject(new Error('no-supabase'));
-    var name = 'boards/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
+    var name = (folder || 'boards') + '/' + Date.now() + '-' + Math.random().toString(36).slice(2, 8) + '.jpg';
     return sb.storage.from(IMG_BUCKET)
       .upload(name, blob, { contentType: 'image/jpeg', upsert: true, cacheControl: '31536000' })
       .then(function (res) {
@@ -8237,9 +8681,10 @@
     var btn = wrap ? wrap.querySelector('.upload-btn') : null;
     var label = btn ? btn.textContent : '';
     if (btn) { btn.setAttribute('aria-disabled', 'true'); btn.textContent = '올리는 중…'; }
-    shrinkImage(file).then(uploadImageBlob).then(function (url) {
+    shrinkImage(file).then(function (blob) { return uploadImageBlob(blob, key === 'goods' ? 'goods' : 'boards'); }).then(function (url) {
       target.value = url;
-      refreshBoardImages(form);
+      if (form && form.getAttribute('data-form') === 'goods-form') refreshGoodsImage(form);
+      else refreshBoardImages(form);
       toast('사진을 올렸어요', 'ok');
     }).catch(imageErrorToast).then(function () {
       if (btn) { btn.removeAttribute('aria-disabled'); btn.textContent = label || '📷 올리기'; }
@@ -9081,11 +9526,6 @@
           startMultiDraw({ couponIds: mCoupons.slice(0, ui.draw.count).map(function (c) { return c.id; }) });
           break;
         }
-        case 'multi-points': {
-          if (!ui.draw || !ui.draw.batch) break;
-          startMultiDraw({ usePoints: true });
-          break;
-        }
         case 'zoom-tier': showTierZoom(el.getAttribute('data-grade')); break;
         case 'zoom-last': showTierZoom('LAST'); break;
         case 'ticket-info': showTicketInfo(n); break;
@@ -9103,11 +9543,6 @@
           enterPeel({ couponId: id });
           break;
         }
-        case 'draw-points': {
-          if (!ui.draw) break;
-          enterPeel({ usePoints: true });
-          break;
-        }
         case 'go-my-points': {
           closeModal();
           ui.myTab = 'inventory';
@@ -9115,15 +9550,72 @@
           else renderMy();
           break;
         }
+        case 'go-goods': closeModal(); location.hash = '#/goods'; break;
 
         case 'filter-cat': ui.filters.category = el.getAttribute('data-value'); renderHome(); break;
         case 'filter-price': ui.filters.price = el.getAttribute('data-value'); renderHome(); break;
         case 'reset-filter': ui.filters = { category: '전체', price: 'all', sort: 'recommend' }; renderHome(); break;
 
         case 'open-delivery': openDeliveryModal(id); break;
-        case 'open-postcode': openPostcodeLayer(document.querySelector('form[data-form="delivery"]')); break;
+        case 'open-postcode': openPostcodeLayer(document.querySelector('form[data-form="delivery"], form[data-form="goods-redeem"]')); break;
         case 'close-postcode': closePostcodeLayer(); break;
         case 'convert-points': convertPointsFlow(id); break;
+
+        /* ---------- 굿즈샵 (v4.2.6) ---------- */
+        case 'goods-redeem': openGoodsRedeemModal(id); break;
+        case 'go-my-goods': {
+          closeModal();
+          ui.myTab = 'goods';
+          if (location.hash !== '#/my') location.hash = '#/my';
+          else renderMy();
+          break;
+        }
+        case 'goods-edit': {
+          ui.goodsEditingId = id;
+          renderGoodsTab();
+          var gform = document.querySelector('form[data-form="goods-form"]');
+          if (gform) gform.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          break;
+        }
+        case 'goods-form-reset': {
+          ui.goodsEditingId = null;
+          var gf = document.querySelector('form[data-form="goods-form"]');
+          if (gf) { gf.reset(); }
+          var gerr = gf ? gf.querySelector('[data-role="goods-error"]') : null;
+          if (gerr) gerr.textContent = '';
+          syncGoodsForm();
+          break;
+        }
+        case 'goods-delete': {
+          var gdel = getGoodsItem(id);
+          if (!gdel) break;
+          confirmDialog({
+            title: '굿즈를 삭제할까요?',
+            message: '‘<b>' + h(gdel.name) + '</b>’ 굿즈를 목록에서 지웁니다. 이미 교환된 주문 내역은 그대로 남아요.',
+            confirmLabel: '삭제', danger: true
+          }).then(function (ok) {
+            if (!ok) return;
+            Backend.deleteGoodsItem(id).then(function () {
+              if (String(ui.goodsEditingId) === String(id)) ui.goodsEditingId = null;
+              renderGoodsTab();
+              if (ui.view === 'goods') renderGoods();
+              toast('굿즈를 삭제했어요', 'ok');
+            }).catch(function (e) { toast(errMsg(e), 'err'); });
+          });
+          break;
+        }
+        case 'goods-stock': {
+          var gs = getGoodsItem(id);
+          if (!gs) break;
+          var delta = Number(el.getAttribute('data-delta')) || 0;
+          var next = Math.max(0, gs.stock + delta);
+          if (next === gs.stock) break;
+          Backend.setGoodsStock(id, next).then(function () {
+            renderGoodsTab();
+            if (ui.view === 'goods') renderGoods();
+          }).catch(function (e) { toast(errMsg(e), 'err'); });
+          break;
+        }
 
         case 'grant-open': openGrantModal(id); break;
         case 'admin-reload': ensureAdminData(true); break;
@@ -9536,6 +10028,93 @@
         return;
       }
 
+      if (type === 'goods-redeem') {
+        var goErr = form.querySelector('[data-role="goods-error"]');
+        var goItem = getGoodsItem(form.getAttribute('data-id'));
+        var goInfo = {
+          recipient: fieldValue(form, 'recipient').trim(),
+          phone: fieldValue(form, 'phone').trim(),
+          postcode: fieldValue(form, 'postcode').trim(),
+          address: fieldValue(form, 'address').trim(),
+          memo: fieldValue(form, 'memo').trim()
+        };
+        if (goErr) goErr.textContent = '';
+        if (!goInfo.recipient || !goInfo.phone || !goInfo.address) {
+          if (goErr) goErr.textContent = '받는 사람·연락처·주소를 모두 입력해 주세요.';
+          return;
+        }
+        if (!goItem) { if (goErr) goErr.textContent = '굿즈를 찾을 수 없어요. 새로고침 후 다시 시도해 주세요.'; return; }
+        var goBtn = form.querySelector('button[type="submit"]');
+        var goLabel = goBtn ? goBtn.textContent : '';
+        if (goBtn) { goBtn.setAttribute('aria-disabled', 'true'); goBtn.textContent = '교환 중…'; }
+        Backend.redeemGoods(goItem.id, goInfo).then(function (res) {
+          var order = (res && res.order) || res || {};
+          /* Supabase RPC 는 snake_case 로 돌려준다 */
+          if (res && res.item_name && !order.itemName) {
+            order = {
+              itemName: res.item_name, itemImage: res.item_image,
+              points: res.points, pointsBalance: res.points_balance,
+              address: res.address, status: res.status
+            };
+          }
+          try { renderAll(); } catch (e) {}
+          openGoodsDoneModal(order, goItem);
+          toast('굿즈를 교환했어요!', 'ok');
+        }).catch(function (e) {
+          if (goErr) goErr.textContent = goodsErrText(e);
+          if (goBtn) { goBtn.removeAttribute('aria-disabled'); goBtn.textContent = goLabel || '교환하기'; }
+        });
+        return;
+      }
+
+      if (type === 'goods-form') {
+        var gErr = form.querySelector('[data-role="goods-error"]');
+        var gName = fieldValue(form, 'name').trim();
+        var gPoints = Number(fieldValue(form, 'points'));
+        var gStock = Number(fieldValue(form, 'stock'));
+        var gId = fieldValue(form, 'id').trim() || null;
+        if (gErr) gErr.textContent = '';
+        if (!gName) { if (gErr) gErr.textContent = '상품명을 입력해 주세요.'; return; }
+        if (!(gPoints >= 1)) { if (gErr) gErr.textContent = '필요 포인트는 1P 이상 숫자로 넣어 주세요.'; return; }
+        if (!(gStock >= 0)) { if (gErr) gErr.textContent = '재고 수량은 0 이상이어야 해요.'; return; }
+        var gBtn = form.querySelector('button[type="submit"]');
+        var gBtnLabel = gBtn ? gBtn.textContent : '';
+        if (gBtn) { gBtn.setAttribute('aria-disabled', 'true'); gBtn.textContent = '저장 중…'; }
+        Backend.saveGoodsItem({
+          id: gId, name: gName, points: gPoints, stock: gStock,
+          image: fieldValue(form, 'image').trim(),
+          description: fieldValue(form, 'description').trim()
+        }).then(function () {
+          ui.goodsEditingId = null;
+          if (gBtn) { gBtn.removeAttribute('aria-disabled'); gBtn.textContent = '등록하기'; }
+          form.reset();
+          renderGoodsTab();
+          if (ui.view === 'goods') renderGoods();
+          toast(gId ? '굿즈를 수정했어요' : '굿즈를 등록했어요', 'ok');
+        }).catch(function (e) {
+          if (gErr) gErr.textContent = goodsErrText(e);
+          if (gBtn) { gBtn.removeAttribute('aria-disabled'); gBtn.textContent = gBtnLabel || '등록하기'; }
+        });
+        return;
+      }
+
+      if (type === 'goods-ship') {
+        var gsId = form.getAttribute('data-id');
+        var gsCarrier = fieldValue(form, 'carrier');
+        var gsTracking = fieldValue(form, 'tracking').trim();
+        if (!gsTracking) return;
+        var gsBtn = form.querySelector('button[type="submit"]');
+        if (gsBtn) { gsBtn.setAttribute('aria-disabled', 'true'); gsBtn.textContent = '저장 중…'; }
+        Backend.shipGoodsOrder(gsId, gsCarrier, gsTracking).then(function () {
+          renderAdmin();
+          toast('굿즈 출고 완료로 바꿨어요', 'ok');
+        }).catch(function (e) {
+          if (gsBtn) { gsBtn.removeAttribute('aria-disabled'); gsBtn.textContent = '출고 완료'; }
+          toast(errMsg(e), 'err');
+        });
+        return;
+      }
+
       if (type === 'grant') {
         var gerr = form.querySelector('[data-role="grant-error"]');
         var qtyG = Number(fieldValue(form, 'qty'));
@@ -9613,6 +10192,7 @@
         if (prev) { var v = e.target.value.trim(); prev.innerHTML = v ? '<img src="' + escapeHtml(v) + '" alt="">' : ''; }
       }
       if (e.target.name === 'cover' && e.target.closest('form[data-form="board-form"]')) updateCoverPreview(e.target.closest('form'));
+      if (e.target.name === 'image' && e.target.closest('form[data-form="goods-form"]')) refreshGoodsImage(e.target.closest('form'));
       if (e.target.id === 'codeSearch') renderCodesTable();
       if (e.target.id === 'genQty') {
         var gq = Math.max(1, Math.min(100, Math.round(Number(e.target.value) || 1)));

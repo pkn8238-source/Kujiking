@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.2.5">
+<link rel="stylesheet" href="assets/styles.css?v=4.2.6">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -45,6 +45,7 @@
     </a>
     <nav class="main-nav" id="mainNav" aria-label="주요 메뉴">
       <a href="#/board" data-nav="board">뽑기판</a>
+      <a href="#/goods" data-nav="goods">굿즈</a>
       <a href="#/my" data-nav="my">내 보관함</a>
       <a href="#/winners" data-nav="winners">당첨 내역</a>
       <a href="#/fairness" data-nav="fairness">공정성 검증</a>
@@ -150,7 +151,7 @@
           <ol class="guide-steps">
             <li><span class="step-no">1</span><div><b>판 고르기</b><p>남은 번호와 실제 판매 현황을 확인해요.</p></div></li>
             <li><span class="step-no">2</span><div><b>번호 선택</b><p>뽑고 싶은 번호를 직접 골라요.</p></div></li>
-            <li><span class="step-no">3</span><div><b>쿠폰·코드·포인트로 뽑기</b><p>종이를 찢어 등급을 확인해요.</p></div></li>
+            <li><span class="step-no">3</span><div><b>쿠폰·코드로 뽑기</b><p>종이를 찢어 등급을 확인해요.</p></div></li>
             <li><span class="step-no">4</span><div><b>보관함에서 수령</b><p>배송 신청 또는 포인트로 전환해요.</p></div></li>
           </ol>
         </div>
@@ -205,10 +206,11 @@
           <div class="card aside-card aside-help">
             <h3>이용 안내</h3>
             <ul>
-              <li>번호를 고른 뒤 쿠폰 · 교환 코드 · 굿즈 포인트로 개봉합니다.</li>
+              <li>번호를 고른 뒤 쿠폰 · 교환 코드로 개봉합니다.</li>
               <li>한 번 연 번호는 되돌릴 수 없어요.</li>
               <li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청할 수 있어요.</li>
               <li>실물에 당첨되지 않은 번호는 P상(굿즈 포인트 1,200P)으로 바로 적립됩니다.</li>
+              <li>모은 포인트는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 상품으로 교환할 수 있어요.</li>
             </ul>
             <p class="aside-ship"><b>배송비 · 합배송</b><span data-ship-notice>기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)</span></p>
             <button class="kakao-pill kakao-pill-sm kakao-pill-block" type="button" data-action="open-kakao">
@@ -228,6 +230,41 @@
           <span class="store-bar-word">스마트스토어에서 구매</span>
         </a>
         <button class="store-bar-btn store-bar-draw" id="storeBarDraw" type="button" data-action="store-bar-draw">코드 입력하고 뽑기</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================= GOODS ================= -->
+  <section class="view" data-view="goods">
+    <div class="container page goods-page">
+      <div class="page-head goods-page-head">
+        <span class="eyebrow">POINT GOODS</span>
+        <h1>굿즈</h1>
+        <p class="page-desc">뽑기에서 모은 굿즈 포인트(P)로 실물 굿즈를 교환합니다. 배송지로 바로 보내 드려요.</p>
+      </div>
+
+      <div class="goods-hero">
+        <div class="goods-hero-copy">
+          <span class="goods-hero-kicker">KUJIKING POINT SHOP</span>
+          <h2>모은 P,<br>굿즈로 바꾸세요</h2>
+          <p>실물에 당첨되지 않은 번호는 P상으로 포인트가 쌓입니다. 쌓인 P는 아래 굿즈에서 실물로 교환할 수 있어요.</p>
+          <div class="goods-hero-flow">
+            <span>뽑기 P상 적립</span><i aria-hidden="true">→</i><span>포인트 모으기</span><i aria-hidden="true">→</i><span>굿즈 교환</span>
+          </div>
+        </div>
+        <div class="goods-balance" id="goodsBalance"></div>
+      </div>
+
+      <div class="goods-grid" id="goodsGrid"></div>
+
+      <div class="card goods-note">
+        <h3>교환 안내</h3>
+        <ul>
+          <li>포인트는 <b>뽑기 결제에 쓰지 않습니다.</b> 굿즈 교환에만 사용돼요.</li>
+          <li>교환을 누르면 배송지를 확인한 뒤 <b>포인트 차감 · 재고 차감 · 주문 생성</b>이 한 번에 처리됩니다.</li>
+          <li>교환한 포인트는 되돌릴 수 없고, 주문 내역은 <a href="#/my" class="inline-link">내 보관함 › 굿즈 주문</a>에서 확인할 수 있어요.</li>
+          <li>재고가 떨어진 굿즈는 품절로 표시되고, 다시 채워질 때까지 교환할 수 없어요.</li>
+        </ul>
       </div>
     </div>
   </section>
@@ -255,6 +292,7 @@
         <div class="my-tabs" role="tablist" id="myTabs">
           <button class="my-tab active" data-my-tab="coupons" role="tab">내 쿠폰함 <span class="tab-count" id="myCouponCount">0</span></button>
           <button class="my-tab" data-my-tab="inventory" role="tab">내 보관함 <span class="tab-count" id="myItemCount">0</span></button>
+          <button class="my-tab" data-my-tab="goods" role="tab">굿즈 주문 <span class="tab-count" id="myGoodsCount">0</span></button>
           <button class="my-tab" data-my-tab="claims" role="tab">구매확인 요청</button>
           <button class="my-tab" data-my-tab="history" role="tab">뽑기 기록</button>
         </div>
@@ -278,6 +316,17 @@
             </div>
           </div>
           <div class="inventory-list" id="myInventory"></div>
+        </div>
+
+        <div class="my-panel" data-my-panel="goods" hidden>
+          <div class="my-panel-head">
+            <div>
+              <h2>굿즈 주문</h2>
+              <p class="muted">포인트로 교환한 굿즈입니다. 출고되면 운송장이 표시돼요.</p>
+            </div>
+            <a class="btn btn-outline btn-sm" href="#/goods">굿즈 보러 가기</a>
+          </div>
+          <div class="goods-order-list" id="myGoodsOrders"></div>
         </div>
 
         <div class="my-panel" data-my-panel="claims" hidden>
@@ -517,6 +566,7 @@
           <div class="admin-tabs" role="tablist">
             <button class="admin-tab" data-admin-tab="members" role="tab">회원 · 쿠폰</button>
             <button class="admin-tab" data-admin-tab="boards" role="tab">판 관리</button>
+            <button class="admin-tab" data-admin-tab="goods" role="tab">굿즈 관리</button>
             <button class="admin-tab" data-admin-tab="shipping" role="tab">배송 · 출고</button>
             <button class="admin-tab" data-admin-tab="codes" role="tab">코드 발급</button>
             <button class="admin-tab" data-admin-tab="settings" role="tab">설정 · 연결</button>
@@ -580,6 +630,61 @@
           </div>
         </div>
 
+        <!-- 굿즈 관리 -->
+        <div class="admin-tab-panel" data-admin-panel="goods">
+          <div class="card admin-card">
+            <div class="admin-card-head">
+              <h2 id="goodsFormTitle">굿즈 등록</h2>
+              <span class="muted">사진 · 상품명 · 필요 포인트 · 재고만 넣으면 바로 올라갑니다.</span>
+            </div>
+            <form class="goods-form" data-form="goods-form" novalidate>
+              <input type="hidden" name="id" value="">
+              <div class="goods-form-grid">
+                <div class="field goods-photo-field">
+                  <span>사진</span>
+                  <div class="goods-photo">
+                    <div class="goods-photo-prev is-empty" id="goodsPhotoPrev"><span aria-hidden="true">📷</span></div>
+                    <div class="goods-photo-side">
+                      <button type="button" class="btn btn-outline btn-sm upload-btn" data-action="pick-image" data-upload="goods">📷 사진 올리기</button>
+                      <input type="file" accept="image/*" class="upload-file" data-upload="goods" hidden>
+                      <input name="image" class="input input-sm" type="text" autocomplete="off" spellcheck="false" placeholder="사진 주소(자동 입력) 또는 이미지 경로">
+                    </div>
+                  </div>
+                </div>
+                <label class="field">
+                  <span>상품명</span>
+                  <input name="name" type="text" maxlength="60" required placeholder="예: 시바마루야 아크릴 스탠드">
+                </label>
+                <label class="field">
+                  <span>필요 포인트 (P)</span>
+                  <input name="points" type="number" min="1" max="1000000" step="1" inputmode="numeric" required placeholder="1200">
+                </label>
+                <label class="field">
+                  <span>재고 수량</span>
+                  <input name="stock" type="number" min="0" max="9999" step="1" inputmode="numeric" required value="1">
+                </label>
+                <label class="field field-wide">
+                  <span>간단 설명 (선택)</span>
+                  <input name="description" type="text" maxlength="100" placeholder="예: 높이 10cm · 아크릴 스탠드">
+                </label>
+              </div>
+              <div class="form-actions">
+                <button class="btn btn-primary" type="submit">등록하기</button>
+                <button class="btn btn-outline" type="button" data-action="goods-form-reset" hidden>수정 취소</button>
+              </div>
+              <p class="form-error" data-role="goods-error" role="alert"></p>
+            </form>
+          </div>
+
+          <div class="card admin-card">
+            <div class="admin-card-head">
+              <h2>등록된 굿즈</h2>
+              <span class="muted" id="goodsAdminCount">0개</span>
+            </div>
+            <div class="goods-admin-list" id="goodsAdminList"></div>
+          </div>
+        </div>
+
         <!-- 배송 · 출고 -->
         <div class="admin-tab-panel" data-admin-panel="shipping">
           <div class="card admin-card">
@@ -588,6 +693,14 @@
               <span class="muted">받는 사람·주소 확인 후 운송장을 넣고 출고 완료로 바꿔 주세요.</span>
             </div>
             <div class="delivery-list" id="deliveryList"></div>
+          </div>
+
+          <div class="card admin-card">
+            <div class="admin-card-head">
+              <h2>굿즈 배송 <span class="badge" id="goodsOrderCount">0건 대기</span></h2>
+              <span class="muted">포인트로 교환된 굿즈입니다. 경품 배송과 같은 방식으로 송장을 넣어 주세요.</span>
+            </div>
+            <div class="delivery-list" id="goodsOrderList"></div>
           </div>
         </div>
 
@@ -760,6 +873,7 @@
       <div>
         <h4>쇼핑</h4>
         <a href="#/board">뽑기판</a>
+        <a href="#/goods">굿즈</a>
         <a href="#/my">내 보관함</a>
         <a href="#/winners">당첨 내역</a>
         <a href="#/fairness">공정성 검증</a>
@@ -797,7 +911,7 @@
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
     <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. 미성년자는 법정대리인 동의 후 이용해 주세요.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.1.4</span></p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.2.6</span></p>
   </div>
 </footer>
 
@@ -812,6 +926,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.2.5" defer></script>
+<script src="assets/app.js?v=4.2.6" defer></script>
 </body>
 </html>

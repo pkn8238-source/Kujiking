@@ -1424,6 +1424,7 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .pay-badge{background:var(--ink);color:#fff;border-radius:6px;padding:2px 7px;font-size:10.5px;font-weight:900;letter-spacing:.02em}
 .pay-head b{font-size:14px;font-weight:900}
 .pay-desc{font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.55}
+.pay-desc .pay-gap{color:var(--red-deep);font-weight:900}
 .pay-divider{display:flex;align-items:center;gap:10px;margin:4px 0 12px;color:var(--muted);font-size:11.5px;font-weight:800}
 .pay-divider::before,.pay-divider::after{content:"";flex:1;height:1px;background:var(--line-strong)}
 .aside-hint{font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:12px}
@@ -2164,24 +2165,14 @@ body.is-live .demo-only{display:none !important}
 }
 
 /* =========================================================
-   v3.6 — 굿즈 포인트로 뽑기 · B/A 초화려 연출 · 봉인 배너 · 쫀득한 임팩트
+   v3.6 — 버튼 골드 · B/A 초화려 연출 · 봉인 배너 · 쫀득한 임팩트
    ========================================================= */
 
-/* ---------- 굿즈 포인트로 뽑기 ---------- */
+/* ---------- 골드 버튼 (쿠지킹 시그니처) ---------- */
 .btn-gold{--btn-bg:linear-gradient(180deg,#ffdf7a,#f5b800);--btn-fg:#2a1a00;border-color:#5a3c00;
   box-shadow:0 4px 0 #5a3c00,0 10px 22px rgba(245,184,0,.35)}
 .btn-gold:hover{box-shadow:0 6px 0 #5a3c00,0 14px 28px rgba(245,184,0,.45)}
 .btn-gold:active{box-shadow:0 1px 0 #5a3c00}
-
-.pay-option.is-points{border-color:#d29b16;background:linear-gradient(150deg,#fffbee 0%,#fff1c9 100%);
-  box-shadow:0 3px 0 rgba(184,135,31,.35)}
-.pay-option.is-points.is-off{background:#f8f5ee;border-color:var(--line-strong);border-style:dashed;box-shadow:none}
-.pay-badge.is-points{background:linear-gradient(135deg,#ffd863,#e08a00);color:#2a1a00}
-.pay-option.is-points .pay-head{justify-content:flex-start;gap:10px}
-.pay-need{display:block;font-size:13.5px;line-height:1.38}
-.pay-need em{display:block;font-style:normal;font-size:11.5px;font-weight:800;color:#8a5b00;letter-spacing:0}
-.pay-option.is-off .pay-need em{color:var(--muted)}
-.pay-desc .pay-gap{color:var(--red-deep);font-weight:900}
 
 /* ---------- 2단계 봉인: C상 이상 확정 배너 ---------- */
 .seal-banner{position:relative;display:inline-block;margin:2px auto 14px;padding:14px 24px 16px;
@@ -2361,6 +2352,11 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   transition:width .7s cubic-bezier(.2,.9,.3,1)}
 .pc-progress.is-full .pc-bar i{background:linear-gradient(90deg,#35d39c,var(--mint))}
 .pc-progress small{display:block;margin-top:7px;font-size:12px;color:var(--muted);font-weight:600}
+.pc-goods{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:space-between;
+  margin:0 0 8px;padding:12px 14px;border-radius:var(--radius-sm);
+  background:linear-gradient(150deg,#fffbee,#fff1c9);border:1.5px solid #f0d68a;text-align:left}
+.pc-goods-copy{flex:1 1 170px;min-width:0;font-size:13px;line-height:1.45;color:var(--ink-soft)}
+.pc-goods-copy b{color:var(--ink);font-weight:900}
 .pc-guest{margin:14px 0 8px;padding:11px 14px;border-radius:var(--radius-sm);
   background:#fff4f0;border:2px solid #ffd3c7;font-size:13px;line-height:1.55;color:#8a3a25;font-weight:700}
 @media (prefers-reduced-motion:reduce){
@@ -3402,3 +3398,183 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
 /* 코드 입력 모달 안 — 보유 뽑기권으로 바로 뽑기 */
 .code-quick{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-strong);text-align:center}
 .code-quick .result-meta{margin:0 0 8px}
+
+/* =========================================================
+   v4.2.6 — 굿즈샵 (포인트로 교환)
+   화이트 스튜디오 톤 + 쿠지킹 시그니처 골드 포인트
+   ========================================================= */
+.goods-page{max-width:1080px}
+.goods-page-head{text-align:center;margin-bottom:22px}
+.goods-page-head .page-desc{max-width:520px;margin:10px auto 0}
+
+/* 히어로 밴드 */
+.goods-hero{
+  display:flex;align-items:stretch;gap:18px;
+  padding:26px 26px;margin-bottom:26px;
+  background:#fff;border:1px solid var(--line);border-radius:24px;
+  box-shadow:0 18px 44px rgba(23,18,14,.06);
+  position:relative;overflow:hidden;
+}
+.goods-hero::before{
+  content:"";position:absolute;inset:auto -60px -110px auto;width:260px;height:260px;border-radius:50%;
+  background:radial-gradient(circle,rgba(255,213,30,.30),rgba(255,213,30,0) 70%);
+  pointer-events:none;
+}
+.goods-hero-copy{flex:1 1 auto;min-width:0;position:relative;z-index:1}
+.goods-hero-kicker{display:inline-block;font-size:11px;font-weight:900;letter-spacing:.16em;color:#b08600}
+.goods-hero-copy h2{font-family:var(--font-display);font-size:30px;line-height:1.2;margin:8px 0 10px;letter-spacing:-.03em}
+.goods-hero-copy p{color:var(--muted);font-size:14px;max-width:430px}
+.goods-hero-flow{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;font-size:12px;font-weight:800;color:var(--ink-soft)}
+.goods-hero-flow span{padding:6px 12px;border-radius:999px;background:var(--cream);border:1px solid var(--cream-deep)}
+.goods-hero-flow i{font-style:normal;color:#c9b489}
+.goods-balance{
+  flex:0 0 auto;min-width:186px;display:flex;flex-direction:column;justify-content:center;gap:6px;
+  padding:18px 20px;border-radius:18px;background:var(--bg);border:1px dashed var(--line-strong);
+}
+.goods-bal-caption{font-size:12px;font-weight:800;color:var(--muted);letter-spacing:-.01em}
+.goods-bal-num{font-family:var(--font-display);font-size:30px;line-height:1.1;letter-spacing:-.02em}
+.goods-bal-num em{font-style:normal;font-size:16px;margin-left:2px;color:#b08600}
+.goods-bal-num.is-guest{font-size:19px;color:var(--muted);font-family:var(--font-body);font-weight:800}
+.goods-bal-links{font-size:12px;font-weight:700;color:var(--muted);display:flex;gap:6px;align-items:center}
+.goods-bal-links a{text-decoration:underline;text-underline-offset:3px;color:var(--ink-soft)}
+.goods-bal-links i{font-style:normal;color:#c9b489}
+
+/* 굿즈 카드 그리드 */
+.goods-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:18px}
+.goods-card{
+  display:flex;flex-direction:column;background:#fff;
+  border:1px solid var(--line);border-radius:20px;overflow:hidden;
+  box-shadow:0 12px 28px rgba(23,18,14,.05);
+  transition:transform .16s ease,box-shadow .16s ease,border-color .16s ease;
+}
+.goods-card:hover{transform:translateY(-3px);box-shadow:0 20px 38px rgba(23,18,14,.09);border-color:var(--cream-deep)}
+.goods-thumb{position:relative;aspect-ratio:1/1;background:linear-gradient(180deg,#fffdf7,#fff6e0);display:flex;align-items:center;justify-content:center;padding:12px}
+.goods-thumb img{width:100%;height:100%;object-fit:contain}
+.goods-soldout-tag,.goods-few-tag{
+  position:absolute;top:10px;left:10px;padding:5px 10px;border-radius:999px;
+  font-size:10.5px;font-weight:900;letter-spacing:.02em;
+}
+.goods-soldout-tag{background:var(--ink);color:#fff}
+.goods-few-tag{background:var(--yellow);color:var(--ink);box-shadow:0 2px 0 rgba(23,18,14,.18)}
+.goods-body{display:flex;flex-direction:column;gap:7px;padding:14px 15px 16px;flex:1 1 auto}
+.goods-stock{font-size:11.5px;font-weight:800;color:var(--muted)}
+.goods-name{font-size:15px;font-weight:800;letter-spacing:-.02em;line-height:1.35;min-height:2.7em}
+.goods-desc{font-size:12px;color:var(--muted);line-height:1.45}
+.goods-points{display:flex;align-items:baseline;gap:2px;margin-top:auto;padding-top:4px}
+.goods-p-mark{
+  display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+  margin-right:5px;border-radius:6px;background:var(--yellow);color:var(--ink);
+  font-size:11px;font-weight:900;align-self:center;
+}
+.goods-points b{font-family:var(--font-display);font-size:22px;letter-spacing:-.02em}
+.goods-points em{font-style:normal;font-size:12px;font-weight:800;color:var(--muted);margin-left:1px}
+.goods-card .btn{margin-top:10px}
+.goods-card .btn-gold{background:linear-gradient(180deg,#FFD649,#FFC800);color:#18181B;border-color:var(--ink)}
+.goods-card.is-soldout .goods-thumb{filter:grayscale(1);opacity:.55}
+.goods-card.is-soldout .goods-points{opacity:.5}
+.goods-empty{grid-column:1/-1}
+
+/* 교환 안내 */
+.goods-note{margin-top:26px;padding:22px 24px}
+.goods-note h3{font-size:16px;margin-bottom:10px}
+.goods-note ul{display:grid;gap:7px}
+.goods-note li{position:relative;padding-left:14px;font-size:13px;color:var(--muted);line-height:1.55}
+.goods-note li::before{content:"";position:absolute;left:0;top:9px;width:5px;height:5px;border-radius:50%;background:var(--gold)}
+
+/* 뽑기 모달 — 포인트 안내 한 줄 */
+.pay-points-note{
+  margin:14px 0 0;padding:10px 13px;border-radius:12px;
+  background:var(--cream);border:1px dashed var(--cream-deep);
+  font-size:12.5px;line-height:1.5;color:var(--ink-soft);
+}
+.pay-points-note b{color:var(--ink)}
+.pay-points-note a.inline-link{color:#8a5b00;text-decoration-color:#e0b23f;text-underline-offset:3px}
+
+/* 교환 모달 */
+.goods-redeem-head{display:flex;gap:14px;align-items:center;margin:6px 0 14px;padding:14px;border-radius:16px;background:var(--bg);border:1px solid var(--line)}
+.goods-redeem-thumb{flex:0 0 78px;width:78px;height:78px;border-radius:14px;overflow:hidden;background:#fff;border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.goods-redeem-thumb img{width:100%;height:100%;object-fit:contain}
+.goods-redeem-info{flex:1 1 auto;min-width:0;display:grid;gap:4px}
+.goods-redeem-row{display:flex;align-items:baseline;justify-content:space-between;gap:10px;font-size:12.5px}
+.goods-redeem-row em{font-style:normal;color:var(--muted);font-weight:700}
+.goods-redeem-row b{font-weight:900;letter-spacing:-.01em}
+.goods-redeem-row.is-after b{color:#b08600}
+.goods-redeem-note{font-size:12.5px;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.goods-done{text-align:center}
+.goods-done-mark{font-size:40px;line-height:1;display:block;margin-bottom:6px}
+.goods-done-card{display:grid;gap:8px;padding:16px;border-radius:16px;background:var(--bg);border:1px solid var(--line);margin:12px 0}
+.goods-done-card .goods-redeem-row{font-size:13px}
+.goods-done-card .goods-redeem-row b{text-align:right;word-break:break-all}
+
+/* 내 보관함 — 굿즈 주문 */
+.goods-order-list{display:grid;gap:12px}
+.gorder-card{display:flex;gap:14px;padding:14px}
+.gorder-thumb{flex:0 0 74px;width:74px;height:74px;border-radius:14px;overflow:hidden;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center}
+.gorder-thumb img{width:100%;height:100%;object-fit:contain}
+.gorder-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:4px}
+.gorder-top{display:flex;align-items:center;gap:8px;justify-content:space-between}
+.gorder-date{font-size:11.5px;color:var(--muted)}
+.gorder-body h3{font-size:15px}
+.gorder-meta{font-size:12.5px;color:var(--muted);line-height:1.5}
+.gorder-meta b{color:var(--ink);font-weight:900}
+.gorder-card.is-done{background:#fbfdfa}
+
+/* 관리자 — 굿즈 등록·목록 */
+.goods-form-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.goods-form .form-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.goods-form .form-actions .btn{flex:1 1 150px}
+.goods-photo-field{grid-column:1/-1}
+.goods-photo{display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+.goods-photo-prev{
+  flex:0 0 96px;width:96px;height:96px;border-radius:16px;overflow:hidden;
+  border:1px dashed var(--line-strong);background:var(--bg);
+  display:flex;align-items:center;justify-content:center;font-size:26px;
+}
+.goods-photo-prev img{width:100%;height:100%;object-fit:contain;background:#fff}
+.goods-photo-side{flex:1 1 170px;min-width:0;display:flex;flex-direction:column;gap:8px}
+.goods-photo-side .btn{align-self:flex-start}
+.field-wide{grid-column:1/-1}
+.goods-admin-list{display:grid;gap:10px}
+.gadmin-row{
+  display:flex;align-items:center;gap:12px;padding:12px;
+  border:1px solid var(--line);border-radius:16px;background:#fff;
+}
+.gadmin-row.is-editing{border-color:var(--yellow-deep);background:#fffdf0}
+.gadmin-thumb{flex:0 0 58px;width:58px;height:58px;border-radius:12px;overflow:hidden;background:var(--bg);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:22px}
+.gadmin-thumb img{width:100%;height:100%;object-fit:contain}
+.gadmin-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:2px}
+.gadmin-body b{font-size:14px;letter-spacing:-.02em}
+.gadmin-body em{font-style:normal;font-size:12px;color:var(--muted)}
+.gadmin-meta{font-size:12px;color:var(--muted)}
+.gadmin-meta strong{color:#b08600}
+.gadmin-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end}
+.gadmin-stock{display:inline-flex;align-items:center;gap:6px;padding:3px 6px;border-radius:999px;background:var(--bg);border:1px solid var(--line)}
+.gadmin-stock button{width:26px;height:26px;border-radius:50%;border:1px solid var(--line-strong);background:#fff;font-weight:900;line-height:1;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
+.gadmin-stock button:active{background:var(--cream)}
+.gadmin-stock b{min-width:22px;text-align:center;font-size:12.5px}
+.goods-order .delivery-head .badge{font-size:11px}
+
+@media (max-width:900px){
+  .goods-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (max-width:820px){
+  .goods-hero{flex-direction:column;padding:22px}
+  .goods-balance{min-width:0}
+  .goods-form-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .gadmin-row{flex-wrap:wrap}
+  .gadmin-acts{width:100%;justify-content:flex-start}
+}
+@media (max-width:620px){
+  .goods-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+  .goods-hero-copy h2{font-size:25px}
+  .goods-name{font-size:14px}
+  .goods-points b{font-size:19px}
+  .goods-card .btn{font-size:13px;padding:10px 12px;min-height:42px}
+  .goods-form-grid{grid-template-columns:1fr}
+  .goods-redeem-thumb{flex-basis:64px;width:64px;height:64px}
+  .gorder-card{gap:11px;padding:12px}
+  .gorder-thumb{flex-basis:62px;width:62px;height:62px}
+}
+@media (max-width:380px){
+  .goods-grid{grid-template-columns:1fr}
+}
