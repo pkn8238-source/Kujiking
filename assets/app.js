@@ -4239,7 +4239,7 @@
       void card.offsetWidth;          /* 초기 스타일을 먼저 계산해야 샤악 개봉 전환이 돈다 */
       card.classList.add('is-open', 'is-fresh');
     }
-    kujiSound.snap(0);
+    kujiSound.snap(gradeLevel(r.grade));   /* 개봉 터짐 — 등급이 높을수록 묵직하게 */
     refreshLastStrip(board, d);
     if (refreshRevealHud(d)) {
       setTimeout(function () {
@@ -4419,6 +4419,13 @@
          실어 두꺼운 티켓 절취선이 뜯기는 쫀득한 탄력을 냈다. 재생 간격도 46→80ms
        · snap: 110→45Hz 묵직한 배 펀치 + 165→430→220Hz 로 솟구쳤다 감기는 '뽕!' 트랜지언트
          (2단 볼륨 엔벨로프) + 3500Hz 종이 끝단 크랙을 더해 '탁' 이 아니라 '뽕!' 이 되게
+
+     v4.1.2 — 안드로이드 진동(손맛) 강화
+       · 4~18ms 딸깍 수준이던 navigator.vibrate 패턴을 35~140ms 타격으로 올렸다
+       · tear: 진행도에 따라 14→26ms 로 길어지고 절반을 넘으면 7→14ms 꼬리 펄스가 붙는다(74ms 쓰로틀)
+       · snap: 등급별 [35,20,55] / [40,20,75] / [45,20,85,20,60] / [55,25,110,25,80]
+       · seal: 두근-두근 [45,140,65,140,50], 승격 1막·1차·2차도 각각 묵직한 패턴으로
+       · 진동은 '소리 꺼짐' 토글과 분리 — 소리만 끄고 손맛은 남는다
   */
   var kujiSound = (function () {
     var RATE = 44100;              /* 22.05k → 44.1k: 바스락·반짝임·트랜지언트 해상도 */
@@ -5069,8 +5076,9 @@
       else if (key === 'promote2') waPromote2();
       else waFanfare(key === 'fanA' ? 3 : key === 'fanB' ? 2 : key === 'fanC' ? 1 : 0);
     }
+    /* 진동은 '소리 꺼짐'과 무관하게 울린다(무음으로 두고 손맛만 원하는 경우가 있다).
+       안드로이드 크롬·삼성 인터넷만 지원. iOS 사파리는 애플 정책상 navigator.vibrate 가 없어 조용히 무시된다. */
     function buzz(pattern) {
-      /* 안드로이드 크롬·삼성 인터넷만 지원. iOS 사파리는 애플 정책상 navigator.vibrate 가 없어 조용히 무시된다 */
       try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
     }
 
@@ -5503,73 +5511,94 @@
     }
 
     /* ================= 바깥으로 내보내는 재생 API ================= */
+    /* ---------- 손맛(진동) 패턴 (v4.1.2 안드로이드 강화) ----------
+       navigator.vibrate 는 안드로이드 크롬·삼성 인터넷·엣지에만 있다. iOS 사파리는 API 자체가
+       없어 buzz() 가 조용히 넘어간다(예외도 삼킨다). 배열은 [진동, 쉼, 진동, …] 밀리초 순서.
+       4~18ms 딸깍에서 손에 묵직하게 남는 35~140ms 타격으로 올렸다.
+       진동은 '소리 꺼짐' 토글과 분리 — 무음으로 두고 손맛만 원하는 경우가 있어 소리만 끈다. */
+    var HAP_SNAP = [                        /* 탁! 뽕! 터지는 순간 — 등급별 타격 */
+      [35, 20, 55],                         /* lv0  D 이하 */
+      [40, 20, 75],                         /* lv1  C상 */
+      [45, 20, 85, 20, 60],                 /* lv2  B상 */
+      [55, 25, 110, 25, 80]                 /* lv3  A·라스트원 */
+    ];
+    var HAP_SEAL = [45, 140, 65, 140, 50];  /* 두근-두근 황금 봉인 */
+    var HAP_PROMO_C = [35, 30, 55];         /* 승격 1막 — C상 확인 */
+    var HAP_PROMOTE1 = [45, 30, 45, 25, 95];            /* 1차 승격 C → B */
+    var HAP_PROMOTE2 = [65, 35, 65, 30, 140, 35, 100];  /* 2차 승격 B → A·라스트원 */
+    var HAP_FAN = [                         /* 결과 팡파레 — 등급별 마무리 */
+      [22, 32, 20], [35, 40, 55], [45, 35, 65, 30, 90], [60, 30, 80, 30, 110, 40, 160]
+    ];
+    /* 찢기: 진행도가 오를수록 길어지는 본체(14→26ms) + 꼬리 펄스(7→14ms).
+       총 49ms 이하라 74ms 쓰로틀 안에서 끊기지 않고 '드르륵' 결이 이어진다. */
+    function ripPattern(a) {
+      var body = Math.round(14 + a * 12);
+      return a > 0.5 ? [body, 9, Math.round(7 + a * 7)] : [body];
+    }
     /* 찢기 진행률이 한 칸(약 11%) 넘어갈 때마다 짧은 진동 — 종이 '드드득' 찢는 리듬.
-       진동 모터가 뭉개지지 않게 78ms 간격으로 제한하고, 소리와 같은 지점에서 울린다. */
+       진동 모터가 뭉개지지 않게 74ms 간격으로 제한하고, 소리와 같은 지점에서 울린다. */
     var ripStep = -1, ripAt = 0, tearSeq = 0;
     function ripBuzz(a) {
-      if (isMuted()) return;
       var step = Math.floor(a * 9);
       if (step === ripStep) return;
       var now = Date.now();
-      if (now - ripAt < 78) return;
+      if (now - ripAt < 74) return;
       ripStep = step;
       ripAt = now;
-      buzz([12]);
+      buzz(ripPattern(a));
     }
     /* 종이 찢기: 진행도가 오를수록 피치·세기·팬이 함께 올라간다 (0.92 → 1.28배).
        80ms 간격 — 마디(0.026~0.034초)보다 넉넉히 벌려 드래그할 때 톱니가 겹쳐
-       뭉개지지 않고 "드르륵-드르륵" 이어지게 한다(진동은 ripBuzz 가 78ms 로 따로 제한). */
+       뭉개지지 않고 "드르륵-드르륵" 이어지게 한다(진동은 ripBuzz 가 74ms 로 따로 제한). */
     function tear(amount) {
-      if (isMuted()) return;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
       var now = Date.now();
-      if (now - lastTick < 80) return;
-      lastTick = now;
-      tearSeq = (tearSeq + 1) % 3;
-      play('tear' + tearSeq, {
-        rate: 0.92 + a * 0.36 + (Math.random() - 0.5) * 0.04,
-        vol: 0.62 + a * 0.38,
-        pan: (Math.random() - 0.5) * 0.34
-      });
+      if (now - lastTick >= 80) {
+        lastTick = now;
+        if (!isMuted()) {
+          tearSeq = (tearSeq + 1) % 3;
+          play('tear' + tearSeq, {
+            rate: 0.92 + a * 0.36 + (Math.random() - 0.5) * 0.04,
+            vol: 0.62 + a * 0.38,
+            pan: (Math.random() - 0.5) * 0.34
+          });
+        }
+      }
       ripBuzz(a);
     }
     function snap(level) {
-      if (isMuted()) return;
       var lv = Math.max(0, Math.min(3, Math.round(Number(level) || 0)));
-      play('snap' + lv, { vol: 1 });
-      buzz(lv >= 2 ? [0, 22, 26, 16, 40, 30] : [18]);
+      if (!isMuted()) play('snap' + lv, { vol: 1 });
+      buzz(HAP_SNAP[lv]);
     }
     function sealCharge() {
-      if (isMuted()) return;
       var now = Date.now();
       if (now - lastSeal < 700) return;
       lastSeal = now;
-      play('seal', { vol: 1 });
-      buzz([35, 40, 60]);
+      if (!isMuted()) play('seal', { vol: 1 });
+      buzz(HAP_SEAL);
     }
     /* 승격 연출 1막(등급 확인 첫 비트) / 1차·2차 승격 */
     function cBeat() {
-      if (isMuted()) return;
-      play('promoC', { vol: 1 });
-      buzz([0, 12, 16]);
+      if (!isMuted()) play('promoC', { vol: 1 });
+      buzz(HAP_PROMO_C);
     }
     function promote(step) {
-      if (isMuted()) return;
       var s = Number(step) >= 2 ? 2 : 1;
-      play(s >= 2 ? 'promote2' : 'promote1', { vol: 1 });
-      buzz(s >= 2 ? [50, 40, 70, 40, 110] : [35, 40, 60]);
+      if (!isMuted()) play(s >= 2 ? 'promote2' : 'promote1', { vol: 1 });
+      buzz(s >= 2 ? HAP_PROMOTE2 : HAP_PROMOTE1);
     }
     function fanfare(level) {
-      if (isMuted()) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
-      play(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', { vol: 1 });
-      buzz(lv >= 3 ? [50, 40, 70, 40, 110] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : [18]);
+      if (!isMuted()) play(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', { vol: 1 });
+      buzz(HAP_FAN[lv]);
     }
-    /* 소리 켜기 버튼: 바로 들리는 테스트음 */
+    /* 소리 켜기 버튼: 바로 들리는 테스트음 + 손맛 확인용 짧은 진동 */
     function test(withFanfare) {
       if (isMuted()) return;
       unlock();
       play('snap1', { vol: 1 });
+      buzz(HAP_SNAP[1]);
       if (withFanfare) setTimeout(function () { if (!isMuted()) play('fanC', { vol: 1 }); }, 430);
     }
 
@@ -5973,7 +6002,7 @@
       }
       if (p >= 0.75 && !st.armed) {
         st.armed = true;
-        try { navigator.vibrate && navigator.vibrate(14); } catch (err) {}
+        kujiSound.buzz(28);      /* "놓으면 열려요" — 손끝에 남는 한 방 */
       }
       if (p < 0.72) st.armed = false;
     }
@@ -5992,7 +6021,7 @@
       }
       applyPeel(0, true);
       updatePeelText(0);
-      try { navigator.vibrate && navigator.vibrate(4); } catch (err) {}
+      kujiSound.buzz(20);        /* 그냥 톡 눌렀을 때 — 찢어야 한다는 걸 진동으로도 알린다 */
     }
 
     card.addEventListener('pointerdown', function (e) {
@@ -6191,7 +6220,7 @@
       if (p >= 0.7 && !st.armed) {
         st.armed = true;
         kujiSound.tear(1);
-        try { navigator.vibrate && navigator.vibrate(16); } catch (e) {}
+        kujiSound.buzz(28);      /* 봉인이 거의 갈라졌다는 신호 */
       }
       if (p < 0.68) st.armed = false;
     }
@@ -6321,7 +6350,8 @@
     if (fill) fill.style.width = '100%';
     var txt = $('#sealMeterText');
     if (txt) { txt.textContent = '봉인 해제!'; txt.classList.add('is-armed'); }
-    kujiSound.snap(3);
+    /* 봉인이 깨지는 순간 — 진짜 등급이 곧 드러나므로 그 등급의 타격을 먼저 준다 */
+    kujiSound.snap(gradeLevel(d.result && d.result.grade));
     var stage3 = document.getElementById('sealStage');
     if (stage3) {
       stage3.classList.add('is-burst');
