@@ -4395,20 +4395,41 @@
     '</div>';
   }
 
-  /* ---------- 개봉 효과음: 합성 PCM → Web Audio(AudioBuffer) 재생 ----------
+  /* ---------- 개봉 효과음: 합성 PCM(스테레오 44.1kHz) → Web Audio(AudioBuffer) ----------
      iOS 사파리에서 HTML5 <audio>.play() 는 '미디어' 오디오 세션으로 재생돼
      아이폰 하드웨어 무음 스위치를 무시한다(무음 모드인데 소리가 난다).
      반면 AudioContext(Web Audio)는 무음 스위치를 그대로 따르므로, 합성해 둔
-     16bit PCM 을 AudioBuffer 로 디코드해 BufferSource 로 재생한다.
+     PCM 을 AudioBuffer 로 디코드해 BufferSource 로 재생한다.
      (audioSession 은 'ambient' 로 두고 'playback' 으로는 절대 바꾸지 않는다.)
-     AudioContext 자체가 없는 브라우저에서만 <audio> 로 폴백한다. */
+     AudioContext 자체가 없는 브라우저에서만 <audio> 로 폴백한다.
+
+     v4.1.0 — 손맛(쫀득함·입체감) 업그레이드
+       · 44.1kHz 스테레오 합성: L/R 미세 디튠·패닝·좌우 독립 노이즈로 폰 스피커에서도 폭이 산다
+       · 마스터 체인: 컴프레서(음압 밀도·펀치) → 드라이 + 짧은 스테레오 룸 리버브(입체감)
+         → 리미터. 효과음마다 Wet/Dry 비중을 달리해 찢기는 소리는 건조하게, 팡파레는 넓게
+       · tear(p): 절취선 톱니가 톡톡 끊기는 마이크로 팝 + 180→90Hz 종이 바디 공명,
+         p 가 오를수록 재생 피치(0.92→1.28배)·세기·팬이 함께 올라가는 3가지 변주
+       · snap(lv): 고무줄처럼 튕기는 "촥! 톡!" 피치 드롭 + 서브 펀치 + 맑은 벨 잔향, lv 0~3 차등
+       · seal: 서브로 가슴을 울리는 더블 심장박동 + 금빛 셔머(스테레오 확산)
+       · fanfare/promote: 벨로시티·코러스(디튠)·킥 펀치로 아케이드 뽑기 머신의 손맛
+  */
   var kujiSound = (function () {
-    var RATE = 22050, WA_GAIN = 3.4, PCM_PEAK = 0.95, PCM_GAIN = 1.22;
-    var KEYS = ['tear', 'seal', 'snap', 'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
+    var RATE = 44100;              /* 22.05k → 44.1k: 바스락·반짝임·트랜지언트 해상도 */
+    var PCM_PEAK = 0.92;           /* 버퍼 정규화 피크 */
+    var PCM_GAIN = 1;              /* PCM 버스 기본 게인 (음압은 마스터 컴프가 만든다) */
+    var MASTER_GAIN = 1.45;        /* 컴프 뒤 메이크업 게인 */
+    var WA_GAIN = 3.4;             /* AudioContext 없이 웹오디오 신스로 폴백할 때의 보정 */
+    var KEYS = ['tear0', 'tear1', 'tear2', 'seal', 'snap0', 'snap1', 'snap2', 'snap3',
+      'fanD', 'fanC', 'fanB', 'fanA', 'promoC', 'promote1', 'promote2'];
+    /* 효과음마다 다른 리버브 송신량 — 찢기는 소리는 건조하게, 팡파레는 홀처럼 넓게 */
+    var WET = {
+      tear: 0.06, seal: 0.20, snap: 0.12, fanD: 0.13, fanC: 0.15, fanB: 0.18,
+      fanA: 0.22, promoC: 0.10, promote1: 0.17, promote2: 0.22
+    };
     var muted = null, lastTick = 0, lastSeal = 0, flashTimer = 0;
-    var ctx = null, master = null, pcmBus = null, noiseBuf = null, running = false;
+    var ctx = null, master = null, mixNode = null, revIn = null, running = false;
     var urls = {}, els = {}, cursor = {}, htmlOk = {}, primed = false, primeTries = 0, playSeq = 0;
-    var pcm = {}, abuf = {}, lastPCM = null, gestureHooked = false;
+    var pcm = {}, abuf = {}, gestureHooked = false, prebaked = false, warmTimer = 0;
 
     /* iOS 16.4+ 오디오 세션: 'ambient' = 다른 오디오와 섞이고 하드웨어 무음 스위치를 따른다.
        아이폰 무음 모드에서 사이트도 조용해야 하므로 'playback' 은 절대 쓰지 않는다. */
@@ -4441,45 +4462,84 @@
       }
     }
 
-    /* ================= 16bit PCM WAV 합성기 ================= */
+    /* ================= 스테레오 PCM 합성기 ================= */
     function buf(dur) {
       var n = Math.max(1, Math.round(RATE * dur));
-      return { rate: RATE, n: n, d: new Float32Array(n) };
+      return { rate: RATE, n: n, l: new Float32Array(n), r: new Float32Array(n) };
     }
-    /* 배음을 제한한 파형 하나(피치 글라이드 지원). 사각·톱니의 앨리어싱을 피한다 */
-    function tone(b, t0, dur, f0, vol, type, f1, atk) {
-      var d = b.d, n = b.n, rate = b.rate;
+    /* pan -1(왼쪽) ~ +1(오른쪽). 가운데는 양쪽 0.707 (등출력) */
+    function panG(pan) {
+      var p = pan == null ? 0 : (pan < -1 ? -1 : pan > 1 ? 1 : pan);
+      var a = (p + 1) * Math.PI * 0.25;
+      return [Math.cos(a), Math.sin(a)];
+    }
+    /* 파형 테이블 — 샘플마다 sin() 을 부르지 않아 합성이 10배 이상 빠르다.
+       (첫 화면을 붙잡지 않으려고 배음 합성은 2048 포인트 테이블로 미리 계산해 둔다) */
+    var TBL_N = 2048, TBL = (function () {
+      var specs = {
+        sine: [[1, 1]],
+        triangle: [[1, 1], [3, -1 / 9], [5, 1 / 25], [7, -1 / 49]],
+        square: [[1, 1], [3, 1 / 3], [5, 1 / 5], [7, 1 / 7], [9, 1 / 9]],
+        saw: [[1, 1], [2, 1 / 2], [3, 1 / 3], [4, 1 / 4], [5, 1 / 5], [6, 1 / 6], [7, 1 / 7], [8, 1 / 8]]
+      };
+      var out = {}, key, i, j;
+      for (key in specs) {
+        if (!specs.hasOwnProperty(key)) continue;
+        var sp = specs[key], t = new Float32Array(TBL_N + 1);
+        for (i = 0; i < TBL_N; i++) {
+          var a = 2 * Math.PI * i / TBL_N, sum = 0;
+          for (j = 0; j < sp.length; j++) sum += Math.sin(a * sp[j][0]) * sp[j][1];
+          t[i] = sum;
+        }
+        t[TBL_N] = t[0];
+        out[key] = { d: t, maxH: sp[sp.length - 1][0] };
+      }
+      return out;
+    })();
+    /* 배음을 제한한 파형 하나(피치 글라이드 지원).
+       pan 으로 자리를 잡고, det(센트) 만큼 L/R 을 서로 반대로 디튠해 폭을 만든다. */
+    function tone(b, t0, dur, f0, vol, type, f1, atk, pan, det) {
+      var L = b.l, R = b.r, n = b.n, rate = b.rate;
       var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
       if (len < 2 || f0 <= 0) return;
-      var harms = type === 'sine' ? [1]
-        : type === 'triangle' ? [1, 3, 5, 7]
-        : type === 'square' ? [1, 3, 5, 7, 9]
-        : [1, 2, 3, 4, 5, 6, 7, 8];
+      var tb = TBL[type] || TBL.sine;
+      if (f0 * tb.maxH > rate * 0.45) tb = TBL.sine;   /* 고음에서 배음이 앨리어싱하지 않게 */
+      var td = tb.d, scale = TBL_N / rate;
       var attack = atk == null ? 0.006 : atk;
       var dec = Math.max(0.02, dur * 0.34);
-      var phase = 0, k, h;
+      var decayK = Math.exp(-1 / (dec * rate));
+      var g = panG(pan);
+      var d = det || 0, same = d === 0;
+      var ratioL = same ? 1 : Math.pow(2, d / 1200), ratioR = same ? 1 : Math.pow(2, -d / 1200);
+      var f = f0, glide = f1 ? Math.pow(f1 / f0, 1 / len) : 1;
+      var pL = 0, pR = 0, e = attack > 0 ? 0 : 1, ip, fr, sL, sR;
       for (var i = 0; i < len; i++) {
         var idx = i0 + i;
         if (idx >= n) break;
         if (idx < 0) continue;
-        var t = i / rate, p = i / len;
-        var f = f1 ? f0 * Math.pow(f1 / f0, p) : f0;
-        phase += 2 * Math.PI * f / rate;
-        var s = 0;
-        for (k = 0; k < harms.length; k++) {
-          h = harms[k];
-          if (f * h > rate * 0.45) break;
-          var amp = type === 'triangle' ? (h % 4 === 1 ? 1 : -1) / (h * h) : 1 / h;
-          s += Math.sin(phase * h) * amp;
+        var t = i / rate;
+        pL += f * ratioL * scale;
+        if (pL >= TBL_N) pL -= TBL_N * Math.floor(pL / TBL_N);
+        ip = pL | 0; fr = pL - ip;
+        sL = td[ip] + (td[ip + 1] - td[ip]) * fr;
+        if (same) { sR = sL; }
+        else {
+          pR += f * ratioR * scale;
+          if (pR >= TBL_N) pR -= TBL_N * Math.floor(pR / TBL_N);
+          ip = pR | 0; fr = pR - ip;
+          sR = td[ip] + (td[ip + 1] - td[ip]) * fr;
         }
-        var e = t < attack ? t / attack : Math.exp(-(t - attack) / dec);
-        d[idx] += s * vol * e;
+        if (glide !== 1) f *= glide;
+        if (t < attack) e = t / attack; else e *= decayK;
+        L[idx] += sL * vol * e * g[0];
+        R[idx] += sR * vol * e * g[1];
       }
     }
-    /* 필터를 건 노이즈 한 방 (찢김·지직·펀치) */
+    /* 필터를 건 노이즈 한 방 (찢김·지직·펀치).
+       wide: 좌우에 서로 다른 노이즈를 넣어 '종이 바스락'이 한 점에서 나지 않게 한다. */
     function noise(b, t0, dur, vol, opt) {
       opt = opt || {};
-      var d = b.d, n = b.n, rate = b.rate;
+      var L = b.l, R = b.r, n = b.n, rate = b.rate;
       var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
       if (len < 2) return;
       var type = opt.type || 'bandpass';
@@ -4490,7 +4550,10 @@
       var aLo = 1 - Math.exp(-2 * Math.PI * fcLo / rate);
       var attack = opt.atk == null ? 0.003 : opt.atk;
       var dec = Math.max(0.006, opt.dec || dur * 0.3);
-      var l1 = 0, l2 = 0, l3 = 0, l4 = 0;
+      var g = panG(opt.pan), wide = !!opt.wide;
+      var decayK = Math.exp(-1 / (dec * rate));
+      var l1 = 0, l2 = 0, l3 = 0, l4 = 0, m1 = 0, m2 = 0, m3 = 0, m4 = 0;
+      var e = attack > 0 ? 0 : 1;
       for (var i = 0; i < len; i++) {
         var idx = i0 + i;
         if (idx >= n) break;
@@ -4503,47 +4566,67 @@
         var hp1 = x - l3;
         l4 += aLo * (hp1 - l4);
         var hp2 = hp1 - l4;
-        var s = type === 'lowpass' ? l2 : type === 'highpass' ? hp2 : 2 * (l1 - l3);
+        var sL = type === 'lowpass' ? l2 : type === 'highpass' ? hp2 : 2 * (l1 - l3);
+        var sR = sL;
+        if (wide) {
+          var y = Math.random() * 2 - 1;
+          m1 += aHi * (y - m1);
+          m2 += aHi * (m1 - m2);
+          m3 += aLo * (y - m3);
+          var hp3 = y - m3;
+          m4 += aLo * (hp3 - m4);
+          var hp4 = hp3 - m4;
+          sR = type === 'lowpass' ? m2 : type === 'highpass' ? hp4 : 2 * (m1 - m3);
+        }
         var t = i / rate;
-        var e = t < attack ? t / attack : Math.exp(-(t - attack) / dec);
-        d[idx] += s * vol * e;
+        if (t < attack) e = t / attack; else e *= decayK;
+        L[idx] += sL * vol * e * g[0];
+        R[idx] += sR * vol * e * g[1];
       }
     }
     /* 배를 때리는 저음 (두근 / 쿵) */
-    function thump(b, t0, f0, f1, dur, vol) { tone(b, t0, dur, f0, vol, 'sine', f1, 0.003); }
-    /* 짧게 흩뿌리는 반짝임 */
-    function sparkle(b, t0, count, base, vol) {
+    function thump(b, t0, f0, f1, dur, vol, pan) { tone(b, t0, dur, f0, vol, 'sine', f1, 0.003, pan); }
+    /* 짧게 흩뿌리는 반짝임 — 좌우로 퍼지게 */
+    function sparkle(b, t0, count, base, vol, spread) {
       for (var i = 0; i < count; i++) {
-        tone(b, t0 + i * 0.028 + Math.random() * 0.02, 0.1 + Math.random() * 0.08, base + Math.random() * 1900, vol, 'sine');
+        tone(b, t0 + i * 0.028 + Math.random() * 0.024, 0.1 + Math.random() * 0.1,
+          base + Math.random() * 2000, vol * (0.6 + Math.random() * 0.5), 'sine', null, 0.002,
+          (Math.random() - 0.5) * 2 * (spread == null ? 0.8 : spread));
       }
     }
-    /* Float32 버퍼 → 피크 정규화 PCM (AudioBuffer 재생용 원본) */
+    /* Float32 스테레오 버퍼 → 피크 정규화 PCM (AudioBuffer 재생용 원본) */
     function toPCM(b, peak) {
-      var n = b.n, d = b.d, i, m = 0, a, v;
-      for (i = 0; i < n; i++) { a = d[i] < 0 ? -d[i] : d[i]; if (a > m) m = a; }
-      var g = m > 0.0002 ? (peak || PCM_PEAK) / m : 1;
-      var fade = Math.min(Math.floor(0.01 * b.rate), Math.floor(n / 3));
-      var out = new Float32Array(n);
+      var n = b.n, L = b.l, R = b.r, i, m = 0, a, v;
       for (i = 0; i < n; i++) {
-        v = d[i] * g;
-        if (i > n - fade) v *= (n - i) / fade;
-        out[i] = v > 1 ? 1 : (v < -1 ? -1 : v);
+        a = L[i] < 0 ? -L[i] : L[i]; if (a > m) m = a;
+        a = R[i] < 0 ? -R[i] : R[i]; if (a > m) m = a;
       }
-      return { rate: b.rate, n: n, d: out };
+      var g = m > 0.0002 ? (peak || PCM_PEAK) / m : 1;
+      var fade = Math.min(Math.floor(0.012 * b.rate), Math.floor(n / 3));
+      var fin = Math.min(Math.floor(0.0015 * b.rate), Math.floor(n / 4));
+      var outL = new Float32Array(n), outR = new Float32Array(n);
+      for (i = 0; i < n; i++) {
+        var f = 1;
+        if (i > n - fade) f = (n - i) / fade;
+        else if (i < fin) f = i / fin;
+        v = L[i] * g * f; outL[i] = v > 1 ? 1 : (v < -1 ? -1 : v);
+        v = R[i] * g * f; outR[i] = v > 1 ? 1 : (v < -1 ? -1 : v);
+      }
+      return { rate: b.rate, n: n, l: outL, r: outR };
     }
-    /* 정규화 PCM → 16bit PCM WAV blob URL (AudioContext 가 없을 때의 <audio> 폴백용) */
+    /* 정규화 PCM → 16bit 스테레오 WAV blob URL (AudioContext 가 없을 때의 <audio> 폴백용) */
     function toURL(p) {
-      var n = p.n, d = p.d, i, v;
-      var size = 44 + n * 2, ab = new ArrayBuffer(size), dv = new DataView(ab);
+      var n = p.n, L = p.l, R = p.r, i, v;
+      var size = 44 + n * 4, ab = new ArrayBuffer(size), dv = new DataView(ab);
       function str(off, s) { for (var j = 0; j < s.length; j++) dv.setUint8(off + j, s.charCodeAt(j)); }
       str(0, 'RIFF'); dv.setUint32(4, size - 8, true); str(8, 'WAVE');
-      str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 1, true);
-      dv.setUint32(24, p.rate, true); dv.setUint32(28, p.rate * 2, true);
-      dv.setUint16(32, 2, true); dv.setUint16(34, 16, true);
-      str(36, 'data'); dv.setUint32(40, n * 2, true);
+      str(12, 'fmt '); dv.setUint32(16, 16, true); dv.setUint16(20, 1, true); dv.setUint16(22, 2, true);
+      dv.setUint32(24, p.rate, true); dv.setUint32(28, p.rate * 4, true);
+      dv.setUint16(32, 4, true); dv.setUint16(34, 16, true);
+      str(36, 'data'); dv.setUint32(40, n * 4, true);
       for (i = 0; i < n; i++) {
-        v = d[i];
-        dv.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+        v = L[i]; dv.setInt16(44 + i * 4, v < 0 ? v * 0x8000 : v * 0x7fff, true);
+        v = R[i]; dv.setInt16(46 + i * 4, v < 0 ? v * 0x8000 : v * 0x7fff, true);
       }
       try {
         var blob = new Blob([ab], { type: 'audio/wav' });
@@ -4552,179 +4635,252 @@
       return '';
     }
 
-    /* 종이 찢기: 촘촘한 하이패스 노이즈 + 섬유가 끊기는 짧은 클릭 (0.13초) */
-    function buildTear() {
-      var b = buf(0.13), i;
-      noise(b, 0, 0.12, 0.6, { type: 'bandpass', f: 2600, q: 1.3, dec: 0.05, atk: 0.003 });
-      for (i = 0; i < 6; i++) {
-        noise(b, i * 0.011 + Math.random() * 0.008, 0.05 + Math.random() * 0.035, 0.75,
-          { type: 'highpass', f: 3000 + Math.random() * 3200, q: 0.8, dec: 0.016, atk: 0.0015 });
+    /* 종이 절취선 찢기 — 톱니가 톡톡 끊기는 마이크로 팝 + 종이 바디 공명 (0.17초)
+       v(0~2): 톱니 간격·피치·팬을 조금씩 달리한 변주. 같은 소리가 반복되지 않게 한다. */
+    function buildTear(v) {
+      var b = buf(0.17), i, n, t, base = 3100 + v * 380, jit = 0.9 + v * 0.13;
+      /* ① 절취선이 한 칸씩 끊기는 톡톡 (6~7개) */
+      n = 6 + (v % 2);
+      for (i = 0; i < n; i++) {
+        t = i * 0.016 * jit + Math.random() * 0.008;
+        noise(b, t, 0.03 + Math.random() * 0.02, 0.55 + Math.random() * 0.2,
+          { type: 'bandpass', f: base + Math.random() * 2200, dec: 0.009 + Math.random() * 0.006,
+            atk: 0.0008, pan: (Math.random() - 0.5) * 0.5, wide: true });
+        tone(b, t + 0.001, 0.007, 2100 + Math.random() * 2600, 0.15, 'square', null, 0.0006,
+          (Math.random() - 0.5) * 0.6);
       }
-      for (i = 0; i < 3; i++) tone(b, 0.008 + i * 0.022, 0.014, 3400 + Math.random() * 2200, 0.22, 'square', null, 0.001);
-      tone(b, 0, 0.1, 240, 0.22, 'triangle', 120, 0.004);
-      return toURL(lastPCM = toPCM(b, 0.8));
+      /* ② 180→90Hz 종이 바디 공명: 톡 끊길 때 나는 '툭' */
+      tone(b, 0.002, 0.062, 196 + v * 9, 0.3, 'triangle', 96, 0.002, -0.1 + v * 0.1);
+      tone(b, 0.004, 0.046, 120, 0.22, 'sine', 82, 0.002, 0.12);
+      /* ③ 섬유가 쓸리는 바스락 — 좌우를 따로 만들어 폰 스피커에서도 폭이 느껴진다 */
+      noise(b, 0, 0.13, 0.34, { type: 'bandpass', f: 4600, dec: 0.045, atk: 0.002, wide: true });
+      noise(b, 0.01, 0.1, 0.2, { type: 'highpass', f: 6400, dec: 0.03, atk: 0.004, pan: 0.35 });
+      /* ④ 끝에 톡 남는 작은 마디 */
+      noise(b, 0.1 + v * 0.01, 0.032, 0.4, { type: 'highpass', f: 4200, dec: 0.011, atk: 0.001, pan: -0.3 });
+      return toPCM(b, 0.86);
     }
-    /* 황금 봉인: 두근-두근 심장박동 + 금빛 셔머 + 낮게 깔리는 서브베이스 (0.7초) */
+    /* 황금 봉인: 서브로 가슴을 울리는 더블 심장박동 + 금빛 셔머 (0.95초) */
     function buildSeal() {
-      var b = buf(0.78), i;
-      thump(b, 0.0, 112, 42, 0.3, 0.95);
-      thump(b, 0.0, 56, 30, 0.34, 0.5);
-      thump(b, 0.21, 98, 38, 0.28, 0.75);
-      thump(b, 0.23, 50, 28, 0.3, 0.38);
-      tone(b, 0, 0.76, 60, 0.26, 'sine', 88, 0.05);
-      for (i = 0; i < 8; i++) tone(b, 0.08 + i * 0.072, 0.24, 1700 + Math.random() * 2500, 0.12, 'sine', 2600 + Math.random() * 1600);
-      [261.63, 329.63, 392.0, 523.25].forEach(function (f, k) {
-        tone(b, 0.34 + k * 0.07, 0.42, f, 0.26, 'triangle');
+      var b = buf(0.95), i;
+      /* ① 두근-두근-두근 */
+      thump(b, 0.0, 104, 36, 0.32, 0.9, 0);
+      thump(b, 0.002, 54, 28, 0.36, 0.55, 0);
+      thump(b, 0.2, 96, 33, 0.28, 0.7, 0.05);
+      thump(b, 0.202, 50, 26, 0.3, 0.4, 0);
+      thump(b, 0.62, 88, 30, 0.34, 0.5, -0.05);
+      /* ② 따뜻한 로우패스 저역이 감싸는 느낌 */
+      tone(b, 0, 0.92, 58, 0.28, 'sine', 92, 0.06, 0);
+      tone(b, 0, 0.9, 116, 0.1, 'triangle', 174, 0.08, 0.22, 6);
+      /* ③ 금빛 셔머 — 좌우로 흩날리는 고역 */
+      for (i = 0; i < 11; i++) {
+        tone(b, 0.06 + i * 0.062, 0.3 + Math.random() * 0.2, 1700 + Math.random() * 2600,
+          0.09, 'sine', null, 0.01, (Math.random() - 0.5) * 1.4, 12);
+      }
+      /* ④ 금빛 화음 (좌우로 벌려 감싸는 입체감) */
+      [261.63, 329.63, 392, 523.25].forEach(function (f, k) {
+        tone(b, 0.4 + k * 0.06, 0.5, f, 0.2, 'triangle', null, 0.02, k % 2 ? 0.5 : -0.5, 6);
       });
-      return toURL(lastPCM = toPCM(b, 0.93));
+      noise(b, 0.1, 0.8, 0.05, { type: 'highpass', f: 5200, dec: 0.4, atk: 0.15, wide: true });
+      return toPCM(b, 0.93);
     }
-    /* 찢어지는 순간: 펀치 크랙 + 반짝이는 종소리 (0.38초) */
-    function buildSnap() {
-      var b = buf(0.42), i;
-      noise(b, 0, 0.06, 0.95, { type: 'highpass', f: 4800, q: 0.7, dec: 0.012, atk: 0.001 });
-      noise(b, 0.002, 0.26, 0.75, { type: 'bandpass', f: 2400, q: 0.9, dec: 0.07, atk: 0.002 });
-      thump(b, 0, 190, 50, 0.26, 0.9);
-      tone(b, 0.01, 0.15, 340, 0.38, 'sine', 150, 0.002);
+    /* 찢어지는 순간: 고무줄처럼 튕기는 "촥! 톡!" + 서브 펀치 + 벨 잔향 (lv 0~3) */
+    function buildSnap(lv) {
+      var b = buf(0.52 + lv * 0.1), heavy = 0.6 + lv * 0.16;
+      /* ① 찢어지는 찰나의 크랙 */
+      noise(b, 0, 0.05, 0.72 + lv * 0.06, { type: 'highpass', f: 4600, dec: 0.009, atk: 0.0006, wide: true });
+      /* ② 고무줄이 튕기는 '촥' — 피치가 빠르게 떨어지는 탄성 팝 */
+      tone(b, 0.001, 0.13, 520 + lv * 40, 0.5, 'triangle', 132 - lv * 8, 0.0015, 0.05);
+      tone(b, 0.004, 0.1, 300, 0.3, 'sine', 96, 0.002, -0.12);
+      /* ③ 두꺼운 티켓이 젖혀지는 몸통 */
+      noise(b, 0.004, 0.2, 0.4, { type: 'bandpass', f: 1900, dec: 0.05, atk: 0.0015, wide: true });
+      /* ④ 서브 펀치 — 가슴에 '툭' */
+      thump(b, 0, 132 - lv * 6, 44, 0.22 + lv * 0.05, heavy, 0);
+      thump(b, 0.006, 66, 30, 0.26 + lv * 0.04, 0.5 + lv * 0.1, 0);
+      /* ⑤ 맑은 벨 잔향 — 좌우로 번갈아 퍼진다 */
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
-        tone(b, 0.07 + k * 0.05, 0.34 - k * 0.03, f, 0.3, 'sine');
+        tone(b, 0.055 + k * 0.034, 0.4 + lv * 0.06, f, 0.26 - k * 0.02, 'sine', null, 0.004,
+          k % 2 ? 0.32 : -0.32, 7);
       });
-      for (i = 0; i < 6; i++) tone(b, 0.12 + Math.random() * 0.18, 0.13, 2800 + Math.random() * 2200, 0.12, 'sine');
-      return toURL(lastPCM = toPCM(b, 0.94));
+      if (lv >= 2) tone(b, 0.2, 0.5 + lv * 0.08, 2637, 0.16, 'sine', null, 0.01, 0.45);
+      sparkle(b, 0.08, 4 + lv * 2, 2600, 0.1, 0.75);
+      return toPCM(b, 0.94);
     }
-    /* 등급별 팡파레 — 0: D 이하 팝 · 1: C 밝은 신스 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
+    /* 등급별 팡파레 — 0: D 이하 팝 · 1: C 밝은 화음 · 2: B 금빛 브라스 · 3: A/라스트원 대서사 */
     function buildFanfare(level) {
-      var b, i;
+      var b;
       if (level <= 0) {
-        b = buf(0.85);
-        tone(b, 0, 0.32, 783.99, 0.6, 'triangle');
-        tone(b, 0.1, 0.45, 1046.5, 0.55, 'sine');
-        tone(b, 0.02, 0.26, 1567.98, 0.26, 'sine');
-        tone(b, 0.2, 0.52, 1318.51, 0.36, 'triangle');
-        thump(b, 0, 170, 60, 0.18, 0.55);
-        sparkle(b, 0.12, 7, 2500, 0.16);
-        return toURL(lastPCM = toPCM(b, 0.9));
+        b = buf(0.9);
+        thump(b, 0, 176, 56, 0.2, 0.55, 0);
+        tone(b, 0.001, 0.13, 640, 0.18, 'triangle', 170, 0.002, 0);       /* 뽑기 손맛 킥 */
+        tone(b, 0, 0.32, 783.99, 0.46, 'triangle', null, 0.004, -0.12, 5);
+        tone(b, 0.005, 0.3, 783.99, 0.2, 'sine', null, 0.004, 0.14, 5);
+        tone(b, 0.1, 0.44, 1046.5, 0.42, 'sine', null, 0.004, 0.12, 6);
+        tone(b, 0.02, 0.26, 1567.98, 0.18, 'sine', null, 0.004, -0.36);
+        tone(b, 0.2, 0.5, 1318.51, 0.28, 'triangle', null, 0.006, 0.3, 7);
+        sparkle(b, 0.1, 7, 2500, 0.13, 0.85);
+        return toPCM(b, 0.9);
       }
       if (level === 1) {
-        b = buf(1.05);
+        b = buf(1.08);
+        thump(b, 0, 158, 52, 0.24, 0.62, 0);
+        tone(b, 0.001, 0.12, 620, 0.16, 'triangle', 180, 0.002, 0);
         [523.25, 659.25, 783.99].forEach(function (f, k) {
-          tone(b, k * 0.05, 0.78, f, 0.36, 'saw');
-          tone(b, k * 0.05, 0.55, f * 2, 0.18, 'sine');
+          var pan = (k - 1) * 0.42;
+          tone(b, k * 0.045, 0.8, f, 0.3, 'saw', null, 0.012, pan, 8);
+          tone(b, k * 0.045 + 0.006, 0.6, f, 0.14, 'triangle', null, 0.012, -pan, 8);
+          tone(b, k * 0.045, 0.5, f * 2, 0.13, 'sine', null, 0.008, pan * 0.5);
         });
-        tone(b, 0.3, 0.62, 1046.5, 0.32, 'triangle');
-        tone(b, 0.38, 0.6, 1318.51, 0.3, 'triangle');
-        thump(b, 0, 150, 55, 0.22, 0.6);
-        sparkle(b, 0.3, 10, 2400, 0.14);
-        return toURL(lastPCM = toPCM(b, 0.92));
+        tone(b, 0.28, 0.66, 1046.5, 0.3, 'triangle', null, 0.008, -0.3, 6);
+        tone(b, 0.36, 0.62, 1318.51, 0.28, 'triangle', null, 0.008, 0.3, 6);
+        sparkle(b, 0.3, 10, 2400, 0.13, 0.9);
+        return toPCM(b, 0.92);
       }
       if (level === 2) {
-        b = buf(1.32);
+        b = buf(1.4);
+        thump(b, 0, 164, 48, 0.3, 0.8, 0);
+        thump(b, 0.7, 146, 44, 0.34, 0.66, 0.05);
         [392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
-          var at = k * 0.14;
-          tone(b, at, 0.5, f, 0.42, 'saw');
-          tone(b, at, 0.3, f * 2, 0.2, 'sine');
+          var at = k * 0.13, pan = (k % 2 ? 0.4 : -0.4) * (k > 2 ? 1.2 : 1);
+          tone(b, at, 0.52, f, 0.34, 'saw', null, 0.012, pan, 9);
+          tone(b, at + 0.004, 0.42, f * 1.005, 0.16, 'triangle', null, 0.012, -pan, 9);
+          tone(b, at, 0.3, f * 2, 0.14, 'sine', null, 0.008, pan * 0.6);
         });
-        thump(b, 0, 160, 50, 0.3, 0.75);
-        thump(b, 0.7, 140, 46, 0.34, 0.65);
-        tone(b, 0.7, 0.62, 1567.98, 0.32, 'sine');
-        sparkle(b, 0.62, 12, 2500, 0.14);
-        return toURL(lastPCM = toPCM(b, 0.93));
+        tone(b, 0.72, 0.64, 1567.98, 0.28, 'sine', null, 0.01, 0);
+        sparkle(b, 0.62, 12, 2500, 0.13, 0.95);
+        noise(b, 0.66, 0.7, 0.09, { type: 'highpass', f: 6800, dec: 0.28, atk: 0.06, wide: true });
+        return toPCM(b, 0.93);
       }
-      b = buf(2.0);
+      b = buf(2.05);
       [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
-        var at = k * 0.105;
-        tone(b, at, 0.5, f, 0.4, 'saw');
-        tone(b, at, 0.28, f * 2, 0.2, 'sine');
+        var at = k * 0.1, pan = (k % 2 ? 0.45 : -0.45);
+        tone(b, at, 0.5, f, 0.32, 'saw', null, 0.012, pan, 10);
+        tone(b, at + 0.003, 0.44, f * 1.004, 0.16, 'triangle', null, 0.012, -pan, 10);
+        tone(b, at, 0.3, f * 2, 0.13, 'sine', null, 0.008, pan * 0.5);
       });
-      var tail = 9 * 0.105;
-      [261.63, 392, 523.25].forEach(function (f) { tone(b, tail, 1.0, f, 0.26, 'saw'); });
+      var tail = 9 * 0.1;
+      [261.63, 392, 523.25].forEach(function (f, k) {
+        tone(b, tail, 1.0, f, 0.24, 'saw', null, 0.02, k % 2 ? 0.35 : -0.35, 9);
+      });
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
-        tone(b, tail + k * 0.06, 0.95 - k * 0.1, f, 0.3, 'sine');
+        tone(b, tail + k * 0.06, 0.95 - k * 0.1, f, 0.26, 'sine', null, 0.008, k % 2 ? 0.4 : -0.4, 6);
       });
-      thump(b, 0, 170, 46, 0.42, 0.85);
-      thump(b, tail, 150, 42, 0.5, 0.8);
-      noise(b, tail, 0.95, 0.2, { type: 'highpass', f: 7000, q: 0.6, dec: 0.4, atk: 0.05 });
-      sparkle(b, tail, 18, 2600, 0.16);
-      return toURL(lastPCM = toPCM(b, 0.95));
+      thump(b, 0, 170, 44, 0.44, 0.85, 0);
+      thump(b, tail, 150, 40, 0.5, 0.8, 0);
+      noise(b, tail, 0.95, 0.17, { type: 'highpass', f: 7000, dec: 0.4, atk: 0.05, wide: true });
+      sparkle(b, tail, 18, 2600, 0.14, 1);
+      return toPCM(b, 0.95);
     }
-
-    /* 승격 1막(C상 확인): 짧고 또렷한 밝은 벨 + 반짝임 (0.62초) */
+    /* 승격 1막(C상 확인): 짧고 또렷한 밝은 벨 + 반짝임 (0.66초) */
     function buildPromoC() {
-      var b = buf(0.62);
-      tone(b, 0, 0.22, 880, 0.46, 'triangle');
-      tone(b, 0.07, 0.3, 1174.66, 0.4, 'sine');
-      tone(b, 0.15, 0.36, 1760, 0.26, 'sine', 2349.32);
-      thump(b, 0, 168, 72, 0.14, 0.5);
-      noise(b, 0, 0.09, 0.22, { type: 'highpass', f: 5600, dec: 0.03, atk: 0.002 });
-      sparkle(b, 0.12, 6, 2600, 0.12);
-      return toURL(lastPCM = toPCM(b, 0.9));
+      var b = buf(0.66);
+      thump(b, 0, 172, 68, 0.15, 0.55, 0);
+      tone(b, 0.001, 0.1, 560, 0.14, 'triangle', 200, 0.002, 0);
+      tone(b, 0, 0.24, 880, 0.4, 'triangle', null, 0.004, -0.22, 6);
+      tone(b, 0.06, 0.32, 1174.66, 0.34, 'sine', null, 0.004, 0.24, 6);
+      tone(b, 0.14, 0.38, 1760, 0.22, 'sine', 2349.32, 0.006, -0.1);
+      noise(b, 0, 0.08, 0.16, { type: 'highpass', f: 5600, dec: 0.02, atk: 0.001, wide: true });
+      sparkle(b, 0.1, 6, 2600, 0.11, 0.9);
+      return toPCM(b, 0.9);
     }
-    /* 1차 승격(C → B): 전기 지직 + 위로 훑는 아크 + 상승 화음 (1.05초) */
+    /* 1차 승격(C → B): 전기 지직 + 위로 훑는 아크 + 상승 화음 (1.1초) */
     function buildPromote1() {
-      var b = buf(1.05), i;
+      var b = buf(1.1), i;
       for (i = 0; i < 7; i++) {
-        noise(b, 0.004 + i * 0.026, 0.07, 0.4 + i * 0.03,
-          { type: 'bandpass', f: 1200 + i * 900, dec: 0.018, atk: 0.001 });
+        noise(b, 0.004 + i * 0.026, 0.07, 0.36 + i * 0.03,
+          { type: 'bandpass', f: 1200 + i * 900, dec: 0.016, atk: 0.001, pan: i % 2 ? 0.4 : -0.4, wide: true });
       }
-      tone(b, 0, 0.24, 190, 0.3, 'square', 2500, 0.002);
-      tone(b, 0.02, 0.2, 95, 0.26, 'saw', 760, 0.004);
+      tone(b, 0, 0.24, 190, 0.28, 'square', 2500, 0.002, 0);
+      tone(b, 0.02, 0.22, 95, 0.24, 'saw', 760, 0.004, 0);
       [329.63, 415.3, 523.25].forEach(function (f, k) {
-        tone(b, 0.1 + k * 0.05, 0.52, f * 0.5, 0.3, 'saw', f);
-        tone(b, 0.1 + k * 0.05, 0.4, f, 0.17, 'triangle', f * 1.5);
+        tone(b, 0.1 + k * 0.05, 0.55, f * 0.5, 0.26, 'saw', f, 0.01, (k - 1) * 0.4, 8);
+        tone(b, 0.1 + k * 0.05, 0.42, f, 0.15, 'triangle', f * 1.5, 0.01, (1 - k) * 0.4, 8);
       });
-      thump(b, 0.3, 200, 46, 0.4, 0.85);
-      thump(b, 0.3, 72, 32, 0.5, 0.5);
-      noise(b, 0.3, 0.3, 0.5, { type: 'highpass', f: 4400, dec: 0.08, atk: 0.001 });
+      thump(b, 0.3, 196, 44, 0.4, 0.8, 0);
+      thump(b, 0.3, 70, 30, 0.5, 0.5, 0);
+      noise(b, 0.3, 0.32, 0.4, { type: 'highpass', f: 4400, dec: 0.07, atk: 0.001, wide: true });
       [659.25, 830.61, 987.77, 1318.51].forEach(function (f, k) {
-        tone(b, 0.33 + k * 0.045, 0.55 - k * 0.05, f, 0.28, 'sine');
+        tone(b, 0.33 + k * 0.045, 0.58 - k * 0.05, f, 0.24, 'sine', null, 0.006, k % 2 ? 0.45 : -0.45, 7);
       });
-      sparkle(b, 0.38, 9, 2600, 0.13);
-      return toURL(lastPCM = toPCM(b, 0.94));
+      sparkle(b, 0.38, 9, 2600, 0.12, 1);
+      return toPCM(b, 0.94);
     }
-    /* 2차 승격(B → A·라스트원): 천둥 저음 드롭 + 번개 크랙 + 클라이맥스 팡파레 (2.25초) */
+    /* 2차 승격(B → A·라스트원): 천둥 저음 드롭 + 번개 크랙 + 클라이맥스 팡파레 (2.3초) */
     function buildPromote2() {
-      var b = buf(2.25), i;
-      noise(b, 0, 0.95, 0.5, { type: 'lowpass', f: 380, dec: 0.44, atk: 0.02 });
-      noise(b, 0, 0.22, 0.62, { type: 'highpass', f: 3200, dec: 0.06, atk: 0.001 });
+      var b = buf(2.3), i;
+      noise(b, 0, 0.95, 0.46, { type: 'lowpass', f: 380, dec: 0.44, atk: 0.02, wide: true });
+      noise(b, 0, 0.22, 0.6, { type: 'highpass', f: 3200, dec: 0.06, atk: 0.001, wide: true });
       for (i = 0; i < 9; i++) {
-        noise(b, 0.02 + i * 0.021, 0.065, 0.34 + Math.random() * 0.22,
-          { type: 'highpass', f: 2600 + Math.random() * 4200, dec: 0.013, atk: 0.001 });
+        noise(b, 0.02 + i * 0.021, 0.065, 0.32 + Math.random() * 0.22,
+          { type: 'highpass', f: 2600 + Math.random() * 4200, dec: 0.013, atk: 0.001,
+            pan: (Math.random() - 0.5) * 1.2, wide: true });
       }
-      tone(b, 0, 0.5, 150, 0.5, 'sine', 32, 0.004);
-      thump(b, 0, 132, 28, 0.58, 0.95);
-      thump(b, 0.02, 62, 24, 0.7, 0.6);
+      tone(b, 0, 0.5, 150, 0.48, 'sine', 32, 0.004, 0);
+      thump(b, 0, 132, 28, 0.58, 0.95, 0);
+      thump(b, 0.02, 62, 24, 0.7, 0.6, 0);
       [523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98].forEach(function (f, k) {
-        tone(b, 0.16 + k * 0.072, 0.3, f * 0.5, 0.24, 'saw', f);
-        tone(b, 0.16 + k * 0.072, 0.22, f, 0.14, 'triangle', f * 2);
+        tone(b, 0.16 + k * 0.072, 0.3, f * 0.5, 0.22, 'saw', f, 0.006, (k % 2 ? 0.4 : -0.4), 9);
+        tone(b, 0.16 + k * 0.072, 0.22, f, 0.13, 'triangle', f * 2, 0.006, (k % 2 ? -0.4 : 0.4), 9);
       });
       var t1 = 0.7;
       [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
-        tone(b, t1 + k * 0.055, 0.5, f, 0.32, 'saw');
-        tone(b, t1 + k * 0.055, 0.3, f * 2, 0.16, 'sine');
+        tone(b, t1 + k * 0.055, 0.5, f, 0.3, 'saw', null, 0.012, (k % 2 ? 0.45 : -0.45), 10);
+        tone(b, t1 + k * 0.055, 0.3, f * 2, 0.15, 'sine', null, 0.008, (k % 2 ? -0.45 : 0.45));
       });
       [1046.5, 1318.51, 1567.98, 2093, 2637].forEach(function (f, k) {
-        tone(b, t1 + 0.34 + k * 0.05, 1.35 - k * 0.14, f, 0.28, 'sine');
+        tone(b, t1 + 0.34 + k * 0.05, 1.35 - k * 0.14, f, 0.26, 'sine', null, 0.01, (k % 2 ? 0.5 : -0.5), 6);
       });
-      thump(b, t1 + 0.3, 158, 34, 0.55, 0.9);
-      noise(b, t1 + 0.3, 1.5, 0.2, { type: 'highpass', f: 6800, dec: 0.6, atk: 0.06 });
-      sparkle(b, t1 + 0.34, 22, 2800, 0.14);
-      return toURL(lastPCM = toPCM(b, 0.96));
+      thump(b, t1 + 0.3, 158, 32, 0.55, 0.9, 0);
+      noise(b, t1 + 0.3, 1.5, 0.17, { type: 'highpass', f: 6800, dec: 0.6, atk: 0.06, wide: true });
+      sparkle(b, t1 + 0.34, 22, 2800, 0.13, 1);
+      return toPCM(b, 0.96);
     }
 
-    function buildAll() {
-      try { urls.tear = buildTear(); pcm.tear = lastPCM; } catch (e) {}
-      try { urls.seal = buildSeal(); pcm.seal = lastPCM; } catch (e) {}
-      try { urls.snap = buildSnap(); pcm.snap = lastPCM; } catch (e) {}
-      try { urls.fanD = buildFanfare(0); pcm.fanD = lastPCM; } catch (e) {}
-      try { urls.fanC = buildFanfare(1); pcm.fanC = lastPCM; } catch (e) {}
-      try { urls.fanB = buildFanfare(2); pcm.fanB = lastPCM; } catch (e) {}
-      try { urls.fanA = buildFanfare(3); pcm.fanA = lastPCM; } catch (e) {}
-      try { urls.promoC = buildPromoC(); pcm.promoC = lastPCM; } catch (e) {}
-      try { urls.promote1 = buildPromote1(); pcm.promote1 = lastPCM; } catch (e) {}
-      try { urls.promote2 = buildPromote2(); pcm.promote2 = lastPCM; } catch (e) {}
+    var BUILDERS = {
+      tear0: function () { return buildTear(0); },
+      tear1: function () { return buildTear(1); },
+      tear2: function () { return buildTear(2); },
+      seal: buildSeal,
+      snap0: function () { return buildSnap(0); },
+      snap1: function () { return buildSnap(1); },
+      snap2: function () { return buildSnap(2); },
+      snap3: function () { return buildSnap(3); },
+      fanD: function () { return buildFanfare(0); },
+      fanC: function () { return buildFanfare(1); },
+      fanB: function () { return buildFanfare(2); },
+      fanA: function () { return buildFanfare(3); },
+      promoC: buildPromoC,
+      promote1: buildPromote1,
+      promote2: buildPromote2
+    };
+    /* 필요한 소리만 그때그때 합성한다(첫 화면을 붙잡지 않게). */
+    function ensureKey(key) {
+      if (pcm[key]) return true;
+      var fn = BUILDERS[key];
+      if (!fn) return false;
+      try {
+        pcm[key] = fn();
+        /* AudioContext 가 없는 브라우저에서만 <audio> 폴백용 WAV 를 만든다 */
+        if (!(window.AudioContext || window.webkitAudioContext)) urls[key] = toURL(pcm[key]);
+        return true;
+      } catch (e) { return false; }
     }
-    /* WAV 마다 <audio> 요소를 만들고 사운드별로 1개(찢기는 3개) 풀을 둔다 */
+    /* 페이지가 뜬 뒤 한 소리씩 미리 합성해 둔다 (첫 찢기에서 끊기지 않게) */
+    function prebake() {
+      if (prebaked) return;
+      prebaked = true;
+      var i = 0;
+      var step = function () {
+        if (i >= KEYS.length) return;
+        try { ensureKey(KEYS[i]); } catch (e) {}
+        i++;
+        setTimeout(step, 26);
+      };
+      setTimeout(step, 160);
+    }
+    /* WAV 마다 <audio> 요소를 만든다 (AudioContext 가 없을 때만 쓰인다) */
     function buildElements() {
-      if (els.tear && els.tear.length) return;
+      if (els.tear0 && els.tear0.length) return;
+      if (!Object.keys(urls).length) return;
       var host = null;
       try {
         host = document.getElementById('kujiSoundBank');
@@ -4738,7 +4894,7 @@
       } catch (e) { host = null; }
       KEYS.forEach(function (k) {
         if (!urls[k]) return;
-        var n = k === 'tear' ? 3 : 1, i, el;
+        var n = /^(tear|snap)/.test(k) ? 2 : 1, i, el;
         els[k] = [];
         for (i = 0; i < n; i++) {
           try {
@@ -4758,9 +4914,7 @@
         cursor[k] = 0;
       });
     }
-    /* 첫 제스처에서 모든 <audio> 요소를 무음(muted)으로 한 번 재생해 잠금을 푼다.
-       이후에는 터치가 끝난 뒤(touchmove·setTimeout 안)에도 play() 가 허용된다.
-       이때 소리가 새지 않도록 muted 와 volume 0 을 함께 건다. */
+    /* 첫 제스처에서 모든 <audio> 요소를 무음으로 한 번 재생해 잠금을 푼다(폴백 전용). */
     function prime() {
       if (primed) return;
       var list = [], k, i;
@@ -4785,9 +4939,6 @@
           var p = el.play();
           if (p && p.then) {
             p.then(function () {
-              /* 프라임 도중에 실제 효과음이 시작됐다면 그 소리를 끊지 않는다.
-                 그 경우 이 요소는 무음인 채로 끝까지 흐르게 두고(들리지 않음),
-                 다음 재생 직전에 elPlay 가 muted 를 풀어 준다. */
               try {
                 if (playSeq === seqAtStart) { el.pause(); el.currentTime = 0; el.muted = false; }
               } catch (e) {}
@@ -4807,37 +4958,40 @@
       });
     }
     /* <audio> 로 재생(폴백). 필요할 때 처음 한 번 <audio> 풀을 만든다 */
-    function elPlay(key, vol) {
+    function elPlay(key, opt) {
       if (isMuted()) return true;
+      opt = opt || {};
       var pool = els[key];
       if (!pool || !pool.length) {
         try { buildElements(); } catch (e) {}
         pool = els[key];
       }
-      if (!pool || !pool.length) return false;
+      if (!pool || !pool.length) { fallback(key, opt); return false; }
       var el = pool[cursor[key] % pool.length];
       cursor[key] = (cursor[key] + 1) % 1024;
       playSeq++;
       try { el.muted = false; } catch (e) {}
-      try { el.volume = Math.max(0.05, Math.min(1, vol == null ? 1 : vol)); } catch (e) {}
+      try { el.volume = Math.max(0.05, Math.min(1, opt.vol == null ? 1 : opt.vol)); } catch (e) {}
+      try { el.playbackRate = Math.max(0.85, Math.min(1.35, opt.rate == null ? 1 : opt.rate)); } catch (e) {}
       try { el.pause(); } catch (e) {}
       try { el.currentTime = 0; } catch (e) {}
       var p = null;
       try { p = el.play(); } catch (e) { p = null; }
-      if (!p) { fallback(key, vol); return false; }
+      if (!p) { fallback(key, opt); return false; }
       if (p.then) {
         p.then(function () { htmlOk[key] = true; }, function () {
           htmlOk[key] = false;
-          fallback(key, vol);
+          fallback(key, opt);
         });
       }
       return true;
     }
-    function fallback(key, vol) {
+    function fallback(key, opt) {
       if (isMuted()) return;
-      if (key === 'tear') waTear(vol);
+      opt = opt || {};
+      if (key.indexOf('tear') === 0) waTear(Math.max(0, Math.min(1, ((opt.rate || 1) - 0.92) / 0.36)));
+      else if (key.indexOf('snap') === 0) waSnap(Number(key.slice(4)) || 0);
       else if (key === 'seal') waSeal();
-      else if (key === 'snap') waSnap(0);
       else if (key === 'promoC') waPromoC();
       else if (key === 'promote1') waPromote1();
       else if (key === 'promote2') waPromote2();
@@ -4848,65 +5002,101 @@
       try { if (navigator.vibrate) navigator.vibrate(pattern); } catch (e) {}
     }
 
-    /* ================= 웹오디오 폴백(3.4배 부스트) ================= */
+    /* ================= 웹오디오 마스터 체인 ================= */
+    function impulse(c, sec, decay) {
+      var len = Math.max(1, Math.floor(c.sampleRate * sec));
+      var ir = c.createBuffer(2, len, c.sampleRate);
+      for (var ch = 0; ch < 2; ch++) {
+        var d = ir.getChannelData(ch), lp = 0;
+        for (var i = 0; i < len; i++) {
+          var t = i / len;
+          var x = (Math.random() * 2 - 1) * Math.pow(1 - t, decay) * (ch ? 1 : 0.94);
+          lp += 0.22 * (x - lp);                 /* 저역이 뭉개지지 않게 살짝 하이패스 */
+          d[i] = (x - lp * 0.85) * (i < 12 ? i / 12 : 1);
+        }
+        /* 아주 작은 방의 초기 반사 몇 개 — 손 안에서 나는 느낌의 크기 */
+        var taps = ch ? [0.0021, 0.0043, 0.0091] : [0.0016, 0.0037, 0.0082];
+        for (var k = 0; k < taps.length; k++) {
+          var idx = Math.floor(taps[k] * c.sampleRate);
+          if (idx < len) d[idx] += (k % 2 ? -0.34 : 0.42);
+        }
+      }
+      return ir;
+    }
+    function buildChain(c) {
+      try {
+        mixNode = c.createGain();
+        mixNode.gain.value = 1;
+        var masterGain = c.createGain();
+        masterGain.gain.value = MASTER_GAIN;
+        var comp = null;
+        if (c.createDynamicsCompressor) {
+          /* 쫀득한 음압 밀도: 어택은 조금 늦춰 트랜지언트를 남기고, 릴리즈로 펀치를 되살린다 */
+          comp = c.createDynamicsCompressor();
+          comp.threshold.value = -12;
+          comp.knee.value = 8;
+          comp.ratio.value = 2.8;
+          comp.attack.value = 0.007;
+          comp.release.value = 0.18;
+        }
+        if (comp) {
+          mixNode.connect(comp);
+          var dry = c.createGain();
+          dry.gain.value = 0.95;
+          comp.connect(dry); dry.connect(masterGain);
+          if (c.createConvolver) {
+            var conv = c.createConvolver();
+            conv.buffer = impulse(c, 0.24, 3.2);
+            revIn = c.createGain(); revIn.gain.value = 1;
+            var revOut = c.createGain(); revOut.gain.value = 0.9;
+            revIn.connect(conv); conv.connect(revOut); revOut.connect(masterGain);
+          }
+        } else {
+          mixNode.connect(masterGain);
+        }
+        if (c.createDynamicsCompressor) {
+          var lim = c.createDynamicsCompressor();
+          lim.threshold.value = -1.5;
+          lim.knee.value = 0;
+          lim.ratio.value = 20;
+          lim.attack.value = 0.001;
+          lim.release.value = 0.06;
+          masterGain.connect(lim); lim.connect(c.destination);
+        } else {
+          masterGain.connect(c.destination);
+        }
+        master = masterGain;
+      } catch (e) { mixNode = null; revIn = null; master = null; }
+    }
     function makeCtx() {
       var C = window.AudioContext || window.webkitAudioContext;
       if (!C) return null;
       if (!ctx) {
         try { ctx = new C(); } catch (e) { return null; }
         try { ctx.onstatechange = function () { running = (ctx.state === 'running'); }; } catch (e) {}
-        try {
-          /* PCM 전용 버스: 1.22배로 올리고 리미터로 어깨만 다듬어 크고 또렷하게.
-             (작은 gain 은 iOS 에서 통째로 무음 처리되는 사례가 있다) */
-          if (ctx.createGain) {
-            pcmBus = ctx.createGain();
-            pcmBus.gain.value = PCM_GAIN;
-            if (ctx.createDynamicsCompressor) {
-              var lim = ctx.createDynamicsCompressor();
-              lim.threshold.value = -2;
-              lim.knee.value = 0;
-              lim.ratio.value = 20;
-              lim.attack.value = 0.001;
-              lim.release.value = 0.08;
-              pcmBus.connect(lim);
-              lim.connect(ctx.destination);
-            } else {
-              pcmBus.connect(ctx.destination);
-            }
-          }
-        } catch (e) { pcmBus = null; }
-        try {
-          if (ctx.createDynamicsCompressor) {
-            master = ctx.createDynamicsCompressor();
-            master.threshold.value = -14;
-            master.knee.value = 18;
-            master.ratio.value = 6;
-            master.attack.value = 0.003;
-            master.release.value = 0.22;
-            master.connect(ctx.destination);
-          }
-        } catch (e) { master = null; }
+        buildChain(ctx);
       }
       if (ctx.state !== 'running' && ctx.state !== 'closed') { try { ctx.resume(); } catch (e) {} }
       return ctx;
     }
-    function out(c) { return master || c.destination; }
+    function out(c) { return mixNode || c.destination; }
     function ac() { if (isMuted()) return null; return makeCtx(); }
     function wakeCtx() {
       var c = makeCtx();
       if (!c) return;
       try {
         var p = c.resume();
-        if (p && p.then) p.then(function () { running = (c.state === 'running'); }, function () {});
+        if (p && p.then) p.then(function () { running = (c.state === 'running'); warmSoon(); }, function () {});
       } catch (e) {}
       setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 160);
-      setTimeout(function () { running = !!(ctx && ctx.state === 'running'); }, 480);
+      setTimeout(function () { running = !!(ctx && ctx.state === 'running'); if (running) warmSoon(); }, 480);
     }
     function unlock() {
       ambientSession();
       wakeCtx();
       /* AudioContext 가 없는 브라우저만 <audio> 를 미리 깨워 둔다 */
       if (!(window.AudioContext || window.webkitAudioContext)) prime();
+      prebake();
     }
 
     /* ================= AudioBuffer 재생 (기본) ================= */
@@ -4915,15 +5105,27 @@
       var p = pcm[key];
       if (!p || !ctx) return null;
       try {
-        var b = ctx.createBuffer(1, p.n, p.rate);
-        b.getChannelData(0).set(p.d);
+        var b = ctx.createBuffer(2, p.n, p.rate);
+        b.getChannelData(0).set(p.l);
+        b.getChannelData(1).set(p.r);
         abuf[key] = b;
         return b;
       } catch (e) { return null; }
     }
-    /* BufferSource → 볼륨 GainNode → PCM 버스. 재생이 시작되면 true */
-    function ctxPlay(key, vol) {
+    /* 첫 제스처 뒤 한 번, 만들어 둔 PCM 을 AudioBuffer 로 옮겨 첫 재생의 끊김을 없앤다 */
+    function warmSoon() {
+      if (warmTimer) return;
+      warmTimer = setTimeout(function () {
+        warmTimer = 0;
+        if (!ctx || ctx.state !== 'running') return;
+        for (var i = 0; i < KEYS.length; i++) { if (pcm[KEYS[i]]) { try { audioBuf(KEYS[i]); } catch (e) {} } }
+      }, 260);
+    }
+    /* BufferSource(→ StereoPanner) → GainNode → 믹스 + 리버브 송신.
+       opt: { vol, rate, pan } — rate 는 피치와 길이를 함께 올린다(찢기 텐션). */
+    function ctxPlay(key, opt) {
       if (isMuted()) return true;
+      opt = opt || {};
       var c = makeCtx();
       if (!c) return false;
       if (c.state === 'suspended' || c.state === 'interrupted') { try { c.resume(); } catch (e) {} }
@@ -4932,24 +5134,35 @@
       try {
         var src = c.createBufferSource();
         src.buffer = buf;
-        var v = Math.max(0.05, Math.min(1, vol == null ? 1 : vol));
-        if (c.createGain) {
-          var g = c.createGain();
-          g.gain.value = v;
-          src.connect(g);
-          g.connect(pcmBus || out(c));
-        } else {
-          src.connect(pcmBus || out(c));
+        var rate = opt.rate == null ? 1 : Math.max(0.25, Math.min(4, opt.rate));
+        if (rate !== 1) { try { src.playbackRate.value = rate; } catch (e) {} }
+        var v = Math.max(0.02, Math.min(1, opt.vol == null ? 1 : opt.vol));
+        var g = c.createGain();
+        g.gain.value = v * PCM_GAIN;
+        var tail = g;
+        if (opt.pan && c.createStereoPanner) {
+          var pn = c.createStereoPanner();
+          pn.pan.value = Math.max(-1, Math.min(1, opt.pan));
+          g.connect(pn); tail = pn;
         }
+        tail.connect(out(c));
+        var wetAmt = WET[key.replace(/[0-9]+$/, '')] || 0;
+        if (wetAmt && revIn) {
+          var s = c.createGain();
+          s.gain.value = wetAmt;
+          tail.connect(s); s.connect(revIn);
+        }
+        src.connect(g);
         src.start(0);
         return true;
       } catch (e) { return false; }
     }
     /* 기본은 AudioBuffer, 안 되면 <audio>(→ 웹오디오 신스) 폴백 */
-    function play(key, vol) {
+    function play(key, opt) {
       if (isMuted()) return true;
-      if (ctxPlay(key, vol)) return true;
-      return elPlay(key, vol);
+      ambientSession();
+      if (ensureKey(key) && ctxPlay(key, opt)) return true;
+      return elPlay(key, opt);
     }
     function noiseBuffer(c) {
       if (noiseBuf) return noiseBuf;
@@ -4959,8 +5172,9 @@
       for (var i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
       return noiseBuf;
     }
+    var noiseBuf = null;
     /* 기본 음 하나 (endFreq 로 피치 글라이드) */
-    function blip(c, at, freq, dur, vol, type, endFreq) {
+    function blip(c, at, freq, dur, vol, type, endFreq, pan) {
       var v = Math.min(1, vol * WA_GAIN);
       var o = c.createOscillator(), g = c.createGain();
       o.type = type || 'sine';
@@ -4969,7 +5183,11 @@
       g.gain.setValueAtTime(0.0001, at);
       g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v), at + Math.min(0.014, dur * 0.35));
       g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
-      o.connect(g); g.connect(out(c));
+      var tail = g;
+      if (pan && c.createStereoPanner) {
+        var p = c.createStereoPanner(); p.pan.value = pan; g.connect(p); tail = p;
+      }
+      o.connect(g); tail.connect(out(c));
       o.start(at); o.stop(at + dur + 0.05);
     }
     function thumpWA(c, at, from, to, dur, vol) {
@@ -5001,7 +5219,7 @@
       src.start(at, Math.random() * 0.3, dur + 0.06);
     }
     function sparkleWA(c, at, n, base, vol) {
-      for (var i = 0; i < n; i++) blip(c, at + i * 0.026 + Math.random() * 0.02, (base || 2400) + Math.random() * 1700, 0.08 + Math.random() * 0.07, vol || 0.02, 'sine');
+      for (var i = 0; i < n; i++) blip(c, at + i * 0.026 + Math.random() * 0.02, (base || 2400) + Math.random() * 1700, 0.08 + Math.random() * 0.07, vol || 0.02, 'sine', null, (Math.random() - 0.5) * 1.2);
     }
     function heartbeat(c, at, gain) {
       thumpWA(c, at, 98, 45, 0.3, 0.2 * gain);
@@ -5069,8 +5287,8 @@
       var c = ac();
       if (!c) return;
       var now = c.currentTime + 0.01;
-      blip(c, now, 880, 0.22, 0.09, 'triangle');
-      blip(c, now + 0.07, 1174.66, 0.3, 0.08, 'sine');
+      blip(c, now, 880, 0.22, 0.09, 'triangle', null, -0.2);
+      blip(c, now + 0.07, 1174.66, 0.3, 0.08, 'sine', null, 0.2);
       blip(c, now + 0.15, 1760, 0.34, 0.06, 'sine');
       thumpWA(c, now, 168, 72, 0.14, 0.16);
       sparkleWA(c, now + 0.12, 5, 2600, 0.03);
@@ -5084,13 +5302,13 @@
       }
       blip(c, now, 190, 0.22, 0.09, 'square', 2500);
       [329.63, 415.3, 523.25].forEach(function (f, k) {
-        blip(c, now + 0.08 + k * 0.05, f * 0.5, 0.3, 0.06, 'sawtooth', f);
-        blip(c, now + 0.08 + k * 0.05, f, 0.24, 0.035, 'triangle', f * 1.5);
+        blip(c, now + 0.08 + k * 0.05, f * 0.5, 0.3, 0.06, 'sawtooth', f, (k - 1) * 0.4);
+        blip(c, now + 0.08 + k * 0.05, f, 0.24, 0.035, 'triangle', f * 1.5, (1 - k) * 0.4);
       });
       thumpWA(c, now + 0.3, 190, 46, 0.35, 0.26);
       noiseHit(c, now + 0.3, { type: 'highpass', f0: 4400, vol: 0.13, dur: 0.22, attack: 0.001 });
       [659.25, 830.61, 987.77, 1318.51].forEach(function (f, k) {
-        blip(c, now + 0.34 + k * 0.05, f, 0.5, 0.055, 'sine');
+        blip(c, now + 0.34 + k * 0.05, f, 0.5, 0.055, 'sine', null, k % 2 ? 0.45 : -0.45);
       });
       sparkleWA(c, now + 0.4, 7, 2600, 0.03);
     }
@@ -5108,11 +5326,11 @@
       });
       var t1 = now + 0.68;
       [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, k) {
-        blip(c, t1 + k * 0.055, f, 0.5, 0.07, 'sawtooth');
-        blip(c, t1 + k * 0.055, f * 2, 0.3, 0.03, 'sine');
+        blip(c, t1 + k * 0.055, f, 0.5, 0.07, 'sawtooth', null, k % 2 ? 0.45 : -0.45);
+        blip(c, t1 + k * 0.055, f * 2, 0.3, 0.03, 'sine', null, k % 2 ? -0.45 : 0.45);
       });
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
-        blip(c, t1 + 0.34 + k * 0.05, f, 1.1 - k * 0.12, 0.07, 'sine');
+        blip(c, t1 + 0.34 + k * 0.05, f, 1.1 - k * 0.12, 0.07, 'sine', null, k % 2 ? 0.5 : -0.5);
       });
       thumpWA(c, t1 + 0.3, 158, 34, 0.55, 0.3);
       noiseHit(c, t1 + 0.3, { type: 'highpass', f0: 6800, vol: 0.05, dur: 1.3, attack: 0.06 });
@@ -5131,8 +5349,8 @@
       }
       if (lv === 1) {
         [523.25, 659.25, 783.99].forEach(function (f, i) {
-          blip(c, t0 + i * 0.06, f, 0.52, 0.08, 'sawtooth');
-          blip(c, t0 + i * 0.06, f * 2, 0.3, 0.03, 'sine');
+          blip(c, t0 + i * 0.06, f, 0.52, 0.08, 'sawtooth', null, (i - 1) * 0.4);
+          blip(c, t0 + i * 0.06, f * 2, 0.3, 0.03, 'sine', null, (1 - i) * 0.4);
         });
         [1046.5, 1318.51].forEach(function (f, i) {
           blip(c, t0 + 0.22 + i * 0.06, f, 0.55, 0.06, 'triangle');
@@ -5144,8 +5362,8 @@
       if (lv === 2) {
         [392, 523.25, 659.25, 783.99, 1046.5].forEach(function (f, i) {
           var at = t0 + i * 0.105;
-          blip(c, at, f, 0.44, 0.09, 'sawtooth');
-          blip(c, at + 0.005, f * 2, 0.28, 0.04, 'triangle');
+          blip(c, at, f, 0.44, 0.09, 'sawtooth', null, i % 2 ? 0.4 : -0.4);
+          blip(c, at + 0.005, f * 2, 0.28, 0.04, 'triangle', null, i % 2 ? -0.4 : 0.4);
         });
         thumpWA(c, t0, 150, 52, 0.3, 0.22);
         thumpWA(c, t0 + 0.55, 132, 48, 0.34, 0.2);
@@ -5156,12 +5374,12 @@
       var rise = [261.63, 329.63, 392, 523.25, 659.25, 783.99, 1046.5, 1318.51, 1567.98];
       rise.forEach(function (f, i) {
         var at = t0 + i * 0.082;
-        blip(c, at, f, 0.42, 0.08 + i * 0.003, 'sawtooth');
-        blip(c, at + 0.004, f * 2, 0.22, 0.03, 'triangle');
+        blip(c, at, f, 0.42, 0.08 + i * 0.003, 'sawtooth', null, i % 2 ? 0.45 : -0.45);
+        blip(c, at + 0.004, f * 2, 0.22, 0.03, 'triangle', null, i % 2 ? -0.45 : 0.45);
       });
       var tail = t0 + rise.length * 0.082;
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
-        blip(c, tail + i * 0.07, f, 0.9, 0.09, 'sine');
+        blip(c, tail + i * 0.07, f, 0.9, 0.09, 'sine', null, i % 2 ? 0.5 : -0.5);
       });
       thumpWA(c, t0, 170, 46, 0.42, 0.3);
       thumpWA(c, tail, 148, 42, 0.5, 0.28);
@@ -5172,7 +5390,7 @@
     /* ================= 바깥으로 내보내는 재생 API ================= */
     /* 찢기 진행률이 한 칸(약 11%) 넘어갈 때마다 짧은 진동 — 종이 '드드득' 찢는 리듬.
        진동 모터가 뭉개지지 않게 78ms 간격으로 제한하고, 소리와 같은 지점에서 울린다. */
-    var ripStep = -1, ripAt = 0;
+    var ripStep = -1, ripAt = 0, tearSeq = 0;
     function ripBuzz(a) {
       if (isMuted()) return;
       var step = Math.floor(a * 9);
@@ -5183,19 +5401,25 @@
       ripAt = now;
       buzz([12]);
     }
+    /* 종이 찢기: 진행도가 오를수록 피치·세기·팬이 함께 올라간다 (0.92 → 1.28배) */
     function tear(amount) {
       if (isMuted()) return;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
       var now = Date.now();
-      if (now - lastTick < 50) return;
+      if (now - lastTick < 46) return;
       lastTick = now;
-      play('tear', 0.7 + a * 0.3);
+      tearSeq = (tearSeq + 1) % 3;
+      play('tear' + tearSeq, {
+        rate: 0.92 + a * 0.36 + (Math.random() - 0.5) * 0.04,
+        vol: 0.62 + a * 0.38,
+        pan: (Math.random() - 0.5) * 0.34
+      });
       ripBuzz(a);
     }
     function snap(level) {
       if (isMuted()) return;
-      var lv = Number(level) || 0;
-      play('snap', 1);
+      var lv = Math.max(0, Math.min(3, Math.round(Number(level) || 0)));
+      play('snap' + lv, { vol: 1 });
       buzz(lv >= 2 ? [0, 22, 26, 16, 40, 30] : [18]);
     }
     function sealCharge() {
@@ -5203,33 +5427,33 @@
       var now = Date.now();
       if (now - lastSeal < 700) return;
       lastSeal = now;
-      play('seal', 1);
+      play('seal', { vol: 1 });
       buzz([35, 40, 60]);
     }
     /* 승격 연출 1막(등급 확인 첫 비트) / 1차·2차 승격 */
     function cBeat() {
       if (isMuted()) return;
-      play('promoC', 1);
+      play('promoC', { vol: 1 });
       buzz([0, 12, 16]);
     }
     function promote(step) {
       if (isMuted()) return;
       var s = Number(step) >= 2 ? 2 : 1;
-      play(s >= 2 ? 'promote2' : 'promote1', 1);
+      play(s >= 2 ? 'promote2' : 'promote1', { vol: 1 });
       buzz(s >= 2 ? [50, 40, 70, 40, 110] : [35, 40, 60]);
     }
     function fanfare(level) {
       if (isMuted()) return;
       var lv = level === true ? 3 : (level === false ? 0 : (Number(level) || 0));
-      play(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', 1);
+      play(lv >= 3 ? 'fanA' : lv === 2 ? 'fanB' : lv === 1 ? 'fanC' : 'fanD', { vol: 1 });
       buzz(lv >= 3 ? [50, 40, 70, 40, 110] : lv === 2 ? [0, 26, 34, 22, 40, 30] : lv === 1 ? [0, 16, 22, 20] : [18]);
     }
     /* 소리 켜기 버튼: 바로 들리는 테스트음 */
     function test(withFanfare) {
       if (isMuted()) return;
       unlock();
-      play('snap', 1);
-      if (withFanfare) setTimeout(function () { if (!isMuted()) play('fanC', 1); }, 430);
+      play('snap1', { vol: 1 });
+      if (withFanfare) setTimeout(function () { if (!isMuted()) play('fanC', { vol: 1 }); }, 430);
     }
 
     /* 첫 제스처에서 오디오 잠금 해제.
@@ -5251,11 +5475,11 @@
       });
     }
 
-    /* 시작: PCM 합성 + 세션 타입(ambient) + 제스처 잠금 해제 */
+    /* 시작: 세션 타입(ambient) + 제스처 잠금 해제 + 합성은 idle 에서 조금씩 */
     try {
       ambientSession();
-      buildAll();
       hookGestures();
+      prebake();
     } catch (e) {}
     try { document.addEventListener('DOMContentLoaded', function () { refreshToggle(false); }, { once: true }); } catch (e) {}
 
