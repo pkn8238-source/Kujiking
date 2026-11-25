@@ -4412,6 +4412,13 @@
        · snap(lv): 고무줄처럼 튕기는 "촥! 톡!" 피치 드롭 + 서브 펀치 + 맑은 벨 잔향, lv 0~3 차등
        · seal: 서브로 가슴을 울리는 더블 심장박동 + 금빛 셔머(스테레오 확산)
        · fanfare/promote: 벨로시티·코러스(디튠)·킥 펀치로 아케이드 뽑기 머신의 손맛
+
+     v4.1.1 — "드르륵 뽕" 손맛 튜닝
+       · tear: 0.016초 간격으로 뭉개지던 톱니를 0.026~0.034초 간격 4~5마디로 분리해
+         '드-르-륵' 이 한 칸씩 짚이고, 마디마다 340→140Hz(240→110Hz) 0.022초 탄성 펄스를
+         실어 두꺼운 티켓 절취선이 뜯기는 쫀득한 탄력을 냈다. 재생 간격도 46→80ms
+       · snap: 110→45Hz 묵직한 배 펀치 + 165→430→220Hz 로 솟구쳤다 감기는 '뽕!' 트랜지언트
+         (2단 볼륨 엔벨로프) + 3500Hz 종이 끝단 크랙을 더해 '탁' 이 아니라 '뽕!' 이 되게
   */
   var kujiSound = (function () {
     var RATE = 44100;              /* 22.05k → 44.1k: 바스락·반짝임·트랜지언트 해상도 */
@@ -4586,6 +4593,48 @@
     }
     /* 배를 때리는 저음 (두근 / 쿵) */
     function thump(b, t0, f0, f1, dur, vol, pan) { tone(b, t0, dur, f0, vol, 'sine', f1, 0.003, pan); }
+    /* 피치가 솟구쳤다 감기는 탄성 톤 — tone() 은 한 방향 글라이드만 그리므로
+       '뽕!' 의 봉우리 곡선(예: 165 → 430 → 220Hz)을 직접 그린다.
+       볼륨은 어택 → 12ms 유지 → 지수 감쇠의 2단 엔벨로프(탱글하게 튕기는 손맛). */
+    function burst(b, t0, dur, f0, fPeak, fEnd, rise, vol, type, pan, det) {
+      var L = b.l, R = b.r, n = b.n, rate = b.rate;
+      var i0 = Math.round(t0 * rate), len = Math.round(dur * rate);
+      if (len < 8 || f0 <= 0) return;
+      var tb = TBL[type] || TBL.sine;
+      if (Math.max(f0, fPeak) * tb.maxH > rate * 0.45) tb = TBL.sine;
+      var td = tb.d, scale = TBL_N / rate, g = panG(pan);
+      var d = det || 0, same = d === 0;
+      var ratioL = same ? 1 : Math.pow(2, d / 1200), ratioR = same ? 1 : Math.pow(2, -d / 1200);
+      var riseN = Math.max(2, Math.round((rise || 0.03) * rate));
+      var atkN = Math.max(2, Math.round(0.0025 * rate));
+      var holdN = riseN + Math.round(0.012 * rate);
+      var tauK = Math.exp(-1 / (0.055 * rate));      /* 감기는 구간의 볼륨 풀림 */
+      var pL = 0, pR = 0, ip, fr, sL, sR, f = f0, e = 0;
+      for (var i = 0; i < len; i++) {
+        var idx = i0 + i;
+        if (idx >= n) break;
+        if (idx < 0) continue;
+        /* 봉우리까지는 빠르게 솟구치고(감속 곡선), 그 뒤로는 지수적으로 감긴다 */
+        if (i < riseN) f = f0 + (fPeak - f0) * Math.pow(i / riseN, 0.55);
+        else f = fEnd + (fPeak - fEnd) * Math.exp(-(i - riseN) / (0.028 * rate));
+        pL += f * ratioL * scale;
+        if (pL >= TBL_N) pL -= TBL_N * Math.floor(pL / TBL_N);
+        ip = pL | 0; fr = pL - ip;
+        sL = td[ip] + (td[ip + 1] - td[ip]) * fr;
+        if (same) { sR = sL; }
+        else {
+          pR += f * ratioR * scale;
+          if (pR >= TBL_N) pR -= TBL_N * Math.floor(pR / TBL_N);
+          ip = pR | 0; fr = pR - ip;
+          sR = td[ip] + (td[ip + 1] - td[ip]) * fr;
+        }
+        if (i < atkN) e = i / atkN;
+        else if (i < holdN) e = 1;
+        else e *= tauK;
+        L[idx] += sL * vol * e * g[0];
+        R[idx] += sR * vol * e * g[1];
+      }
+    }
     /* 짧게 흩뿌리는 반짝임 — 좌우로 퍼지게 */
     function sparkle(b, t0, count, base, vol, spread) {
       for (var i = 0; i < count; i++) {
@@ -4635,28 +4684,42 @@
       return '';
     }
 
-    /* 종이 절취선 찢기 — 톱니가 톡톡 끊기는 마이크로 팝 + 종이 바디 공명 (0.17초)
-       v(0~2): 톱니 간격·피치·팬을 조금씩 달리한 변주. 같은 소리가 반복되지 않게 한다. */
+    /* 종이 절취선 찢기 — "드르륵" (0.22~0.24초)
+       0.016초 간격으로 뭉쳐 '치이익' 으로 들리던 톱니를 0.026~0.034초 간격 4~5마디로
+       벌려 '드-르-륵' 이 한 칸씩 귀에 짚이게 하고, 마디마다 두꺼운 종이가 젖혀지는
+       0.022초 중저역 탄성 펄스(340→140Hz / 240→110Hz)를 실어 쫀득한 탄력을 낸다.
+       v(0~2): 마디 수·간격·음높이·팬을 달리한 변주 — 같은 소리가 반복되지 않는다. */
     function buildTear(v) {
-      var b = buf(0.17), i, n, t, base = 3100 + v * 380, jit = 0.9 + v * 0.13;
-      /* ① 절취선이 한 칸씩 끊기는 톡톡 (6~7개) */
-      n = 6 + (v % 2);
+      var b = buf(0.22 + v * 0.012), i, n, t, ang, last;
+      var base = 2600 + v * 320, jit = 0.96 + v * 0.02;
+      var times = [];
+      /* ① 마디 시각을 먼저 잡아 둔다 — 섬유 소리와 바디 펄스가 같은 지점에서 터져야 '톡' 이 된다 */
+      n = v === 2 ? 5 : 4;
+      t = 0.004;
       for (i = 0; i < n; i++) {
-        t = i * 0.016 * jit + Math.random() * 0.008;
-        noise(b, t, 0.03 + Math.random() * 0.02, 0.55 + Math.random() * 0.2,
-          { type: 'bandpass', f: base + Math.random() * 2200, dec: 0.009 + Math.random() * 0.006,
-            atk: 0.0008, pan: (Math.random() - 0.5) * 0.5, wide: true });
-        tone(b, t + 0.001, 0.007, 2100 + Math.random() * 2600, 0.15, 'square', null, 0.0006,
-          (Math.random() - 0.5) * 0.6);
+        times.push(t);
+        t += (0.026 + v * 0.002 + Math.random() * 0.006) * jit;
       }
-      /* ② 180→90Hz 종이 바디 공명: 톡 끊길 때 나는 '툭' */
-      tone(b, 0.002, 0.062, 196 + v * 9, 0.3, 'triangle', 96, 0.002, -0.1 + v * 0.1);
-      tone(b, 0.004, 0.046, 120, 0.22, 'sine', 82, 0.002, 0.12);
-      /* ③ 섬유가 쓸리는 바스락 — 좌우를 따로 만들어 폰 스피커에서도 폭이 느껴진다 */
-      noise(b, 0, 0.13, 0.34, { type: 'bandpass', f: 4600, dec: 0.045, atk: 0.002, wide: true });
-      noise(b, 0.01, 0.1, 0.2, { type: 'highpass', f: 6400, dec: 0.03, atk: 0.004, pan: 0.35 });
-      /* ④ 끝에 톡 남는 작은 마디 */
-      noise(b, 0.1 + v * 0.01, 0.032, 0.4, { type: 'highpass', f: 4200, dec: 0.011, atk: 0.001, pan: -0.3 });
+      for (i = 0; i < n; i++) {
+        t = times[i]; last = i === n - 1;
+        ang = (Math.random() - 0.5) * 0.8;
+        /* ② 종이 섬유가 끊기는 2200~3800Hz — 마디마다 조금씩 다른 결 */
+        noise(b, t, 0.028 + Math.random() * 0.014, (last ? 0.68 : 0.86) + Math.random() * 0.14,
+          { type: 'bandpass', f: base + Math.random() * 1100, dec: 0.011 + Math.random() * 0.005,
+            atk: 0.0009, pan: ang, wide: true });
+        /* ③ 톱니가 끊기는 짧은 고역 틱 */
+        tone(b, t + 0.0012, 0.0075, 2300 + Math.random() * 2200, 0.16, 'square', null, 0.0006, ang * 0.5);
+        /* ④ 쫀득한 바디 톡 — 절취선에서 두꺼운 종이가 젖혀지는 탄력 (340→140 / 240→110Hz) */
+        tone(b, t + 0.001, 0.022, i % 2 ? 340 : 300, 0.27, 'triangle', i % 2 ? 140 : 128, 0.0015, ang * 0.8, 4);
+        tone(b, t + 0.0014, 0.02, i % 2 ? 240 : 215, 0.17, 'sine', 110, 0.0015, -ang * 0.5);
+      }
+      /* ⑤ 종이 통 전체가 한 번 울리는 몸통 (마디 전체를 덮는 공명) */
+      tone(b, 0.003, 0.075, 196 + v * 9, 0.2, 'triangle', 96, 0.003, -0.1 + v * 0.1);
+      tone(b, 0.005, 0.05, 118, 0.14, 'sine', 82, 0.003, 0.12);
+      /* ⑥ 섬유가 쓸리는 바스락 — 좌우를 따로 만들어 폰 스피커에서도 폭이 느껴진다 */
+      noise(b, 0, 0.17, 0.24, { type: 'bandpass', f: 3000, dec: 0.055, atk: 0.003, wide: true });
+      /* ⑦ 끝에 톡 남는 작은 마디 */
+      noise(b, times[n - 1] + 0.026, 0.028, 0.34, { type: 'highpass', f: 4200, dec: 0.01, atk: 0.001, pan: -0.3 });
       return toPCM(b, 0.86);
     }
     /* 황금 봉인: 서브로 가슴을 울리는 더블 심장박동 + 금빛 셔머 (0.95초) */
@@ -4683,20 +4746,29 @@
       noise(b, 0.1, 0.8, 0.05, { type: 'highpass', f: 5200, dec: 0.4, atk: 0.15, wide: true });
       return toPCM(b, 0.93);
     }
-    /* 찢어지는 순간: 고무줄처럼 튕기는 "촥! 톡!" + 서브 펀치 + 벨 잔향 (lv 0~3) */
+    /* 찢어지는 순간: "뽕!" — 저역 어택 → 솟구쳤다 감기는 탄성 팝 → 벨 잔향 (lv 0~3)
+       520→132Hz 로 떨어지기만 하던 '탁' 에, 110→45Hz 묵직한 배 펀치와
+       165→430→220Hz '뽕!' 트랜지언트를 얹어 코르크·볼이 튕기는 쫀득한 탄성을 낸다.
+       (아이폰 스피커는 200Hz 아래를 거의 못 내므로 중역 팝이 귀로 들리는 핵심이다) */
     function buildSnap(lv) {
-      var b = buf(0.52 + lv * 0.1), heavy = 0.6 + lv * 0.16;
+      var b = buf(0.56 + lv * 0.1), heavy = 0.6 + lv * 0.14;
       /* ① 찢어지는 찰나의 크랙 */
-      noise(b, 0, 0.05, 0.72 + lv * 0.06, { type: 'highpass', f: 4600, dec: 0.009, atk: 0.0006, wide: true });
-      /* ② 고무줄이 튕기는 '촥' — 피치가 빠르게 떨어지는 탄성 팝 */
-      tone(b, 0.001, 0.13, 520 + lv * 40, 0.5, 'triangle', 132 - lv * 8, 0.0015, 0.05);
-      tone(b, 0.004, 0.1, 300, 0.3, 'sine', 96, 0.002, -0.12);
-      /* ③ 두꺼운 티켓이 젖혀지는 몸통 */
-      noise(b, 0.004, 0.2, 0.4, { type: 'bandpass', f: 1900, dec: 0.05, atk: 0.0015, wide: true });
-      /* ④ 서브 펀치 — 가슴에 '툭' */
-      thump(b, 0, 132 - lv * 6, 44, 0.22 + lv * 0.05, heavy, 0);
-      thump(b, 0.006, 66, 30, 0.26 + lv * 0.04, 0.5 + lv * 0.1, 0);
-      /* ⑤ 맑은 벨 잔향 — 좌우로 번갈아 퍼진다 */
+      noise(b, 0, 0.045, 0.66 + lv * 0.06, { type: 'highpass', f: 3500, dec: 0.009, atk: 0.0005, wide: true });
+      /* ② 묵직한 배 펀치 — 110→45Hz 아주 짧은 저역 어택이 '뽕' 의 무게를 받친다 */
+      thump(b, 0, 110, 45, 0.11 + lv * 0.012, 0.8, 0);
+      tone(b, 0.001, 0.06, 78, 0.4, 'sine', 38, 0.002, 0);
+      /* ③ 핵심 '뽕!' — 165 → 430Hz(0.032초) 솟구쳤다 430 → 220Hz(0.09초) 감기는 탄성 팝 */
+      burst(b, 0.001, 0.115, 165 + lv * 6, 430 + lv * 30, 220 + lv * 14, 0.032, 0.62, 'triangle', 0.04, 4);
+      burst(b, 0.0015, 0.105, 330 + lv * 12, 860 + lv * 60, 440 + lv * 28, 0.03, 0.2, 'sine', -0.12, -4);
+      /* ④ 고무줄이 튕기는 '촥' — 뒤에 살짝 깔리는 피치 드롭 */
+      tone(b, 0.004, 0.12, 520 + lv * 40, 0.32, 'triangle', 132 - lv * 8, 0.0015, -0.08);
+      /* ⑤ 두꺼운 티켓이 젖혀지는 몸통 */
+      noise(b, 0.005, 0.2, 0.36, { type: 'bandpass', f: 1900, dec: 0.05, atk: 0.0015, wide: true });
+      /* ⑥ 서브 — 가슴에 남는 여운 */
+      thump(b, 0.006, 66, 30, 0.28 + lv * 0.04, 0.45 + lv * 0.1, 0);
+      /* ⑦ 종이 끝단이 튕기는 짧은 크랙 (3500Hz) */
+      noise(b, 0.028, 0.03, 0.34, { type: 'bandpass', f: 3500, dec: 0.008, atk: 0.0006, pan: 0.3 });
+      /* ⑧ 맑은 벨 잔향 — 좌우로 번갈아 퍼진다 */
       [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, k) {
         tone(b, 0.055 + k * 0.034, 0.4 + lv * 0.06, f, 0.26 - k * 0.02, 'sine', null, 0.004,
           k % 2 ? 0.32 : -0.32, 7);
@@ -5255,27 +5327,46 @@
       if (!c) return;
       var now = c.currentTime;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
+      /* v4.1.1: 2200~3800Hz 섬유 + 340→140Hz 쫀득한 바디 톡을 같이 낸다 */
       noiseHit(c, now, {
-        f0: 1200 + a * 2600 + Math.random() * 700,
-        f1: 2200 + a * 3800,
-        sweep: 0.055,
-        q: 0.7 + a * 0.9,
-        vol: 0.06 + a * 0.12,
-        dur: 0.06 + Math.random() * 0.05,
-        attack: 0.004
+        f0: 2200 + a * 1100 + Math.random() * 400,
+        f1: 2600 + a * 1200,
+        sweep: 0.03,
+        q: 0.8 + a * 1.1,
+        vol: 0.07 + a * 0.13,
+        dur: 0.04 + Math.random() * 0.02,
+        attack: 0.001
       });
-      blip(c, now + 0.004, 2600 + a * 3200 + Math.random() * 1400, 0.03, 0.03 + a * 0.05, 'square');
-      thumpWA(c, now, 240, 110, 0.07, 0.05 + a * 0.05);
+      blip(c, now + 0.002, 2400 + a * 2000 + Math.random() * 1200, 0.008, 0.02 + a * 0.03, 'square');
+      thumpWA(c, now, 340, 140, 0.022, 0.06 + a * 0.04);
+      thumpWA(c, now, 196, 96, 0.075, 0.04 + a * 0.03);
+    }
+    /* '뽕!' — 피치가 솟구쳤다 감기는 탄성 팝 (웹오디오 신스 폴백) */
+    function popWA(c, at, f0, fPeak, fEnd, rise, dur, vol) {
+      var o = c.createOscillator(), g = c.createGain();
+      o.type = 'triangle';
+      o.frequency.setValueAtTime(Math.max(20, f0), at);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, fPeak), at + rise);
+      o.frequency.exponentialRampToValueAtTime(Math.max(20, fEnd), at + dur);
+      var v = Math.min(1, vol * WA_GAIN);
+      g.gain.setValueAtTime(0.0001, at);
+      g.gain.exponentialRampToValueAtTime(Math.max(0.0004, v), at + 0.003);
+      g.gain.setValueAtTime(Math.max(0.0004, v), at + rise + 0.012);
+      g.gain.exponentialRampToValueAtTime(0.0001, at + dur);
+      o.connect(g); g.connect(out(c));
+      o.start(at); o.stop(at + dur + 0.04);
     }
     function waSnap(level) {
       var c = ac();
       if (!c) return;
       var lv = Number(level) || 0;
       var now = c.currentTime;
-      noiseHit(c, now, { type: 'highpass', f0: 1400, vol: 0.3 + lv * 0.05, dur: 0.11, attack: 0.001 });
-      noiseHit(c, now, { f0: 3000, f1: 680, sweep: 0.22, q: 0.7, vol: 0.26, dur: 0.3 });
-      thumpWA(c, now, 180, 52, 0.24, 0.3 + lv * 0.05);
-      blip(c, now + 0.01, 330, 0.14, 0.12, 'sine', 140);
+      noiseHit(c, now, { type: 'highpass', f0: 3500, vol: 0.28 + lv * 0.05, dur: 0.06, attack: 0.0005 });
+      noiseHit(c, now, { f0: 3000, f1: 1900, sweep: 0.2, q: 0.7, vol: 0.24, dur: 0.28 });
+      thumpWA(c, now, 110, 45, 0.12, 0.3 + lv * 0.04);
+      popWA(c, now + 0.001, 165 + lv * 6, 430 + lv * 30, 220 + lv * 14, 0.032, 0.12, 0.2);
+      blip(c, now + 0.01, 330, 0.14, 0.1, 'sine', 140);
+      noiseHit(c, now + 0.028, { f0: 3500, q: 1.2, vol: 0.1, dur: 0.05, attack: 0.001 });
       sparkleWA(c, now + 0.05, 4 + lv * 3, 2200 + lv * 250, 0.07);
       if (lv >= 2) {
         [1046.5, 1318.51, 1567.98, 2093].forEach(function (f, i) {
@@ -5425,12 +5516,14 @@
       ripAt = now;
       buzz([12]);
     }
-    /* 종이 찢기: 진행도가 오를수록 피치·세기·팬이 함께 올라간다 (0.92 → 1.28배) */
+    /* 종이 찢기: 진행도가 오를수록 피치·세기·팬이 함께 올라간다 (0.92 → 1.28배).
+       80ms 간격 — 마디(0.026~0.034초)보다 넉넉히 벌려 드래그할 때 톱니가 겹쳐
+       뭉개지지 않고 "드르륵-드르륵" 이어지게 한다(진동은 ripBuzz 가 78ms 로 따로 제한). */
     function tear(amount) {
       if (isMuted()) return;
       var a = Math.max(0, Math.min(1, Number(amount) || 0));
       var now = Date.now();
-      if (now - lastTick < 46) return;
+      if (now - lastTick < 80) return;
       lastTick = now;
       tearSeq = (tearSeq + 1) % 3;
       play('tear' + tearSeq, {
