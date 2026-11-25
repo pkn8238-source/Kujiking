@@ -123,7 +123,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.8';
+  var COVER_VER = '4.2.9';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -2979,7 +2979,7 @@
      6. 헤더 · 공통 조각
      ========================================================= */
   function availableCoupons() {
-    return (state.myCoupons || []).filter(function (c) { return !c.usedAt && !couponPending[c.id]; });
+    return (state.myCoupons || []).filter(function (c) { return !c.usedAt && !couponIsSpent(c.id); });
   }
   function couponsFor(board) {
     return availableCoupons().filter(function (c) { return !c.boardId || c.boardId === board.id; })
@@ -2994,7 +2994,33 @@
      '이미 사용한 쿠폰'이 납니다. 제출 즉시 로컬에서 사용으로 표시하고,
      서버가 실패한 경우에만 되돌립니다.
      ========================================================= */
-  var couponPending = {};      /* couponId -> { usedAt, usedDrawId } (되돌리기용 이전 값) */
+  var couponPending = {};      /* couponId -> { usedAt, usedDrawId, settled } (되돌리기용 이전 값) */
+  var couponSpent = {};        /* 이 화면에서 확실히 쓴 couponId — 목록이 예전 상태로 돌아와도 다시 권하지 않는다 */
+
+  /* 보유 쿠폰 목록의 출처 — 실서버는 state.myCoupons, 데모(로컬)는 state.coupons 다.
+     v4.2.9: 두 배열은 서로 다른 시점의 목록을 들고 있을 수 있어(새로고침이 state.myCoupons 만
+     새 배열로 바꾸는 사이 등) 쿠폰 한 장을 찾을 때는 state.myCoupons 를 먼저, 없으면 state.coupons 도 본다.
+     예전에는 state.coupons 만 보고 있어서 실서버에서 쿠폰을 찾지 못하면 낙관 표시를 통째로 건너뛰었다. */
+  function myCouponLists() {
+    var lists = [];
+    if (state.myCoupons && state.myCoupons.length) lists.push(state.myCoupons);
+    if (state.coupons && state.coupons.length && state.coupons !== state.myCoupons) lists.push(state.coupons);
+    return lists;
+  }
+  function findMyCoupon(id) {
+    if (!id) return null;
+    var lists = myCouponLists();
+    for (var i = 0; i < lists.length; i++) {
+      for (var k = 0; k < lists[i].length; k++) {
+        if (String(lists[i][k].id) === String(id)) return lists[i][k];
+      }
+    }
+    return null;
+  }
+  /* 이미 쓴 쿠폰인가 — 서버 목록이 아직 '미사용'이어도 낙관 표시·확정 표시가 있으면 쓴 것으로 본다 */
+  function couponIsSpent(id) {
+    return !!(id && (couponPending[id] || couponSpent[id]));
+  }
 
   function markCouponsPending(ids) {
     /* 로컬(데모) 모드는 Backend.draw 가 즉시 사용 처리하므로 낙관 표시가 필요 없다.
@@ -3002,10 +3028,14 @@
     if (Backend.mode !== 'supabase') return;
     (ids || []).forEach(function (id) {
       if (!id || couponPending[id]) return;
-      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
-      if (!c) return;
-      couponPending[id] = { usedAt: c.usedAt || null, usedDrawId: c.usedDrawId || null };
-      c.usedAt = nowISO();
+      var c = findMyCoupon(id);
+      couponPending[id] = {
+        usedAt: c ? (c.usedAt || null) : null,
+        usedDrawId: c ? (c.usedDrawId || null) : null
+      };
+      couponSpent[id] = true;
+      /* 목록에서 찾았으면 그 자리에서 '사용'으로 바꿔 헤더·뽑기판 숫자가 즉시 -1 되게 한다 */
+      if (c) c.usedAt = nowISO();
     });
     syncCouponChips();
   }
@@ -3018,27 +3048,30 @@
     });
   }
 
-  /* 서버 목록에 사용으로 반영된 쿠폰은 임시 표시를 거둔다 */
+  /* 서버 목록에 사용으로 반영된 쿠폰은 임시 표시를 거둔다.
+     목록에 아직 없거나 아직 '미사용'이면 표시를 그대로 둔다 — 늦게 도착한 예전 목록이
+     쿠폰을 되살려도 다음 카드에서 같은 쿠폰이 다시 나오지 않게. */
   function pruneCouponPending() {
     Object.keys(couponPending).forEach(function (id) {
-      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
-      if (!c) { delete couponPending[id]; return; }
-      if (c.usedAt) delete couponPending[id];
+      var c = findMyCoupon(id);
+      if (c && c.usedAt) { delete couponPending[id]; delete couponSpent[id]; }
     });
   }
 
   function rollbackCouponsPending(ids) {
     (ids || []).forEach(function (id) {
       var prev = couponPending[id];
-      if (!prev) return;
-      var c = (state.coupons || []).filter(function (x) { return x.id === id; })[0];
-      if (c) { c.usedAt = prev.usedAt; c.usedDrawId = prev.usedDrawId; }
+      if (!prev) { delete couponSpent[id]; return; }
+      if (prev.settled) return;            /* 서버가 이미 사용으로 확정한 쿠폰은 되돌리지 않는다 */
       delete couponPending[id];
+      delete couponSpent[id];
+      var c = findMyCoupon(id);
+      if (c) { c.usedAt = prev.usedAt || null; c.usedDrawId = prev.usedDrawId || null; }
     });
     syncCouponChips();
   }
 
-  /* 상단·판 사이드의 보유 뽑기권 숫자를 바로 맞춘다 */
+  /* 상단·판 사이드의 보유 뽑기권 숫자를 바로 맞춘다 (state.myCoupons 기준) */
   function syncCouponChips() {
     var n = availableCoupons().length;
     var chip = $('#userCoupons');
@@ -3049,29 +3082,36 @@
     }
   }
 
-  /* 뽑은 번호를 기다리지 않고 화면에 바로 반영 — 티켓 셀·등급 현황·남은 장수 (v4.2.8) */
-  function syncBoardAfterDraw(board, no) {
-    if (!board) return;
+  /* 뽑은 번호를 기다리지 않고 화면에 바로 칠한다 — 티켓 셀·등급 현황·남은 장수 (v4.2.9)
+     화면에 떠 있는 판이 이 판인지는 객체 참조가 아니라 id 로 확인한다
+     (백그라운드 새로고침이 state.boards 의 객체를 새로 만들어도 놓치지 않게). */
+  function paintOpenCell(board, no) {
+    if (!board || !board.id) return;
     var n = Number(no);
-    if (ui.view === 'board' && getBoard(ui.boardId) === board) {
-      var opened = (board.opens || []).filter(function (o) { return o.n === n; })[0];
-      var cell = document.querySelector('#ticketGrid .ticket[data-n="' + n + '"]');
-      if (cell && opened && !cell.classList.contains('is-open')) cell.outerHTML = ticketCellHTML(n, opened);
-      var summary = $('#gridSummary');
-      if (summary) summary.textContent = fmt(board.tickets) + '장 중 ' + fmt(remaining(board)) + '장 남음 · 판매 ' + fmt(openedCount(board)) + '장';
-      var sc = $('#salesCount');
-      if (sc) sc.textContent = fmt(openedCount(board));
-      renderBoardStatus(board);
-      renderBoardHero(board);
-      renderQueuePanel(board);
-    }
+    if (!(n > 0)) return;
+    if (ui.view !== 'board') return;
+    var cur = getBoard(ui.boardId);
+    if (!cur || cur.id !== board.id) return;
+    var opened = (cur.opens || []).filter(function (o) { return o.n === n; })[0];
+    if (!opened) return;
+    var cell = document.querySelector('#ticketGrid .ticket[data-n="' + n + '"]');
+    if (cell && !cell.classList.contains('is-open')) cell.outerHTML = ticketCellHTML(n, opened);
+    var summary = $('#gridSummary');
+    if (summary) summary.textContent = fmt(cur.tickets) + '장 중 ' + fmt(remaining(cur)) + '장 남음 · 판매 ' + fmt(openedCount(cur)) + '장';
+    var sc = $('#salesCount');
+    if (sc) sc.textContent = fmt(openedCount(cur));
+    renderBoardStatus(cur);
+    renderBoardHero(cur);
+    renderQueuePanel(cur);
   }
 
   /* 서버 응답의 판매 결과를 새로고침 없이 화면 상태에 먼저 반영한다 */
   function applyDrawOpenLocally(board, no, res) {
     if (!board || !res || !(Number(no) > 0)) return;
-    var opens = board.opens || (board.opens = []);
     var n = Number(no);
+    /* 새로고침이 state.boards 를 새 객체로 갈아 끼웠을 수 있으니, 지금 화면이 쓰는 판 객체에 기록한다 */
+    var target = (board.id ? getBoard(board.id) : null) || board;
+    var opens = target.opens || (target.opens = []);
     if (!opens.some(function (o) { return o.n === n; })) {
       var u = me();
       opens.unshift({
@@ -3081,11 +3121,11 @@
       });
     }
     if (res.lastOneWon) {
-      if (!board.lastOneWinnerName) board.lastOneWinnerName = me() ? maskName(me().nickname) : '게스트';
-      if (!board.lastOneWonAt) board.lastOneWonAt = nowISO();
+      if (!target.lastOneWinnerName) target.lastOneWinnerName = me() ? maskName(me().nickname) : '게스트';
+      if (!target.lastOneWonAt) target.lastOneWonAt = nowISO();
     }
     syncPointsBalance(res);
-    syncBoardAfterDraw(board, n);
+    paintOpenCell(target, n);
     syncCouponChips();
   }
 
@@ -6368,13 +6408,40 @@
       /* 전체 새로고침은 뒤에서 — 카드를 바로 이어 까도 막히지 않게 (v4.2.7) */
       scheduleBackgroundRefresh(1200);
     } catch (e) {
+      var emsg = errMsg(e);
+      /* 방금 쓴 뽑기권이 서버에 이미 '사용'으로 남아 있던 경우(다른 창·기기에서 쓴 경우 등)
+         — 그 쿠폰은 확정 처리하고, 목록을 새로 받아 다음 뽑기권으로 한 번만 다시 시도한다.
+         (같은 뽑기권을 또 보내 '이미 사용한 쿠폰'에서 막히는 일을 없앤다) */
+      if (d.couponId && !d.retried && /이미 사용|사용할 수 없는 쿠폰/.test(emsg)) {
+        d.retried = true;
+        settleCouponsPending([d.couponId]);
+        try {
+          await Backend.refreshData();
+          var nb = getBoard(d.boardId);
+          var nextC = nb ? couponsFor(nb)[0] : null;
+          if (nextC && ui.draw === d && d.step === 'peel') {
+            d.couponId = nextC.id;
+            d.busy = true;
+            markCouponsPending([d.couponId]);
+            prepareDraw();
+            return;
+          }
+        } catch (e2) {}
+        if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(emsg, 'err'); return; }
+        d.busy = false;
+        ui.draw = { boardId: d.boardId, n: d.n, step: 'source', busy: false };
+        renderDrawModal();
+        toast('뽑기권 상태를 새로 고쳤어요. 다시 한 번 눌러 주세요.', 'err');
+        try { await Backend.refreshData(); renderAll(); } catch (e3) {}
+        return;
+      }
       /* 실패한 경우에만 쿠폰 사용 표시를 되돌린다 */
       rollbackCouponsPending([d.couponId]);
-      if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(errMsg(e), 'err'); return; }
+      if (!ui.draw || ui.draw !== d || d.step !== 'peel') { toast(emsg, 'err'); return; }
       d.busy = false;
       ui.draw = { boardId: d.boardId, n: d.n, step: 'source', busy: false };
       renderDrawModal();
-      toast(errMsg(e), 'err');
+      toast(emsg, 'err');
       try { await Backend.refreshData(); renderAll(); } catch (e2) {}
     }
   }
