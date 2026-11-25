@@ -3376,3 +3376,6 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
   .store-bar-btn{font-size:14.5px;min-height:50px;gap:6px}
   .store-bar-n{width:17px;height:17px;font-size:12px}
 }
+/* 코드 입력 모달 안 — 보유 뽑기권으로 바로 뽑기 */
+.code-quick{margin-top:12px;padding-top:12px;border-top:1px dashed var(--line-strong);text-align:center}
+.code-quick .result-meta{margin:0 0 8px}

@@ -8887,6 +8887,13 @@
           else renderMy();
           break;
         case 'open-code-modal': openCodeModal(); break;
+        case 'code-quick-coupon': {
+          closeModal();
+          if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
+          var qcGrid = $('#ticketGrid');
+          if (qcGrid) qcGrid.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          break;
+        }
         case 'open-policy': openPolicyModal(el.getAttribute('data-policy')); break;
         case 'queue-join': queueJoin(getBoard(ui.boardId)); break;
         case 'queue-leave': queueLeave(getBoard(ui.boardId)); break;
@@ -8931,14 +8938,7 @@
           if (!sbBoard) break;
           if (remaining(sbBoard) === 0) { toast('이 판은 전량 소진되었어요', 'err'); break; }
           if (sbBoard.status === 'closed') { toast('이 판은 판매가 종료되었어요', 'err'); break; }
-          /* 이미 이 판에 쓸 뽑기권이 있으면 바로 번호 고르기로, 없으면 코드 입력창 */
-          if (me() && couponsFor(sbBoard).length) {
-            if (ui.boardTab !== 'main') { ui.boardTab = 'main'; renderBoard(); }
-            var sbGrid = $('#ticketGrid');
-            if (sbGrid) sbGrid.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            toast('뽑기권이 있어요. 번호를 고르면 바로 뽑을 수 있어요.', 'ok');
-            break;
-          }
+          /* 코드 입력창을 바로 연다. 이 판에 쓸 뽑기권이 있으면 창 안에 '바로 뽑기'도 함께 보인다. */
           openCodeModal();
           break;
         }
@@ -9865,6 +9865,12 @@
         '<p class="field-error" data-role="code-error" role="alert"></p>' +
         '<button class="btn btn-primary" type="submit">코드 확인</button>' +
       '</form>' +
+      (board && me() && couponsFor(board).length
+        ? '<div class="code-quick">' +
+            '<p class="result-meta">이 판에 쓸 뽑기권 <b>' + fmt(couponsFor(board).length) + '장</b>이 있어요.</p>' +
+            '<button class="btn btn-outline btn-block btn-sm" type="button" data-action="code-quick-coupon">뽑기권으로 바로 뽑기</button>' +
+          '</div>'
+        : '') +
       (board ? '<p class="result-meta">사용할 판 · ' + h(board.title) + '</p>' : ''));
   }
 
