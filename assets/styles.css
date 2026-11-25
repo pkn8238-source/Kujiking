@@ -3864,3 +3864,6 @@ body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
   .prize-gallery.prize-gallery--rest .prize-meta>.prize-left{font-size:8px;padding:1px 2px;letter-spacing:-.05em}
   .prize-gallery.prize-gallery--top .prize-meta>.prize-left{letter-spacing:-.03em}
 }
+/* v4.3.5 — 상품 구성 제목에 붙은 '실시간' 배지가 좁은 폭에서도 넘치지 않게 */
+.prizes-head h2{flex-wrap:wrap;row-gap:4px}
+@media (max-width:400px){.prizes-head h2 .badge-live{font-size:10.5px;padding:3px 8px}}
