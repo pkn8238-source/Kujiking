@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.4, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.5, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -3070,7 +3070,7 @@
     if (summary) summary.textContent = fmt(cur.tickets) + '장 중 ' + fmt(remaining(cur)) + '장 남음 · 판매 ' + fmt(openedCount(cur)) + '장';
     var sc = $('#salesCount');
     if (sc) sc.textContent = fmt(openedCount(cur));
-    renderBoardStatus(cur);
+    renderPrizesPanel(cur);
     renderBoardHero(cur);
     renderQueuePanel(cur);
   }
@@ -3727,7 +3727,6 @@
     renderBoardHero(board);
     renderBoardStoreBar(board);
     renderCouponCard(board);
-    renderBoardStatus(board);
     renderTicketGrid(board);
     renderMultiDraw(board);
     renderQueuePanel(board);
@@ -3835,44 +3834,6 @@
         : '<p class="aside-hint">이 판에 쓸 수 있는 뽑기권이 없어요. 스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 넣으면 뽑기권이 바로 지급됩니다.</p>' +
           '<button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 입력</button>' +
           '<div class="aside-note">다른 판 전용 쿠폰은 해당 판에서만 쓸 수 있어요.</div>');
-  }
-
-  function tierThumb(t, cls) {
-    if (t && !t.image && (t.pointOnly || String(t.grade).toUpperCase() === 'P')) {
-      return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상" loading="lazy" decoding="async"></span>';
-    }
-    if (!t || !t.image) {
-      return '<span class="' + (cls || 'tier-thumb') + ' is-empty" style="background:' + gradeColor(t ? t.grade : 'e') + '22">' +
-        '<b style="color:' + gradeColor(t ? t.grade : 'e') + '">' + h(t ? t.grade : '-') + '</b></span>';
-    }
-    return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label || '') + '" loading="lazy" decoding="async"></span>';
-  }
-
-  function renderBoardStatus(board) {
-    var el = $('#boardStatus');
-    if (!el) return;
-    var lo = lastOneStatus(board);
-    var rows = board.tiers.map(function (t) {
-      var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
-      var left = Number(t.count) - sold;
-      return '<div class="grade-row' + (left <= 0 ? ' is-out' : '') + '">' +
-        tierThumb(t, 'tier-thumb sm') +
-        '<span class="grade-name"><b>' + h(t.label) + '</b>' +
-        '<span><i class="grade-dot" style="background:' + gradeColor(t.grade) + '"></i>' + h(t.grade) + '상 · ' +
-        (t.pointOnly ? '굿즈 포인트 ' + fmt(t.points) + 'P' : h(t.desc || ('전환 ' + fmt(t.points) + 'P'))) + '</span></span>' +
-        '<span class="grade-count">' + (left <= 0 ? '소진' : '<em>' + fmt(left) + '</em> / ' + fmt(t.count)) + '</span>' +
-      '</div>';
-    }).join('');
-    el.innerHTML = '<h2>등급 현황 <span class="badge badge-live">실시간</span></h2>' +
-      '<div class="grade-rows">' + rows + '</div>' +
-      '<button type="button" class="lastone-card' + (lo && lo.won ? ' is-won' : '') + '" data-action="zoom-last">' +
-        (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="" loading="lazy">' : '') +
-        '<span class="lastone-body"><span class="lastone-kicker">LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
-        (lo && lo.won
-          ? '<small class="lastone-won">🏆 라스트원 획득: ' + h(lo.name) + (lo.at ? ' · ' + formatDateTime(lo.at) : '') + '</small>'
-          : (lo && lo.soon ? '<small class="lastone-soon">🔥 라스트원까지 ' + fmt(lo.left) + '장!</small>' : '')) +
-        (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span>' +
-      '</button>';
   }
 
   function ticketCellHTML(n, o) {
@@ -4254,21 +4215,25 @@
     var total = board.tickets || 1;
     var cardHtml = function (t) {
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
-      var left = Math.max(0, Number(t.count) - sold);
+      var count = Number(t.count) || 0;
+      var left = Math.max(0, count - sold);
+      var out = left === 0;
       var pct = (t.count / total * 100).toFixed(1).replace(/\.0$/, '');
       var isP = String(t.grade).toUpperCase() === 'P' || !!t.pointOnly;
-      return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
+      /* v4.3.5 — 등급 현황 표를 걷어내고 카드 하나에 (남은 수)/(전체 수)와 품절을 담는다 */
+      var stock = out ? '품절' : fmt(left) + '/' + fmt(count);
+      return '<button type="button" class="prize-card' + (out ? ' is-out is-soldout' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '" title="' + h(t.label + ' · ' + (out ? '품절' : '남은 ' + fmt(left) + ' / 전체 ' + fmt(count))) + '">' +
           '<span class="prize-media">' +
             (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
                      : (isP ? '<img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P" loading="lazy" decoding="async">'
                             : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>')) +
             (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
-            (left === 0 ? '<span class="prize-out">소진</span>' : '') +
+            (left === 0 ? '<span class="prize-out">품절</span>' : '') +
           '</span>' +
           '<span class="prize-body">' +
             '<b class="prize-name">' + h(t.label) + '</b>' +
             (t.desc ? '<span class="prize-desc">' + h(t.desc) + '</span>' : '') +
-            '<span class="prize-meta"><span>' + (isP ? '당첨 ' + fmt(t.count) + '장' : '수령 ' + fmt(t.count) + '개') + '</span><span>' + pct + '%</span><span class="prize-left">잔여 ' + fmt(left) + '</span></span>' +
+            '<span class="prize-meta"><span>' + (isP ? '당첨 ' + fmt(t.count) + '장' : '수령 ' + fmt(t.count) + '개') + '</span><span>' + pct + '%</span><span class="prize-left' + (out ? ' is-soldout' : '') + '">' + stock + '</span></span>' +
           '</span>' +
         '</button>';
     };
@@ -4300,7 +4265,7 @@
        확률·수량은 상품 카드(수량·잔여·확률)와 [공정성 검증] › 확률·이용 안내에서 그대로 볼 수 있다. */
     el.innerHTML = '<div class="prizes-head"><div class="prizes-head-main">' +
         '<span class="step-no">1</span>' +
-        '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span></h2>' +
+        '<div><h2>상품 구성 <span class="muted">총 ' + fmt(board.tickets) + '장</span> <span class="badge badge-live">실시간</span></h2>' +
         '<p class="muted">' + ((board.tiers.length * 20 === Number(board.tickets) && !hasPointTier(board))
             ? '등급 ' + board.tiers.length + '종 × 20장 = ' + fmt(board.tickets) + '장 구성입니다. '
             : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
@@ -4310,7 +4275,7 @@
         ? '<div class="prize-gallery prize-gallery--top">' + topCards.join('') + lo + '</div>' +
           '<div class="prize-gallery prize-gallery--rest">' + restCards.join('') + '</div>'
         : '<div class="prize-gallery' + denseCls + '">' + topCards.join('') + lo + '</div>') +
-      '<p class="prizes-note">등급·수량·확률은 각 상품 카드에서 바로 확인할 수 있고, 전체 확률 공시는 <a href="#/fairness" class="inline-link">공정성 검증</a>에서 볼 수 있어요.</p>';
+      '<p class="prizes-note">카드 아래 <b>남은 수/전체 수</b>(예: 18/20)로 잔여를 바로 볼 수 있고, 모두 나간 등급은 <b class="soldout-word">품절</b>로 흐리게 표시됩니다. 전체 확률 공시는 <a href="#/fairness" class="inline-link">공정성 검증</a>에서 볼 수 있어요.</p>';
   }
 
   function renderBoardManual(board) {
@@ -4370,6 +4335,13 @@
     var badgeCls = isLast ? 'grade-last' : ('grade-' + String(grade).toLowerCase());
     var badgeTxt = isLast ? 'LAST ONE' : grade + '상';
     var isP = !isLast && (String(grade).toUpperCase() === 'P' || !!t.pointOnly);
+    /* v4.3.5 — 등급 현황을 카드로 합쳤으니 확대 창에도 남은 수/전체 수를 함께 보여 준다 */
+    var zoomLeft = 0;
+    if (!isLast) {
+      var zoomSold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
+      zoomLeft = Math.max(0, Number(t.count) - zoomSold);
+    }
+    var zoomStock = isLast ? '' : (zoomLeft === 0 ? ' · 품절' : ' · 남은 ' + fmt(zoomLeft) + '/' + fmt(t.count));
     openModal('' +
       '<div class="zoom-view' + (isP ? ' is-point' : '') + '">' +
         '<div class="zoom-media">' +
@@ -4384,7 +4356,7 @@
           ? (board.lastOneWinnerName
               ? '🏆 라스트원 획득: ' + h(board.lastOneWinnerName) + (board.lastOneWonAt ? ' · ' + formatDateTime(board.lastOneWonAt) : '')
               : '마지막 1장을 뽑은 분께 추가 지급')
-          : (isP ? ('당정 ' + fmt(t.count) + '장 · 바로 ' + fmt(t.points) + 'P 적립') : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P'))) + '</p>' +
+          : (isP ? ('당첨 ' + fmt(t.count) + '장 · 바로 ' + fmt(t.points) + 'P 적립') : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P')) + zoomStock) + '</p>' +
         '<div class="modal-actions"><button class="btn btn-dark" data-action="close-modal">닫기</button></div>' +
       '</div>');
   }

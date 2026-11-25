@@ -3838,3 +3838,29 @@ body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
   .prize-gallery.prize-gallery--rest .prize-media-empty{font-size:20px}
   .prize-gallery.prize-gallery--rest .prize-out{font-size:9px;letter-spacing:0}
 }
+
+/* ===== v4.3.5 — '등급 현황' 표를 상품 구성 카드로 합침: 잔여는 N/전체, 다 나간 등급은 품절 ===== */
+.prize-card.is-soldout{border-color:#e0d7cb;background:#faf7f2;box-shadow:none}
+.prize-card.is-soldout:hover{transform:none;box-shadow:none;border-color:#e0d7cb}
+.prize-card.is-soldout .prize-media{background:#f3efe9}
+.prize-card.is-soldout .prize-media img{filter:grayscale(1);opacity:.45}
+.prize-card.is-soldout:hover .prize-media img{transform:none}
+.prize-card.is-soldout .prize-name{color:#9c9186}
+.prize-card.is-soldout .prize-desc{color:#b0a599}
+.prize-card.is-soldout .prize-meta>span{background:#efe9e1;color:#a89d91}
+.prize-card.is-soldout .prize-meta>.prize-left{background:#f7ddd6;color:#b3392b;letter-spacing:0}
+.prize-card.is-soldout .prize-out{background:rgba(23,18,14,.4);font-size:13px;letter-spacing:.08em}
+.prize-card.is-soldout.is-point{background:#faf7f2}
+.prize-card.is-soldout.is-point .prize-media{background:#f3efe9}
+.prize-meta>.prize-left:not(.is-soldout){font-variant-numeric:tabular-nums}
+.prizes-note .soldout-word{color:#b3392b;font-weight:900}
+@media (max-width:760px){
+  .prize-gallery.prize-gallery--top .prize-card.is-soldout .prize-out{font-size:10px}
+  .prize-gallery.prize-gallery--rest .prize-card.is-soldout .prize-out{font-size:8.5px}
+  .prize-gallery.prize-gallery--rest .prize-meta>.prize-left{font-variant-numeric:tabular-nums}
+}
+/* v4.3.5 — 5열 컴팩트 카드에서도 N/전체(최대 3자리)가 잘리지 않게 */
+@media (max-width:760px){
+  .prize-gallery.prize-gallery--rest .prize-meta>.prize-left{font-size:8px;padding:1px 2px;letter-spacing:-.05em}
+  .prize-gallery.prize-gallery--top .prize-meta>.prize-left{letter-spacing:-.03em}
+}
