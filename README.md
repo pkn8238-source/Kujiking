@@ -570,3 +570,16 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 - **라인업 포스터 2종**도 새 컷·새 캐릭터 표기로 다시 그렸습니다(`xmas-chiikawa/lineup.jpg`, `gyaru-chiikawa/lineup.jpg`).
 - 생성 스크립트: `work/kujiking-cutfix/cut2.py`(누끼 v5) · `work/kujiking-cutfix/make_all.py`(23장 카드) · `work/kujiking-xmas/gen_lineup_300.py`(라인업).
 - 등급 설명(desc) 문구는 Supabase `boards.tiers` 를 고쳐야 반영됩니다 — `work/kujiking-cutfix/desc_update.sql` 참고.
+
+## v4.1.9 — 두 판 등급 카드를 '원본 사진 + 스튜디오 화이트'로 전면 교체 (`COVER_VER` 4.1.9)
+
+- 누끼(배경 제거)를 **아예 쓰지 않는 방식**으로 두 판 23장 카드를 다시 만들었습니다. 인형 외곽선·볼체인이 파먹히거나 뚫릴 여지가 원천적으로 없습니다.
+  - 원본 상품 사진에서 **배경 여백만 크롭**하고, 사진 배경의 조명 그라디언트만 평탄화(정규화 컨볼루션)해 카드 바탕색과 정확히 맞췄습니다. 사진 사각형 경계가 보이지 않고 인형 픽셀은 손대지 않습니다.
+  - 배경은 파스텔/핑크 그라데이션을 없애고 `#F5F6F8` 라이트그레이 스튜디오 톤 + 아주 약한 원형 비네트. 흰 인형이 배경에 묻히지 않도록 접지 그림자를 넣었습니다.
+  - 좌상단 등급 배지(컬러 스퀘어클)와 우하단 `N종 중 1개 랜덤` 반투명 다크 알약 배지는 유지, 크기만 슬림하게 조정.
+- 여러 캐릭터 등급은 흰 여백 위에 2·3·4분할로 균형 배치했습니다(칸막이·테두리 없음).
+  - 크리스마스: B 호피 3종 · C 포켓도시락 2종 · D 포켓도시락 2종 · E 산리오 키티 2종 · G 소라빵 3종 · H 프린세스 3종 · I 말레이곰 3종 · J 나고야 2종 · K 샌드위치 2종.
+  - 갸루: D 미니소 과일 4종 · E 미니 바스켓 3종 · F 물 3종 · H 숙취 3종 · J 소라빵 4종.
+- **갸루 라스트원(갸루 하치와레)** 은 상단이 잘려 있던 `raw/last.webp` 대신 9090×치이카와 공식 상품컷 정면 원본(`work/kujiking-cutfix/src/gyaru_hachiware.jpg`)으로 교체했습니다.
+- 검수 시트: `attachments/2026-11-25/kujiking_xmas_frame_cards.png`(12장) · `kujiking_gyaru_frame_cards.png`(11장).
+- 생성 스크립트: `work/kujiking-cutfix/make_studio_cards.py`(렌더러) · `work/kujiking-cutfix/build_studio.py`(23장 배치 정의).
