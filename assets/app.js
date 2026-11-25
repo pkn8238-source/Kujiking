@@ -120,7 +120,9 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.1.4';
+  var COVER_VER = '4.1.5';
+  /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
+  var POINT_IMG = 'assets/products/point/p.jpg';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -3238,6 +3240,9 @@
   }
 
   function tierThumb(t, cls) {
+    if (t && !t.image && (t.pointOnly || String(t.grade).toUpperCase() === 'P')) {
+      return '<span class="' + (cls || 'tier-thumb') + '"><img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상" loading="lazy" decoding="async"></span>';
+    }
     if (!t || !t.image) {
       return '<span class="' + (cls || 'tier-thumb') + ' is-empty" style="background:' + gradeColor(t ? t.grade : 'e') + '22">' +
         '<b style="color:' + gradeColor(t ? t.grade : 'e') + '">' + h(t ? t.grade : '-') + '</b></span>';
@@ -3656,7 +3661,7 @@
       return '<button type="button" class="prize-card' + (left === 0 ? ' is-out' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '">' +
           '<span class="prize-media">' +
             (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
-                     : (isP ? '<span class="prize-media-point"><b>P</b><em>' + fmt(t.points) + 'P</em></span>'
+                     : (isP ? '<img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P" loading="lazy" decoding="async">'
                             : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>')) +
             (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
             (left === 0 ? '<span class="prize-out">소진</span>' : '') +
@@ -3774,7 +3779,8 @@
       '<div class="zoom-view' + (isP ? ' is-point' : '') + '">' +
         '<div class="zoom-media">' +
           (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">'
-                 : (isP ? '<div class="zoom-point"><b>P</b><em>' + fmt(t.points) + 'P</em></div>' : '<div class="zoom-empty">이미지 준비 중</div>')) +
+                 : (isP ? '<img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P">'
+                        : '<div class="zoom-empty">이미지 준비 중</div>')) +
           (image ? '' : '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>') +
         '</div>' +
         '<h2 class="zoom-title">' + h(label) + '</h2>' +
