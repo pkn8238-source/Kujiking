@@ -67,7 +67,8 @@
     { id: 'mid', label: '1만 원대' },
     { id: 'premium', label: '프리미엄' }
   ];
-  var GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L'];
+  /* v4.3.0 — 등급을 A~Z(26) + AA~ 까지 확장. P는 P상(굿즈 포인트) 전용으로 비워 둔다. */
+  var GRADES = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'AA', 'AB', 'AC'];
   /* 관리자 판 편집에서는 P상(굿즈 포인트)도 등급으로 고를 수 있다 */
   var TIER_GRADES = GRADES.concat(['P']);
 
@@ -123,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.2.9';
+  var COVER_VER = '4.3.0';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -1901,6 +1902,7 @@
       var res = await this.sb.rpc('admin_decide_claim', { p_claim_id: id, p_approve: !!approve, p_qty: Number(qty) || null });
       if (res.error) throw res.error;
       await this.loadAdmin();
+      await this.refreshData();   /* v4.3.0 — 구매확인 승인 직후 보유 뽑기권 갱신 */
     },
 
     async requestDelivery(drawId, info) {
@@ -2095,6 +2097,8 @@
       });
       if (res.error) throw res.error;
       await this.loadAdmin();
+      /* v4.3.0 — 관리자 본인에게 지급한 경우 새로고침 없이 뽑기판에 바로 보이도록 보유 쿠폰도 다시 읽는다 */
+      await this.refreshData();
     },
 
     /* 관리자: 회원의 미사용 쿠폰 목록 (쿠폰 회수 모달) — 최근 지급분부터 */
@@ -2138,6 +2142,7 @@
       if (res.error) throw res.error;
       var n = Array.isArray(res.data) ? res.data.length : list.length;
       await this.loadAdmin();
+      await this.refreshData();   /* v4.3.0 — 본인 쿠폰 회수 즉시 반영 */
       return n;
     },
 
@@ -4421,6 +4426,9 @@
     }).join(' · ');
     el.innerHTML = '<h3>뽑기 이용 안내</h3><ul>' +
       '<li>라스트원상은 한 판의 마지막 1장을 뽑은 분께 추가로 지급됩니다.</li>' +
+      '<li><b>마지막 10장 순번제</b> — 남은 티켓이 <b>10장 이하</b>가 되면 여러 장을 한꺼번에 뽑는 <b>연뽑(5·10·15·20장)은 자동으로 잠깁니다.</b></li>' +
+      '<li>이때는 <b>줄서기(대기 순번)</b>에 참여한 뒤 <b>본인 차례에 60초 안에 1장씩</b>만 뽑을 수 있습니다. 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다.</li>' +
+      '<li>그 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</li>' +
       '<li>쿠폰(뽑기권)은 구매확인 승인 후 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
       '<li>뽑기는 <b>뽑기권(쿠폰)</b> 또는 <b>교환 코드</b>로만 할 수 있습니다. 모은 굿즈 포인트(P)는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 굿즈로 교환합니다.</li>' +
@@ -7988,11 +7996,13 @@
     if (stats) {
       var byGrade = {};
       rows.forEach(function (r) { byGrade[r.grade] = (byGrade[r.grade] || 0) + 1; });
-      var grades = [];
-      state.boards.forEach(function (b) {
-        b.tiers.forEach(function (t) { if (grades.indexOf(t.grade) === -1) grades.push(t.grade); });
+      /* v4.3.0 — 등급이 26종을 넘어가므로 통계 칩은 '실제로 뽑힌 등급'만 보여 준다 */
+      var grades = Object.keys(byGrade).filter(function (g) { return String(g).toUpperCase() !== 'LAST'; });
+      grades.sort(function (a, b) {
+        var ia = GRADES.indexOf(String(a).toUpperCase()), ib = GRADES.indexOf(String(b).toUpperCase());
+        if (ia === -1) ia = 900; if (ib === -1) ib = 900;
+        return ia - ib;
       });
-      grades.sort();
       if (!grades.length) grades = GRADES.slice(0, 5);
       stats.innerHTML = '<div class="stat is-highlight"><span>총 뽑은 수</span><strong>' + fmt(rows.length) + '장</strong></div>' +
         grades.map(function (g) {
@@ -8049,16 +8059,18 @@
       '<h3>3. 쿠폰(뽑기권)과 교환 코드</h3>' +
       '<p>뽑기권은 구매확인 승인 후 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
       '<h3>4. 등급 및 상품</h3>' +
-      '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 하위 등급은 굿즈 포인트로 대체 지급될 수 있습니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
-      '<h3>5. 상품 수령</h3>' +
+      '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 실물 등급은 대부분 등급마다 1개씩이고, 하위 등급은 굿즈 포인트(P상)로 대체 지급됩니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
+      '<h3>5. 마지막 10장 순번제</h3>' +
+      '<p>남은 티켓이 <b>10장 이하</b>가 되면 여러 장을 한꺼번에 뽑는 <b>연뽑(5·10·15·20장)은 자동으로 잠깁니다.</b> 이때는 <b>줄서기(대기 순번)</b>에 참여한 뒤 <b>본인 차례에 60초 안에 1장씩</b> 뽑을 수 있으며, 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다. 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</p>' +
+      '<h3>6. 상품 수령</h3>' +
       '<p>당첨 상품은 내 보관함에서 배송 신청한 주소로 발송됩니다. 주소 오류로 인한 반송은 재발송 비용이 발생할 수 있습니다.</p>' +
-      '<h3>6. 배송비 · 합배송</h3>' +
+      '<h3>7. 배송비 · 합배송</h3>' +
       '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
       '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
       kakaoPillHTML('kakao-pill-sm') +
-      '<h3>7. 미성년자 이용</h3>' +
+      '<h3>8. 미성년자 이용</h3>' +
       '<p>미성년자는 법정대리인의 동의를 받은 후 이용할 수 있습니다. 만 14세 미만은 이용할 수 없습니다.</p>' +
-      '<h3>8. 결과 검증</h3>' +
+      '<h3>9. 결과 검증</h3>' +
       '<p>판 종료 후 공개되는 시드와 이 페이지의 검증 도구로 누구나 결과를 다시 계산해 볼 수 있습니다. 계산 규칙은 아래와 같습니다.</p>' +
       '<p style="font-family:var(--font-mono);font-size:11.5px;background:#fff;border:1px solid var(--line-strong);border-radius:8px;padding:10px;margin-top:6px">' +
       'for n in 1..N: h(n) = SHA-256(seed + ":" + n)<br>' +
@@ -9283,7 +9295,7 @@
       if (loDesc) loDesc.value = (kujiSizeOf(lo) || lo.desc || '').slice(0, 60);
     }
 
-    var real = parsed.tiers.slice(0, GRADES.length);
+    var real = parsed.tiers.slice(0, GRADES.length); /* GRADES = 실물 등급 풀(A~Z·AA~, P 제외) */
     var total = Math.min(MAX_TICKETS, Math.max(real.length, real.length * 20));
     var tiers = real.map(function (it) {
       var size = kujiSizeOf(it);
@@ -10158,7 +10170,7 @@
           var rowsBox = $('#tierRows');
           if (!rowsBox) break;
           var used = readTierRows().map(function (r) { return r.grade; });
-          var next = GRADES.filter(function (g) { return used.indexOf(g) === -1; })[0] || 'H';
+          var next = GRADES.filter(function (g) { return used.indexOf(g) === -1; })[0] || 'AA';
           rowsBox.insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: next, label: '', count: 0, points: 0 }]));
           updateTierSummary();
           break;
@@ -11074,6 +11086,7 @@
         '<p>판을 만들 때 무작위 시드를 생성하고 SHA-256 해시를 판매 전에 공개합니다. 번호별 결과는 SHA-256(시드:번호) 값을 정렬해 고정하며, 판이 끝나면 시드를 공개합니다. 누구나 <a href="#/fairness">공정성 검증</a> 페이지에서 해시와 번호별 결과를 다시 계산해 확인할 수 있습니다.</p>' +
         '<h3>4. 마지막 10장 순번제</h3>' +
         '<p>잔여 10장부터는 여러 명이 동시에 몰리지 않도록 1장씩 순번제로 진행합니다. 연뽑(5·10·15·20장)은 잔여 10장 이하에서 사용할 수 없습니다.</p>' +
+        '<p>① 남은 티켓이 <b>10장 이하</b>가 되면 연뽑은 자동으로 잠깁니다. ② <b>줄서기(대기 순번)</b>에 참여한 뒤 본인 차례에 <b>60초 안에 1장씩</b> 뽑을 수 있고, 시간 안에 뽑지 않거나 1장을 뽑으면 다음 대기자에게 차례가 넘어갑니다. ③ 판의 <b>마지막 1장</b>을 뽑은 회원에게 <b>라스트원 상품</b>이 지급됩니다.</p>' +
         biz +
         '<p class="policy-updated">시행일 2026년 11월 25일</p>' +
       '</div>';
@@ -11089,6 +11102,8 @@
       '<p>만 19세 이상 이용할 수 있으며, 미성년자는 법정대리인의 동의 후 이용해야 합니다. 타인의 정보를 도용하거나 1인이 여러 계정으로 참여하는 행위는 제한될 수 있습니다.</p>' +
       '<h3>제5조 (결제와 뽑기권)</h3>' +
       '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 구매확인 요청을 회사가 승인하면 요청 수량만큼 뽑기권이 지급되며, 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
+      '<h3>제5조의2 (마지막 10장 순번제)</h3>' +
+      '<p>남은 티켓이 10장 이하가 되면 여러 장을 한꺼번에 뽑는 연뽑(5·10·15·20장)은 자동으로 잠깁니다. 이때는 줄서기(대기 순번)에 참여한 뒤 본인 차례에 60초 안에 1장씩 뽑을 수 있으며, 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다. 판의 마지막 1장을 뽑은 회원에게는 라스트원 상품이 지급됩니다.</p>' +
       '<h3>제6조 (청약철회)</h3>' +
       '<p>교환 코드를 사용해 번호를 개봉하기 전에는 주문을 취소할 수 있습니다. 개봉 후에는 무작위 추첨 상품의 성질상 청약철회가 제한되며, 자세한 내용은 청약철회·환불 정책을 따릅니다.</p>' +
       '<h3>제7조 (금지행위)</h3>' +

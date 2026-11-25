@@ -3612,3 +3612,79 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
 @media (max-width:380px){
   .goods-grid{grid-template-columns:1fr}
 }
+
+/* =========================================================
+   v4.3.0 — 등급 A~Z(26) · AA~ 확장 (P는 P상 전용)
+   ========================================================= */
+:root{
+  --grade-m:#0d9488;
+  --grade-n:#6366f1;
+  --grade-o:#d97706;
+  --grade-q:#0ea5e9;
+  --grade-r:#e11d48;
+  --grade-s:#65a30d;
+  --grade-t:#9333ea;
+  --grade-u:#0891b2;
+  --grade-v:#c2410c;
+  --grade-w:#4f46e5;
+  --grade-x:#16a34a;
+  --grade-y:#a21caf;
+  --grade-z:#475569;
+  --grade-aa:#be123c;
+  --grade-ab:#0369a1;
+  --grade-ac:#7e22ce;
+}
+.rank-badge.grade-m{background:var(--grade-m)}
+.rank-badge.grade-n{background:var(--grade-n)}
+.rank-badge.grade-o{background:var(--grade-o)}
+.rank-badge.grade-q{background:var(--grade-q)}
+.rank-badge.grade-r{background:var(--grade-r)}
+.rank-badge.grade-s{background:var(--grade-s)}
+.rank-badge.grade-t{background:var(--grade-t)}
+.rank-badge.grade-u{background:var(--grade-u)}
+.rank-badge.grade-v{background:var(--grade-v)}
+.rank-badge.grade-w{background:var(--grade-w)}
+.rank-badge.grade-x{background:var(--grade-x)}
+.rank-badge.grade-y{background:var(--grade-y)}
+.rank-badge.grade-z{background:var(--grade-z)}
+.rank-badge.grade-aa{background:var(--grade-aa)}
+.rank-badge.grade-ab{background:var(--grade-ab)}
+.rank-badge.grade-ac{background:var(--grade-ac)}
+
+.bcard.grade-m{--bc:var(--grade-m)}
+.bcard.grade-n{--bc:var(--grade-n)}
+.bcard.grade-o{--bc:var(--grade-o)}
+.bcard.grade-q{--bc:var(--grade-q)}
+.bcard.grade-r{--bc:var(--grade-r)}
+.bcard.grade-s{--bc:var(--grade-s)}
+.bcard.grade-t{--bc:var(--grade-t)}
+.bcard.grade-u{--bc:var(--grade-u)}
+.bcard.grade-v{--bc:var(--grade-v)}
+.bcard.grade-w{--bc:var(--grade-w)}
+.bcard.grade-x{--bc:var(--grade-x)}
+.bcard.grade-y{--bc:var(--grade-y)}
+.bcard.grade-z{--bc:var(--grade-z)}
+.bcard.grade-aa{--bc:var(--grade-aa)}
+.bcard.grade-ab{--bc:var(--grade-ab)}
+.bcard.grade-ac{--bc:var(--grade-ac)}
+
+.reveal-stage.grade-m{--rv:var(--grade-m)}
+.reveal-stage.grade-n{--rv:var(--grade-n)}
+.reveal-stage.grade-o{--rv:var(--grade-o)}
+.reveal-stage.grade-q{--rv:var(--grade-q)}
+.reveal-stage.grade-r{--rv:var(--grade-r)}
+.reveal-stage.grade-s{--rv:var(--grade-s)}
+.reveal-stage.grade-t{--rv:var(--grade-t)}
+.reveal-stage.grade-u{--rv:var(--grade-u)}
+.reveal-stage.grade-v{--rv:var(--grade-v)}
+.reveal-stage.grade-w{--rv:var(--grade-w)}
+.reveal-stage.grade-x{--rv:var(--grade-x)}
+.reveal-stage.grade-y{--rv:var(--grade-y)}
+.reveal-stage.grade-z{--rv:var(--grade-z)}
+.reveal-stage.grade-aa{--rv:var(--grade-aa)}
+.reveal-stage.grade-ab{--rv:var(--grade-ab)}
+.reveal-stage.grade-ac{--rv:var(--grade-ac)}
+
+.grade-badge,.rank-badge{font-variant-numeric:tabular-nums}
+.rank-badge{letter-spacing:-.02em}
+.prize-card .rank-badge{max-width:100%}
