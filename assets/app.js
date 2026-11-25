@@ -120,7 +120,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.0.1';
+  var COVER_VER = '4.0.4';
   function coverSrc(url) {
     if (!url || !/^(\.\/)?assets\/products\//.test(url)) return url;
     return url + (url.indexOf('?') === -1 ? '?v=' : '&v=') + COVER_VER;
@@ -341,7 +341,18 @@
     if (c.length <= 6) return c.slice(0, 2) + '••';
     return c.slice(0, 5) + '••••' + c.slice(-2);
   }
-  function gradeColor(grade) { return 'var(--grade-' + String(grade || 'e').toLowerCase() + ')'; }
+  function gradeColor(grade) {
+    if (String(grade || '').toUpperCase() === 'LAST') return 'var(--gold)';
+    return 'var(--grade-' + String(grade || 'e').toLowerCase() + ')';
+  }
+  /* 라스트원 보너스 행은 티켓 번호가 없다(draws.n = 0) → 번호 대신 이름을 쓴다 */
+  function drawNoLabel(d) {
+    return (d && String(d.grade || '').toUpperCase() === 'LAST') ? '라스트원' : ((d ? d.n : '') + '번');
+  }
+  function gradeLetter(g) {
+    var u = String(g || '').toUpperCase();
+    return u === 'LAST' ? 'L' : u;
+  }
   function priceBand(p) {
     var n = Number(p) || 0;
     if (n <= 10000) return 'under';
@@ -1088,6 +1099,14 @@
     var total = Number(board.tickets || 0);
     return board.status === 'open' && left > 0 && total > 0 && (left / total) < 0.3;
   }
+  /* 라스트원 상태 — 획득자(있으면) / 마지막 5장 이하 임박 */
+  function lastOneStatus(board) {
+    if (!board || !board.lastOneLabel) return null;
+    if (board.lastOneWinnerName) return { won: true, name: board.lastOneWinnerName, at: board.lastOneWonAt || '' };
+    var left = remaining(board);
+    if (board.status === 'open' && left > 0 && left <= 5) return { soon: true, left: left };
+    return null;
+  }
   function tierSum(board) {
     return board.tiers.reduce(function (s, t) { return s + Number(t.count || 0); }, 0);
   }
@@ -1477,6 +1496,8 @@
           price: b.price, tickets: b.ticket_count, tiers: tiers,
           lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
           lastOneImage: b.last_one_image || '', lastOneDesc: b.last_one_desc || '', manual: b.manual || null,
+          lastOneWinnerId: b.last_one_winner_id || '', lastOneWinnerName: b.last_one_winner_name || '',
+          lastOneWonAt: b.last_one_won_at || '',
           seed: b.seed, seedHash: b.seed_hash,
           createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
         };
@@ -1485,14 +1506,20 @@
       if (boards.length) {
         var ids = boards.map(function (b) { return b.id; });
         var tkRes = await sb.from('tickets')
-          .select('board_id,n,status,buyer_name,grade,drawn_at')
+          .select('board_id,n,status,buyer_name,grade,drawn_at,is_last')
           .in('board_id', ids).eq('status', 'sold');
+        /* is_last 컬럼이 아직 없는 DB(마이그레이션 전)에서도 판매 내역이 보이도록 한 번 더 */
+        if (tkRes.error) {
+          tkRes = await sb.from('tickets')
+            .select('board_id,n,status,buyer_name,grade,drawn_at')
+            .in('board_id', ids).eq('status', 'sold');
+        }
         if (!tkRes.error && tkRes.data) {
           var byBoard = {};
           tkRes.data.forEach(function (t) {
             (byBoard[t.board_id] = byBoard[t.board_id] || []).push({
               n: t.n, grade: t.grade, at: t.drawn_at, name: t.buyer_name || '익명',
-              userId: null, demo: false, last: false
+              userId: null, demo: false, last: !!t.is_last
             });
           });
           boards.forEach(function (b) {
@@ -1531,7 +1558,7 @@
 
         var dRes = await sb.from('draws').select('*').eq('user_id', myId).order('created_at', { ascending: false });
         state.myDraws = (dRes.data || []).map(function (d) {
-          return { id: d.id, boardId: d.board_id, n: d.n, userId: d.user_id, grade: d.grade, tierLabel: d.tier_label, points: d.points, itemStatus: d.item_status, source: d.source, at: d.created_at, last: d.is_last };
+          return { id: d.id, boardId: d.board_id, n: d.n, userId: d.user_id, grade: d.grade, tierLabel: d.tier_label, points: d.points, itemStatus: d.item_status, source: d.source, at: d.created_at, last: d.is_last, lastOne: !!d.is_last_one };
         });
 
         var clRes = await sb.from('purchase_claims').select('*').eq('user_id', myId).order('created_at', { ascending: false });
@@ -1715,6 +1742,9 @@
       return {
         grade: r.grade, tierLabel: r.tier_label, points: r.points || 0,
         itemStatus: r.item_status, isLast: !!r.is_last, remaining: r.remaining,
+        lastOneWon: !!r.last_one_won, lastOneLabel: r.last_one_label || '',
+        lastOneImage: r.last_one_image || '', lastOneDesc: r.last_one_desc || '',
+        lastOneWinnerName: r.last_one_winner_name || '',
         source: r.source, demo: r.source === 'demo', pointsBalance: r.points_balance
       };
     },
@@ -2224,6 +2254,23 @@
     };
     state.draws.unshift(draw);
 
+    /* 라스트원상 — 마지막 1장이면 라스트원 상품을 보관함에 한 행 더 넣는다 (로그인 상태에서만) */
+    var lastOneWon = false;
+    if (isLast && !board.lastOneWinnerName && (board.lastOneLabel || '').trim()) {
+      lastOneWon = true;
+      board.lastOneWinnerName = name;
+      board.lastOneWonAt = nowISO();
+      if (state.session) board.lastOneWinnerId = state.session.userId;
+      if (state.me) {
+        state.draws.unshift({
+          id: uid('d'), boardId: board.id, n: 0,
+          userId: state.me.id, grade: 'LAST', tierLabel: board.lastOneLabel || '라스트원상',
+          points: 0, itemStatus: '보관중', source: source, at: nowISO(), deliveryId: null,
+          last: true, lastOne: true
+        });
+      }
+    }
+
     if (args.couponId) {
       var c2 = state.coupons.filter(function (c) { return c.id === args.couponId; })[0];
       if (c2) c2.usedDrawId = draw.id;
@@ -2235,6 +2282,11 @@
     return {
       grade: grade, tierLabel: tier.label || '', points: points,
       itemStatus: itemStatus, isLast: isLast, remaining: remaining(board),
+      lastOneWon: lastOneWon,
+      lastOneLabel: lastOneWon ? (board.lastOneLabel || '') : '',
+      lastOneImage: lastOneWon ? (board.lastOneImage || '') : '',
+      lastOneDesc: lastOneWon ? (board.lastOneDesc || '') : '',
+      lastOneWinnerName: lastOneWon ? name : '',
       source: source, demo: demo, guest: !state.me,
       pointsBalance: state.me ? Number((userById(state.me.id) || {}).points || 0) : null
     };
@@ -2815,6 +2867,7 @@
 
   function boardCardHTML(board) {
     var left = remaining(board);
+    var lo = lastOneStatus(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var soldout = left === 0;
     var closed = board.status !== 'open';
@@ -2842,6 +2895,8 @@
           (soldout ? '<span class="soldout-stamp">품절<span>SOLD OUT</span></span>' : '') +
           (!soldout && closed ? '<span class="soldout-stamp is-closed-stamp">판 종료<span>CLOSED</span></span>' : '') +
           (low ? '<span class="lowstock-flag">🔥 품절임박 · ' + fmt(left) + '장 남음</span>' : '') +
+          (lo && lo.won ? '<span class="last-won-flag">🏆 라스트원 획득: ' + h(lo.name) + '</span>' : '') +
+          (lo && lo.soon ? '<span class="last-soon-flag">🔥 라스트원까지 ' + fmt(lo.left) + '장!</span>' : '') +
           '<div class="board-card-top">' +
             '<span class="band-tag band-' + priceBand(board.price) + '">' + priceBandLabel(board.price) + '</span>' +
             '<span class="muted sold-line">판매 ' + fmt(openedCount(board)) + '장</span>' +
@@ -2969,10 +3024,11 @@
     }
     box.innerHTML = '<div class="ticker-head"><span class="live-dot"></span><b>실시간 판매</b><span class="muted">방금 팔린 번호</span></div>' +
       '<div class="ticker-track">' + rows.map(function (r) {
-        return '<a class="ticker-item" href="#/board/' + h(r.board.id) + '">' +
+        return '<a class="ticker-item' + (r.open.last ? ' is-lastone' : '') + '" href="#/board/' + h(r.board.id) + '">' +
           '<span class="ticker-cat">' + h(r.board.category) + '</span>' +
           '<b>' + r.open.n + '번</b>' +
           '<span class="ticker-name">' + h(r.open.name) + '</span>' +
+          (r.open.last ? '<span class="ticker-last">🏆 라스트원</span>' : '') +
           '<span class="ticker-time">' + timeAgo(r.open.at) + '</span>' +
         '</a>';
       }).join('') + '</div>';
@@ -3012,6 +3068,7 @@
     var left = remaining(board);
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var low = isLowStock(board);
+    var lo = lastOneStatus(board);
     el.classList.toggle('is-lowstock', low);
     el.innerHTML = '' +
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
@@ -3025,6 +3082,8 @@
       '<div class="board-hero-body">' +
         '<span class="pill pill-cream">' + h(board.category) + ' · ' + priceBandLabel(board.price) + '</span>' +
         (low ? '<span class="pill pill-lowstock">🔥 품절임박! 라스트원 찬스</span>' : '') +
+        (lo && lo.won ? '<span class="pill pill-lastwon">🏆 라스트원 획득: ' + h(lo.name) + '</span>' : '') +
+        (lo && lo.soon ? '<span class="pill pill-lowstock">🔥 라스트원까지 ' + fmt(lo.left) + '장!</span>' : '') +
         '<h1>' + h(board.title) + '</h1>' +
         '<div class="board-meta">' +
           '<span>1장 <b>' + won(board.price) + '</b></span>' +
@@ -3084,6 +3143,7 @@
   function renderBoardStatus(board) {
     var el = $('#boardStatus');
     if (!el) return;
+    var lo = lastOneStatus(board);
     var rows = board.tiers.map(function (t) {
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
       var left = Number(t.count) - sold;
@@ -3097,9 +3157,12 @@
     }).join('');
     el.innerHTML = '<h2>등급 현황 <span class="badge badge-live">실시간</span></h2>' +
       '<div class="grade-rows">' + rows + '</div>' +
-      '<button type="button" class="lastone-card" data-action="zoom-last">' +
+      '<button type="button" class="lastone-card' + (lo && lo.won ? ' is-won' : '') + '" data-action="zoom-last">' +
         (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="" loading="lazy">' : '') +
         '<span class="lastone-body"><span class="lastone-kicker">LAST ONE</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
+        (lo && lo.won
+          ? '<small class="lastone-won">🏆 라스트원 획득: ' + h(lo.name) + (lo.at ? ' · ' + formatDateTime(lo.at) : '') + '</small>'
+          : (lo && lo.soon ? '<small class="lastone-soon">🔥 라스트원까지 ' + fmt(lo.left) + '장!</small>' : '')) +
         (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span>' +
       '</button>';
   }
@@ -3266,7 +3329,7 @@
         '<span class="prize-body">' +
           '<b class="prize-name">' + h(board.lastOneLabel || '라스트원상') + '</b>' +
           (board.lastOneDesc ? '<span class="prize-desc">' + h(board.lastOneDesc) + '</span>' : '') +
-          '<span class="prize-meta"><span>마지막 1장</span><span>별도 지급</span></span>' +
+          '<span class="prize-meta"><span>' + (board.lastOneWinnerName ? '🏆 ' + h(board.lastOneWinnerName) : '마지막 1장') + '</span><span>' + (board.lastOneWinnerName ? '지급 완료' : '별도 지급') + '</span></span>' +
         '</span>' +
       '</button>';
 
@@ -3367,7 +3430,11 @@
         '</div>' +
         '<h2 class="zoom-title">' + h(label) + '</h2>' +
         (desc ? '<p class="zoom-desc">' + h(desc) + '</p>' : '') +
-        '<p class="zoom-meta">' + (isLast ? '마지막 1장을 뽑은 분께 추가 지급' : (isP ? ('당정 ' + fmt(t.count) + '장 · 바로 ' + fmt(t.points) + 'P 적립') : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P'))) + '</p>' +
+        '<p class="zoom-meta">' + (isLast
+          ? (board.lastOneWinnerName
+              ? '🏆 라스트원 획득: ' + h(board.lastOneWinnerName) + (board.lastOneWonAt ? ' · ' + formatDateTime(board.lastOneWonAt) : '')
+              : '마지막 1장을 뽑은 분께 추가 지급')
+          : (isP ? ('당정 ' + fmt(t.count) + '장 · 바로 ' + fmt(t.points) + 'P 적립') : ('수령 ' + fmt(t.count) + '개 · 전환 ' + fmt(t.points) + 'P'))) + '</p>' +
         '<div class="modal-actions"><button class="btn btn-dark" data-action="close-modal">닫기</button></div>' +
       '</div>');
   }
@@ -3451,6 +3518,9 @@
       bindSeal();
     } else if (d.step === 'promote') {
       bindPromote(d);
+    } else if (d.step === 'result' || d.step === 'spotlight') {
+      /* 라스트원상 당첨 — 결과 화면이 처음 뜰 때 한 번만 축하 연출 */
+      if (!d.batch) lastOneCelebrate(d);
     }
   }
 
@@ -3894,7 +3964,7 @@
     var physical = rows.filter(function (r) { return !isPointPrize(r); });
     var pointRows = rows.filter(isPointPrize);
     var ptsTotal = pointRows.reduce(function (s, r) { return s + (Number(r.points) || 0); }, 0);
-    var lastWin = rows.filter(function (r) { return r.isLast; })[0];
+    var lastWin = rows.filter(function (r) { return r.lastOneWon || r.isLast || String(r.grade || '').toUpperCase() === 'LAST'; })[0];
     var missing = Math.max(0, (d.count || rows.length) - rows.length);
     var pay = d.pay || {};
     var price = Math.max(0, Number(board.price) || 0);
@@ -3905,15 +3975,17 @@
     var bestPhys = physical[0] || null;
     physical.forEach(function (r) { if (gradeLevel(r.grade) > gradeLevel(bestPhys.grade)) bestPhys = r; });
     var bestLv = bestPhys ? gradeLevel(bestPhys.grade) : 0;
-    var heroImg = bestPhys ? (bestPhys.tierImage || (tierOf(board, bestPhys.grade) || {}).image || '') : '';
-    var heroLabel = bestPhys ? (bestPhys.tierLabel || (tierOf(board, bestPhys.grade) || {}).label || '') : '';
+    var heroImg = bestPhys ? (bestPhys.tierImage || (tierOf(board, bestPhys.grade) || {}).image ||
+      (String(bestPhys.grade).toUpperCase() === 'LAST' ? (board.lastOneImage || '') : '')) : '';
+    var heroLabel = bestPhys ? (bestPhys.tierLabel || (tierOf(board, bestPhys.grade) || {}).label ||
+      (String(bestPhys.grade).toUpperCase() === 'LAST' ? (board.lastOneLabel || '라스트원상') : '')) : '';
     var heroGrade = bestPhys ? (String(bestPhys.grade).toUpperCase() === 'LAST' ? '라스트원' : bestPhys.grade + '상') : '';
 
     var cards = rows.map(function (r, i) {
       var g = String(r.grade || '').toUpperCase();
       var gk = g === 'LAST' ? 'last' : String(r.grade || '').toLowerCase();
       return '<li class="bcard grade-' + h(gk) + '" style="--i:' + i + '">' +
-        '<span class="bcard-n">#' + r.n + '</span>' +
+        '<span class="bcard-n">' + (g === 'LAST' ? '라스트원' : '#' + r.n) + '</span>' +
         '<span class="bcard-g">' + h(g === 'LAST' ? 'LAST' : r.grade + '상') + '</span>' +
         (Number(r.points) > 0 ? '<span class="bcard-p">+' + fmt(r.points) + 'P</span>' : '') +
       '</li>';
@@ -3922,12 +3994,13 @@
     var others = physical.filter(function (r) { return r !== bestPhys; });
     var otherHTML = others.length
       ? '<ul class="batch-prizes">' + others.map(function (r) {
+          var g = String(r.grade || '').toUpperCase();
           var t = tierOf(board, r.grade) || {};
           var img = r.tierImage || t.image || '';
           return '<li class="bp-row">' +
             (img ? '<span class="bp-thumb"><img src="' + h(coverSrc(img)) + '" alt="" loading="lazy"></span>' : '<span class="bp-thumb is-empty">' + h(r.grade) + '</span>') +
-            '<span class="bp-body"><b>' + h(r.grade + '상') + '</b><span>' + h(r.tierLabel || t.label || '') + '</span></span>' +
-            '<span class="bp-n">#' + r.n + '</span>' +
+            '<span class="bp-body"><b>' + h(g === 'LAST' ? '라스트원' : r.grade + '상') + '</b><span>' + h(r.tierLabel || t.label || '') + '</span></span>' +
+            '<span class="bp-n">' + (g === 'LAST' ? '보너스' : '#' + r.n) + '</span>' +
           '</li>';
         }).join('') + '</ul>'
       : '';
@@ -3958,7 +4031,7 @@
       '<h2 class="batch-title" id="modalTitle">' + (rows.length > 1 ? rows.length + '장 뽑기 완료!' : '1장 뽑기 완료!') + '</h2>' +
       '<p class="batch-sub">' + h(board.title) + ' · ' + h(payLabel) + ' 사용</p>' +
       hero + otherHTML + ptsBox +
-      (lastWin ? '<div class="batch-last">👑 <b>라스트원상</b> 획득! 판의 마지막 1장을 뽑았어요.</div>' : '') +
+      (lastWin ? lastOneBannerHTML(lastWin, board, { big: true }) : '') +
       '<div class="batch-all"><span class="batch-all-head">뽑은 번호 ' + rows.length + '장</span>' +
         '<ul class="batch-cards">' + cards + '</ul></div>' +
       (missing ? '<p class="batch-warn">⚠ ' + missing + '장은 다른 분이 먼저 뽑아 진행하지 못했어요. 이미 뽑힌 ' + rows.length + '장의 결과는 그대로 보관함에 담겼습니다.</p>' : '') +
@@ -5339,7 +5412,7 @@
       return;
     }
     d.step = 'result';
-    kujiSound.fanfare(gradeLevel(d.result.grade));
+    kujiSound.fanfare(d.result.lastOneWon ? 3 : gradeLevel(d.result.grade));
     renderDrawModal();
     renderAll();
     toast(d.result.demo ? '체험 뽑기 완료!' : '뽑기 완료! ' + d.result.grade + '상', 'ok');
@@ -5839,7 +5912,6 @@
     return 0;
   }
   function isEpicGrade(grade) { return gradeLevel(grade) >= 1; }
-
   var REVEAL_CONF = [0, 20, 72, 120];
   var REVEAL_SPARK = [4, 10, 34, 56];
 
@@ -5930,12 +6002,70 @@
         '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모아서 다시 뽑기에 사용할 수 있어요.</p>' +
         wallet +
         '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
+        lastOneBannerHTML(r, board) +
         '<p class="result-meta">' + h(board.title) + ' · ' + d.n + '번' + (r.demo ? ' · 체험 코드 사용' : (r.source === 'points' ? ' · 굿즈 포인트 사용' : '')) + '</p>' +
         '<div class="modal-actions">' +
           '<button class="btn btn-dark" data-action="close-modal">확인</button>' +
         '</div>' +
       '</div>' +
     '</div>';
+  }
+
+  /* =========================================================
+     라스트원상(LAST ONE) — 판의 마지막 1장을 뽑은 사람에게 추가 지급되는 상
+     ========================================================= */
+  function lastOneOf(r, board) {
+    if (!r) return null;
+    var won = !!r.lastOneWon || String(r.grade || '').toUpperCase() === 'LAST' || !!r.isLast;
+    if (!won) return null;
+    return {
+      label: r.lastOneLabel || (board && board.lastOneLabel) || '라스트원상',
+      image: r.lastOneImage || (board && board.lastOneImage) || '',
+      desc: r.lastOneDesc || (board && board.lastOneDesc) || '',
+      name: r.lastOneWinnerName || ''
+    };
+  }
+
+  function lastOneBannerHTML(r, board, opt) {
+    var lo = lastOneOf(r, board);
+    if (!lo) return '';
+    opt = opt || {};
+    var img = lo.image
+      ? '<img src="' + h(coverSrc(lo.image)) + '" alt="' + h(lo.label) + '" loading="lazy" decoding="async">'
+      : '<span class="lw-thumb-empty">★</span>';
+    return '<div class="last-win' + (opt.big ? ' is-big' : '') + '">' +
+        '<span class="lw-crown" aria-hidden="true">🏆</span>' +
+        '<span class="lw-body">' +
+          '<span class="lw-kicker">LAST ONE BONUS · 라스트원상 당첨</span>' +
+          '<b class="lw-label">' + h(lo.label) + '</b>' +
+          (lo.desc ? '<small>' + h(lo.desc) + '</small>' : '') +
+          '<small class="lw-hold">' + (me() ? '내 보관함에 함께 담겼어요 · 배송 신청은 내 보관함에서' : '로그인 후 뽑았다면 보관함에 함께 담겼어요') + '</small>' +
+        '</span>' +
+        '<span class="lw-media">' + img + '</span>' +
+      '</div>';
+  }
+
+  /* 라스트원 당첨 순간 한 번만 폭죽을 터뜨린다 (재렌더마다 반복하지 않도록) */
+  function lastConfettiBurst(count) {
+    if (!modalPanel) return;
+    var host = document.createElement('div');
+    host.className = 'last-burst';
+    host.setAttribute('aria-hidden', 'true');
+    host.innerHTML = confettiHTML(count || 34, {
+      drop: 460, drift: 250, spread: .9,
+      colors: ['#ffd51e', '#f5b800', '#fff3b0', '#ffffff', '#ff7ac8', '#8ee3ff']
+    });
+    modalPanel.appendChild(host);
+    setTimeout(function () { if (host.parentNode) host.parentNode.removeChild(host); }, 4200);
+  }
+
+  function lastOneCelebrate(d) {
+    if (!d || d.lastFxDone) return;
+    var lo = lastOneOf(d.result, getBoard(d.boardId));
+    if (!lo) return;
+    d.lastFxDone = true;
+    lastConfettiBurst(36);
+    toast('🏆 라스트원상 당첨! 마지막 1장의 주인공입니다', 'ok');
   }
 
   function drawResultHTML(board, d) {
@@ -6009,10 +6139,8 @@
       (r.itemStatus === '포인트지급' || r.itemStatus === '포인트전환'
         ? '<span class="result-points">' + icon('gift') + ' 굿즈 포인트 ' + fmt(r.points) + 'P 지급</span>'
         : '') +
-      (r.isLast
-        ? '<div class="result-lastone">' + (board.lastOneImage ? '<img src="' + h(coverSrc(board.lastOneImage)) + '" alt="">' : '') +
-          '<span class="result-lastone-body"><span>LAST ONE BONUS</span><b>' + h(board.lastOneLabel || '라스트원상') + '</b>' +
-          (board.lastOneDesc ? '<small>' + h(board.lastOneDesc) + '</small>' : '') + '</span></div>'
+      (r.isLast || r.lastOneWon
+        ? lastOneBannerHTML(r, board, { big: true })
         : '') +
       (r.itemStatus === '보관중' ? '<p class="result-hold">' + icon('box') + ' <b>내 보관함</b>에 담겼어요. 배송 신청은 내 보관함에서.</p>' : '') +
       (!me() && r.itemStatus !== '포인트지급' ? '<p class="result-meta">로그인하지 않아 보관함에 담기지 않았어요. 로그인 후 뽑으면 배송 신청까지 한 번에 됩니다.</p>' : '') +
@@ -6074,7 +6202,7 @@
         '<div class="profile-stats">' +
           '<div class="pstat"><span>보유 쿠폰</span><strong>' + fmt(coupons.length) + '장</strong></div>' +
           '<div class="pstat"><span>굿즈 포인트</span><strong id="myPointsStat">' + fmt(user.points || 0) + 'P</strong></div>' +
-          '<div class="pstat"><span>뽑기</span><strong>' + fmt((state.myDraws || []).length) + '회</strong></div>' +
+          '<div class="pstat"><span>뽑기</span><strong>' + fmt((state.myDraws || []).filter(function (d) { return String(d.grade || '').toUpperCase() !== 'LAST'; }).length) + '회</strong></div>' +
           '<div class="pstat"><span>보관중</span><strong>' + fmt((state.myDraws || []).filter(function (d) { return d.itemStatus === '보관중'; }).length) + '개</strong></div>' +
         '</div>' +
         '<div class="profile-actions">' +
@@ -6155,14 +6283,20 @@
       var tier = board ? tierOf(board, d.grade) : null;
       var dl = (state.myDeliveries || []).filter(function (x) { return x.drawId === d.id; })[0];
       var canAct = d.itemStatus === '보관중';
+      var isLastOne = String(d.grade || '').toUpperCase() === 'LAST' || !!d.lastOne;
       var points = tier ? Number(tier.points || 0) : 0;
-      return '<article class="inv-card card">' +
-        '<div class="inv-thumb" style="background:' + gradeColor(d.grade) + '">' + h(d.grade) + '</div>' +
+      var boardLastImg = (isLastOne && board && board.lastOneImage) ? board.lastOneImage : '';
+      return '<article class="inv-card card' + (isLastOne ? ' is-lastone' : '') + '">' +
+        (isLastOne
+          ? '<div class="inv-thumb is-last">' + (boardLastImg
+              ? '<img src="' + h(coverSrc(boardLastImg)) + '" alt="' + h(d.tierLabel || '라스트원상') + '" loading="lazy">'
+              : '<b>L</b><i>LAST</i>') + '</div>'
+          : '<div class="inv-thumb" style="background:' + gradeColor(d.grade) + '">' + h(d.grade) + '</div>') +
         '<div class="inv-body">' +
           '<div class="inv-top"><span class="inv-board">' + h(board ? board.category : '') + ' · ' + h(board ? board.title : '삭제된 판') + '</span>' +
             '<span class="status-pill ' + statusClass(d.itemStatus) + '">' + statusLabel(d.itemStatus) + '</span></div>' +
-          '<h3>' + h(d.tierLabel || (tier ? tier.label : '') || '당첨 상품') + '</h3>' +
-          '<p class="inv-meta">' + d.n + '번 · ' + formatDateTime(d.at) + (d.last ? ' · 라스트원 보너스' : '') + '</p>' +
+          '<h3>' + (isLastOne ? '<span class="lw-tag">🏆 라스트원</span> ' : '') + h(d.tierLabel || (tier ? tier.label : '') || '당첨 상품') + '</h3>' +
+          '<p class="inv-meta">' + drawNoLabel(d) + ' · ' + formatDateTime(d.at) + (isLastOne ? '' : (d.last ? ' · 마지막 1장' : '')) + '</p>' +
           (dl ? '<p class="inv-meta">' + icon('truck') + ' ' + h(dl.recipient) + ' · ' + h(dl.address) + '</p>' : '') +
           (dl && dl.tracking ? '<p class="inv-track">' + h(dl.carrier || '택배') + ' <b>' + h(dl.tracking) + '</b></p>' : '') +
           '<div class="inv-actions">' +
@@ -6225,9 +6359,9 @@
       return '<tr>' +
         '<td class="num">' + formatDateTime(d.at) + '</td>' +
         '<td>' + (board ? '<a href="#/board/' + h(board.id) + '" class="inline-link">' + h(board.title) + '</a>' : '삭제된 판') + '</td>' +
-        '<td class="num">' + d.n + '번</td>' +
-        '<td><span class="grade-badge" style="background:' + gradeColor(d.grade) + ';width:28px;height:28px;font-size:12px">' + h(d.grade) + '</span></td>' +
-        '<td>' + h(d.tierLabel || '') + (d.last ? ' <span class="badge" style="font-size:10px">' + icon('crown') + ' 라스트원</span>' : '') + '</td>' +
+        '<td class="num">' + drawNoLabel(d) + '</td>' +
+        '<td><span class="grade-badge' + (String(d.grade || '').toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + ';width:28px;height:28px;font-size:12px">' + h(gradeLetter(d.grade)) + '</span></td>' +
+        '<td>' + h(d.tierLabel || '') + (d.last || d.lastOne ? ' <span class="badge" style="font-size:10px">' + icon('crown') + ' 라스트원</span>' : '') + '</td>' +
         '<td><span class="status-pill ' + statusClass(d.itemStatus) + '">' + statusLabel(d.itemStatus) + '</span></td>' +
       '</tr>';
     }).join('');
@@ -6266,7 +6400,7 @@
         grades.map(function (g) {
           return '<div class="stat"><span>' + g + '상</span><strong>' + fmt(byGrade[g] || 0) + '개</strong></div>';
         }).join('') +
-        '<div class="stat"><span>라스트원</span><strong>' + fmt(rows.filter(function (r) { return r.last; }).length) + '개</strong></div>';
+        '<div class="stat"><span>라스트원</span><strong>' + fmt(rows.filter(function (r) { return r.lastOne || r.last; }).length) + '개</strong></div>';
     }
 
     var tbody = $('#winnersTable tbody');
@@ -6285,9 +6419,9 @@
           return '<tr>' +
             '<td class="num">' + formatDateTime(r.at) + '</td>' +
             '<td>' + (board ? '<a href="#/board/' + h(board.id) + '" class="inline-link">' + h(board.title) + '</a>' : '삭제된 판') + '</td>' +
-            '<td class="num">' + r.n + '번</td>' +
-            '<td><span class="grade-badge" style="background:' + gradeColor(r.grade) + ';width:28px;height:28px;font-size:12px">' + h(r.grade) + '</span></td>' +
-            '<td>' + h(r.tierLabel || '') + (r.last ? ' <span class="badge" style="font-size:10px">' + icon('crown') + ' 라스트원</span>' : '') + '</td>' +
+            '<td class="num">' + drawNoLabel(r) + '</td>' +
+            '<td><span class="grade-badge' + (String(r.grade || '').toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(r.grade) + ';width:28px;height:28px;font-size:12px">' + h(gradeLetter(r.grade)) + '</span></td>' +
+            '<td>' + h(r.tierLabel || '') + (r.last || r.lastOne ? ' <span class="badge" style="font-size:10px">' + icon('crown') + ' 라스트원</span>' : '') + '</td>' +
             '<td><span class="status-pill ' + statusClass(r.itemStatus) + '">' + statusLabel(r.itemStatus) + '</span></td>' +
           '</tr>';
         }).join('');
@@ -6703,7 +6837,7 @@
         '<div class="delivery-head">' +
           '<span class="status-pill ' + statusClass(done ? '출고완료' : '배송신청') + '">' + (done ? '출고 완료' : '출고 대기') + '</span>' +
           '<b>' + h(d.itemLabel || '당첨 상품') + '</b>' +
-          (d.grade ? '<span class="grade-badge sm" style="background:' + gradeColor(d.grade) + '">' + h(d.grade) + '</span>' : '') +
+          (d.grade ? '<span class="grade-badge sm' + (String(d.grade).toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(String(d.grade).toUpperCase() === 'LAST' ? 'LAST' : d.grade) + '</span>' : '') +
           '<span class="muted small">' + h(board ? board.category : '') + ' · ' + formatDateTime(d.requestedAt) + '</span>' +
         '</div>' +
         '<div class="delivery-body">' +
@@ -7073,7 +7207,7 @@
     if (!d) return;
     var user = me();
     openModal('<h2 class="modal-title" id="modalTitle">배송 신청</h2>' +
-      '<p class="modal-sub">' + h(d.tierLabel || '당첨 상품') + ' · ' + d.n + '번</p>' +
+      '<p class="modal-sub">' + (String(d.grade || '').toUpperCase() === 'LAST' ? '🏆 ' : '') + h(d.tierLabel || '당첨 상품') + ' · ' + drawNoLabel(d) + '</p>' +
       '<form data-form="delivery" novalidate data-id="' + h(d.id) + '">' +
         '<label class="field"><span>받는 사람</span><input name="recipient" type="text" maxlength="20" required value="' + h(user ? user.nickname : '') + '"></label>' +
         '<label class="field"><span>연락처</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required value="' + h(user ? user.phone : '') + '" placeholder="010-0000-0000"></label>' +

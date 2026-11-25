@@ -57,6 +57,9 @@ create table if not exists public.boards (
   last_one_label text,
   last_one_image text,                              -- 라스트원 이미지 경로
   last_one_desc  text,                              -- 라스트원 설명 (크기·특징)
+  last_one_winner_id   uuid,                        -- 라스트원상 획득 회원 (draw_ticket 이 기록)
+  last_one_winner_name text,                        -- 마스킹된 닉네임 (판 카드 표시용)
+  last_one_won_at      timestamptz,                 -- 라스트원상 지급 시각
   manual         jsonb,                             -- {summary, specs:[{k,v}], lineup:[..], notes:[..]} 상품 설명서
   status         text not null default 'open' check (status in ('open','closed')),
   seed           text not null,
@@ -74,12 +77,18 @@ create table if not exists public.tickets (
   buyer_name text,
   grade      text,
   drawn_at   timestamptz,
+  is_last    boolean not null default false,       -- 이 판의 마지막 1장 (라스트원상)
   unique (board_id, n)
 );
 alter table public.boards add column if not exists cover text;
 alter table public.boards add column if not exists last_one_image text;
 alter table public.boards add column if not exists last_one_desc text;
 alter table public.boards add column if not exists manual jsonb;
+alter table public.boards add column if not exists last_one_winner_id uuid;
+alter table public.boards add column if not exists last_one_winner_name text;
+alter table public.boards add column if not exists last_one_won_at timestamptz;
+alter table public.draws add column if not exists is_last_one boolean not null default false;
+alter table public.tickets add column if not exists is_last boolean not null default false;
 -- 기존 DB의 300장 제약을 500장으로 갱신 (등급 12종 × 20장 = 240장까지 운용)
 alter table public.boards drop constraint if exists boards_ticket_count_check;
 alter table public.boards add constraint boards_ticket_count_check check (ticket_count between 1 and 500);
@@ -120,6 +129,7 @@ create table if not exists public.draws (
   item_status text,                                  -- 보관중 / 배송신청 / 출고완료 / 포인트지급 / 포인트전환
   source      text not null default 'code',          -- points / coupon / code / demo
   is_last     boolean not null default false,
+  is_last_one boolean not null default false,      -- 라스트원상 보너스 행(n = 0, grade = 'LAST')
   seq         bigserial,
   created_at  timestamptz not null default now(),
   unique (board_id, n)
@@ -436,6 +446,9 @@ declare
   v_source  text;
   v_left    integer := 0;
   v_is_last boolean := false;
+  v_lo_won  boolean := false;
+  v_lo_name text;
+  v_lo_id   uuid;
   v_draw_id uuid := gen_random_uuid();
   v_code    text := upper(regexp_replace(coalesce(p_code, ''), '[^A-Za-z0-9]', '', 'g'));
   v_demo    text;
@@ -473,7 +486,6 @@ begin
 
   -- 2) 결제 수단 검증 (굿즈 포인트 → 쿠폰 → 교환 코드 → 데모 코드)
   if coalesce(p_use_points, false) then
-    -- 포인트 결제: 회원 행을 잠그고 판 가격만큼 차감 (같은 잔액으로 동시에 두 번 못 뽑게)
     select * into v_profile from public.profiles where id = v_uid for update;
     if not found then
       raise exception '회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.';
@@ -536,24 +548,54 @@ begin
   where board_id = p_board_id and status = 'available';
   v_is_last := (v_left = 0);
 
-  if coalesce((v_tier->>'pointOnly')::boolean, false)
-     or coalesce((v_tier->>'points_awarded')::int, 0) > 0 then
-    -- P상: 실물 배송이 없으므로 보관함(보관중)을 만들지 않고 포인트만 바로 적립
-    v_is_point := true;
+  -- 4) P상(포인트 꽝) 판정 — 실물 배송이 없으므로 보관함(draws 보관중)을 만들지 않는다
+  v_is_point := coalesce((v_tier->>'pointOnly')::boolean, false)
+                or coalesce((v_tier->>'points_awarded')::int, 0) > 0;
+
+  if v_is_point then
     v_points := coalesce((v_tier->>'points_awarded')::int, 0);
-    if v_points <= 0 then v_points := coalesce((v_tier->>'points')::int, 0); end if;
+    if v_points <= 0 then
+      v_points := coalesce((v_tier->>'points')::int, 0);
+    end if;
     v_status := '포인트지급';
     update public.profiles set points = points + v_points where id = v_uid;
-    v_profile.points := v_profile.points + v_points;
+    v_profile.points := coalesce(v_profile.points, 0) + v_points;
   else
     v_status := '보관중';
   end if;
 
-  insert into public.draws (id, user_id, board_id, n, grade, tier_label, points, item_status, source, is_last)
-  values (v_draw_id, v_uid, p_board_id, p_ticket_no, v_grade, v_tier->>'label', v_points, v_status, v_source, v_is_last);
+  insert into public.draws (id, user_id, board_id, n, grade, tier_label, points, item_status, source, is_last, is_last_one)
+  values (v_draw_id, v_uid, p_board_id, p_ticket_no, v_grade, v_tier->>'label', v_points, v_status, v_source, v_is_last, false);
 
   if v_source = 'coupon' then
     update public.coupons set used_at = now(), used_draw_id = v_draw_id where id = p_coupon_id;
+  end if;
+
+  -- 5) 라스트원상 — 이 판의 마지막 1장을 뽑은 사람에게 라스트원 상품을 '추가로' 지급
+  --    · 같은 트랜잭션 안에서 실행되므로, 동시에 두 사람이 마지막 1장을 가져갈 수 없다
+  --    · 이미 우승자가 기록된 판이면(중복 실행·재초기화 전 데이터) 아무 것도 하지 않는다
+  if v_is_last
+     and v_board.last_one_winner_id is null
+     and coalesce(btrim(v_board.last_one_label), '') <> '' then
+
+    update public.boards
+       set last_one_winner_id   = v_uid,
+           last_one_winner_name = public.mask_name(v_profile.nickname),
+           last_one_won_at      = now()
+     where id = p_board_id
+       and last_one_winner_id is null
+     returning id into v_lo_id;
+
+    if v_lo_id is not null then
+      v_lo_won := true;
+      v_lo_name := public.mask_name(v_profile.nickname);
+
+      update public.tickets set is_last = true where id = v_ticket.id;
+
+      insert into public.draws (user_id, board_id, n, grade, tier_label, points, item_status, source, is_last, is_last_one)
+      values (v_uid, p_board_id, 0, 'LAST', v_board.last_one_label, 0, '보관중', v_source, true, true)
+      on conflict (board_id, n) do nothing;
+    end if;
   end if;
 
   return jsonb_build_object(
@@ -569,12 +611,18 @@ begin
     'item_status', v_status,
     'is_point', v_is_point,
     'is_last', v_is_last,
+    'last_one_won', v_lo_won,
+    'last_one_label', case when v_lo_won then v_board.last_one_label end,
+    'last_one_image', case when v_lo_won then v_board.last_one_image end,
+    'last_one_desc',  case when v_lo_won then v_board.last_one_desc  end,
+    'last_one_winner_name', v_lo_name,
     'remaining', v_left,
     'source', v_source,
     'buyer_name', public.mask_name(v_profile.nickname)
   );
 end;
 $$;
+
 
 -- ---------------------------------------------------------
 -- 7. 관리자: 쿠폰(뽑기권) 지급 / 구매확인 승인 / 출고 처리
@@ -830,7 +878,9 @@ as $$
 declare
   v_sold integer;
 begin
-  if not public.is_admin() then raise exception '관리자만 사용할 수 있습니다.'; end if;
+  if not public.is_admin() then
+    raise exception '관리자만 사용할 수 있습니다.';
+  end if;
 
   select count(*) into v_sold
   from public.tickets
@@ -839,14 +889,19 @@ begin
   delete from public.deliveries where board_id = p_board_id;
   delete from public.draws      where board_id = p_board_id;
   update public.tickets
-     set status = 'available', buyer_id = null, buyer_name = null, grade = null, drawn_at = null
+     set status = 'available', buyer_id = null, buyer_name = null,
+         grade = null, drawn_at = null, is_last = false
    where board_id = p_board_id;
-  update public.boards set status = 'open' where id = p_board_id;
+  update public.boards
+     set status = 'open',
+         last_one_winner_id = null,
+         last_one_winner_name = null,
+         last_one_won_at = null
+   where id = p_board_id;
 
   return jsonb_build_object('board_id', p_board_id, 'reset', v_sold);
 end;
 $$;
-
 grant execute on function public.admin_reset_board(uuid) to authenticated;
 
 -- ---------------------------------------------------------

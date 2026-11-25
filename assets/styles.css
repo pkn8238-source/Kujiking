@@ -3095,3 +3095,80 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
   .board-card-cover.has-image{min-height:220px}
   .board-cover.has-image{min-height:180px}
 }
+
+/* =========================================================
+   v4.0.4 — 라스트원상(LAST ONE) UI
+   · 결과 화면 축하 배너 · 내 보관함 · 판 카드/상세 표시
+   · 라스트원까지 N장 임박 표시
+   ========================================================= */
+.last-win{
+  display:grid;grid-template-columns:auto minmax(0,1fr) 78px;gap:12px;align-items:center;
+  margin:14px 0 2px;padding:13px 14px;border-radius:16px;text-align:left;
+  color:#2a1d00;background:linear-gradient(112deg,#fff3bf,#ffd54a 42%,#f7b500 78%,#ffe89a);
+  border:2.5px solid #3a2600;box-shadow:0 5px 0 #3a2600,0 0 0 4px rgba(255,213,74,.28);
+  position:relative;overflow:hidden;animation:lastWinIn .5s cubic-bezier(.2,.9,.3,1.2) both;
+}
+.last-win::after{
+  content:"";position:absolute;inset:-40% -10%;pointer-events:none;
+  background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.85) 48%,transparent 58%);
+  animation:lastWinShine 3.4s ease-in-out infinite;
+}
+.last-win.is-big{padding:16px;grid-template-columns:auto minmax(0,1fr) 96px}
+.lw-crown{font-size:26px;line-height:1;filter:drop-shadow(0 2px 0 rgba(0,0,0,.18))}
+.last-win.is-big .lw-crown{font-size:32px}
+.lw-body{display:flex;flex-direction:column;gap:2px;min-width:0}
+.lw-kicker{font-size:10px;font-weight:900;letter-spacing:.16em;color:#8a5b00}
+.lw-label{font-size:14.5px;font-weight:900;line-height:1.35;color:#241800}
+.last-win.is-big .lw-label{font-size:16px}
+.lw-body small{font-size:11.5px;font-weight:700;color:#5a4300;line-height:1.4}
+.lw-hold{opacity:.85}
+.lw-media{width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;background:#fff8e1;
+  border:2px solid rgba(58,38,0,.35);display:grid;place-items:center}
+.lw-media img{width:100%;height:100%;object-fit:contain}
+.lw-thumb-empty{font-size:26px;color:#c98a00}
+.lw-tag{display:inline-block;padding:1px 7px;border-radius:999px;background:linear-gradient(100deg,#ffe680,#f5b800);
+  color:#3a2600;border:1.5px solid #3a2600;font-size:10.5px;font-weight:900;vertical-align:1px}
+.last-burst{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:60;border-radius:inherit}
+@keyframes lastWinIn{from{transform:scale(.9) translateY(8px);opacity:0}to{transform:none;opacity:1}}
+@keyframes lastWinShine{0%,55%{transform:translateX(-120%)}80%,100%{transform:translateX(120%)}}
+
+/* 내 보관함 라스트원 카드 */
+.inv-card.is-lastone{border-color:#c98a00;box-shadow:0 4px 0 rgba(201,138,0,.55),0 0 0 3px rgba(255,213,74,.35)}
+.inv-thumb.is-last{background:linear-gradient(140deg,#1a1208,#3a2600 60%,#7a5400);color:#ffe680;
+  border-color:#c98a00;display:flex;flex-direction:column;gap:0;align-items:center;justify-content:center}
+.inv-thumb.is-last b{font-size:24px;line-height:1;color:#ffe680}
+.inv-thumb.is-last i{font-size:8.5px;font-style:normal;letter-spacing:.16em;font-weight:900;color:#ffd54a}
+.inv-thumb.is-last img{width:100%;height:100%;object-fit:contain;background:#fff8e1;border-radius:11px}
+
+/* 판 카드 · 상세 라스트원 표시 */
+.last-won-flag,.last-soon-flag{
+  display:flex;align-items:center;justify-content:center;gap:5px;margin:-2px 0 2px;padding:7px 10px;
+  border-radius:10px;font-size:12px;font-weight:900;line-height:1.2;text-align:center;
+  border:2px solid var(--ink);box-shadow:0 3px 0 var(--ink);
+}
+.last-won-flag{background:linear-gradient(100deg,#1a1208,#3a2600 55%,#7a5400);color:#ffe680}
+.last-soon-flag{background:linear-gradient(100deg,#e01a0a,#ff5b1a 58%,#ff8a00);color:#fff;
+  text-shadow:0 1px 0 rgba(0,0,0,.22);animation:lowStockPulse 1.5s ease-in-out infinite}
+.pill-lastwon{background:linear-gradient(100deg,#1a1208,#3a2600 55%,#7a5400);color:#ffe680;
+  border-color:var(--ink);box-shadow:0 3px 0 var(--ink)}
+.lastone-won{color:#ffe680 !important;font-weight:900 !important}
+.lastone-soon{color:#ffb08a !important;font-weight:900 !important}
+button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,213,74,.28)}
+
+/* 방금 팔린 번호 */
+.ticker-item.is-lastone{background:linear-gradient(100deg,rgba(255,213,74,.22),rgba(255,213,74,.06))}
+.ticker-last{font-size:10px;font-weight:900;color:#8a5b00;background:#ffe680;border:1px solid #c98a00;
+  padding:1px 6px;border-radius:999px;white-space:nowrap}
+.grade-badge.grade-last{background:var(--gold) !important;color:#1a1208 !important}
+
+@media (max-width:760px){
+  .last-win{grid-template-columns:auto minmax(0,1fr) 62px;gap:9px;padding:11px 12px;border-width:2px;box-shadow:0 4px 0 #3a2600}
+  .last-win.is-big{grid-template-columns:auto minmax(0,1fr) 72px}
+  .lw-crown{font-size:22px}
+  .lw-label{font-size:13px}
+  .last-win.is-big .lw-label{font-size:14px}
+  .last-won-flag,.last-soon-flag{font-size:10.5px;padding:4px 6px;border-width:1.5px;box-shadow:0 2px 0 var(--ink);border-radius:8px}
+}
+@media (prefers-reduced-motion: reduce){
+  .last-win,.last-win::after,.last-soon-flag{animation:none}
+}
