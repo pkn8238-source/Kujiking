@@ -4280,10 +4280,7 @@
       var g = String(t.grade || '').toUpperCase();
       (g === 'A' || g === 'B' ? topCards : restCards).push(cardHtml(t));
     });
-    if (!topCards.length) { /* A·B상이 없는 판은 상위 2등급을 크게 */
-      restCards = [];
-      board.tiers.forEach(function (t, i) { (i < 2 ? topCards : restCards).push(cardHtml(t)); });
-    }
+    while (topCards.length < 2 && restCards.length) topCards.push(restCards.shift()); /* A·B상이 하나뿐이거나 없는 판도 윗줄을 3칸으로 */
     var denseCls = board.tiers.length > 6 ? ' is-dense' : '';
 
     var lo = '<button type="button" class="prize-card prize-last" data-action="zoom-last">' +
