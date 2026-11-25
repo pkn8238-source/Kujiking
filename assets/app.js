@@ -124,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.3.0';
+  var COVER_VER = '4.3.0b';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -2781,6 +2781,14 @@
     if (ui.draw && ui.draw.step === 'seal' && ui.draw.result && !ui.draw.revealed) { sealSnap(); return; }
     /* 승격 연출 중에는 먼저 끝까지 보여준다 (한 번 더 누르면 닫힌다) */
     if (ui.draw && ui.draw.step === 'promote' && ui.draw.result) { ui.draw.promoSkip = true; return; }
+    /* v4.3.0 — 연뽑을 다 까지 않고 창을 닫아도 판 상태가 빠지지 않게, 남은 결과를 지금 반영한다 */
+    if (ui.draw && ui.draw.batch && ui.draw.results && ui.draw.results.length) {
+      var cBoard = getBoard(ui.draw.boardId);
+      if (cBoard) {
+        ui.draw.results.forEach(function (r) { applyDrawOpenLocally(cBoard, r.n, r); });
+        scheduleBackgroundRefresh(600);
+      }
+    }
     closePostcodeLayer();
     modalRoot.hidden = true;
     modalPanel.innerHTML = '';
@@ -4826,6 +4834,7 @@
     var back = card ? card.querySelector('.mrv-back') : null;
     d.revealed[idx] = true;
     d.lastOpenIdx = idx;
+    applyDrawOpenLocally(board, r.n, r);   /* v4.3.0 — 이 카드를 깐 지금 반영 (배경 새로고침은 전부 깐 뒤에) */
     if (back) back.outerHTML = multiRevealFace(board, r);
     if (card) {
       void card.offsetWidth;          /* 초기 스타일을 먼저 계산해야 샤악 개봉 전환이 돈다 */
@@ -4836,6 +4845,7 @@
     if (refreshRevealHud(d)) {
       setTimeout(function () {
         if (ui.draw === d && d.step === 'reveal') renderDrawModal();
+        scheduleBackgroundRefresh(700);   /* v4.3.0 — 전부 깐 뒤에야 배경을 새로고침 */
       }, 640);
     }
   }
@@ -4882,10 +4892,12 @@
     });
     d.revealDelay = {};
     var k = 0;
+    var rb = getBoard(d.boardId);
     pending.forEach(function (i) {
       if (i === bestIdx) return;
       d.revealed[i] = true;
       d.lastOpenIdx = i;
+      if (rb) applyDrawOpenLocally(rb, rs[i].n, rs[i]);   /* v4.3.0 — 편 뒤집는 순간 반영 */
       d.revealDelay[i] = Math.min(560, k * 55);
       k++;
     });
@@ -6398,11 +6410,12 @@
       var tuned = tierOf(board, res.grade);
       if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
       ui.pendingCode = '';
-      /* 성공 — 낙관 표시를 확정하고 결과를 바로 화면 상태에 반영한다 */
+      /* 성공 — 뽑기권 낙관 표시만 확정한다. 등급·판 상태는 찢기 전까지 어디에도 반영하지 않는다 (v4.3.0) */
       settleCouponsPending([d.couponId]);
-      applyDrawOpenLocally(board, d.n, res);
       if (!ui.draw || ui.draw !== d || d.step !== 'peel') {
-        /* 화면이 닫혔거나 다른 단계로 넘어간 경우: 결과는 이미 서버·보관함에 기록됐다 */
+        /* 화면이 닫혔거나 다른 단계로 넘어간 경우: 결과는 이미 서버·보관함에 기록됐다.
+           모달이 이미 닫혔으니 배경 스포일러 걱정 없이 바로 반영한다. */
+        applyDrawOpenLocally(board, d.n, res);
         toast('뽑기 완료! ' + res.grade + '상', 'ok');
         try { await Backend.refreshData(); renderAll(); } catch (e0) {}
         return;
@@ -6413,8 +6426,9 @@
       paintPeek(d);
       updatePeelText(peelDrag ? peelDrag.p : 0);
       queueAfterDraw(getBoard(d.boardId) || board);
-      /* 전체 새로고침은 뒤에서 — 카드를 바로 이어 까도 막히지 않게 (v4.2.7) */
-      scheduleBackgroundRefresh(1200);
+      /* v4.3.0 — 종이를 찢기 전에는 판 배경(티켓 칸 색/등급·등급별 남은 수·실시간 판매 내역)을
+         절대 갱신하지 않는다. applyDrawOpenLocally·scheduleBackgroundRefresh 는
+         실제로 결과가 공개되는 peelSnap() 시점으로 미룬다. */
     } catch (e) {
       var emsg = errMsg(e);
       /* 방금 쓴 뽑기권이 서버에 이미 '사용'으로 남아 있던 경우(다른 창·기기에서 쓴 경우 등)
@@ -6523,8 +6537,7 @@
         res.n = no;
         d.results.push(res);
         if (cid) settleCouponsPending([cid]);
-        applyDrawOpenLocally(board, no, res);
-        syncPointsBalance(res);
+        /* v4.3.0 — 연뽑도 카드를 한 장씩 까기 전에는 판 상태에 반영하지 않는다 (뒤 배경 스포일러 방지) */
       } catch (e) {
         d.error = errMsg(e);
         if (cid && /이미 사용|사용할 수 없는 쿠폰/.test(d.error)) {
@@ -6552,9 +6565,8 @@
   async function finishMultiDraw() {
     var d = ui.draw;
     if (!d || !d.batch) return;
-    /* 결과 화면을 먼저 띄우고, 전체 새로고침은 뒤에서 */
+    /* 결과 화면을 먼저 띄운다. 판 배경·새로고침은 카드를 실제로 까는 시점까지 미룬다 (v4.3.0) */
     renderAll();
-    scheduleBackgroundRefresh(1200);
     /* 창이 닫혔거나 다른 화면으로 이동한 경우: 결과는 이미 서버·보관함에 기록됐다 */
     if (!ui.draw || ui.draw !== d) {
       if (d.results.length) toast('무작위 연뽑 완료 · ' + d.results.length + '장', 'ok');
@@ -6832,6 +6844,10 @@
       return;
     }
     d.busy = false;
+    /* v4.3.0 — 종이가 다 찢어져 결과가 공개되는 지금, 그때서야 판 상태·배경에 반영한다 */
+    var revealBoard = getBoard(d.boardId);
+    if (revealBoard) applyDrawOpenLocally(revealBoard, d.n, d.result);
+    scheduleBackgroundRefresh(900);
     /* B상 이상은 한 번 더 봉인을 까는 2단계 연출로 넘어간다 */
     syncPointsBalance(d.result);
     if (isSealGrade(d.result.grade)) {
@@ -7226,6 +7242,10 @@
     d.revealing = false;
     /* 연뽑 그리드에서 넘어온 승격: 클라이맥스 뒤에 당첨 상품(피규어 사진·상품명)을 확실히 보여 준다 */
     if (d.batch && d.promoReturn === 'reveal') {
+      if (d.result) {
+        var pBoard = getBoard(d.boardId);
+        if (pBoard) applyDrawOpenLocally(pBoard, d.result.n, d.result);
+      }
       var gi = d.promoIdx;
       if (!d.revealed) d.revealed = {};
       if (gi != null && gi >= 0) { d.revealed[gi] = true; d.glowIdx = gi; d.lastOpenIdx = gi; }
