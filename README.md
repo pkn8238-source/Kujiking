@@ -387,7 +387,7 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 
 파일: `assets/styles.css`(v4.0.3 블록)
 
-## 15. 관리자 간편 등록 — 1kuji 링크 · 사진 올리기 (v4.0.6 · 2026-11-25)
+## 15. 관리자 간편 등록 — 1kuji 링크 · 사진 올리기 (v4.0.7 · 2026-11-25)
 
 관리자가 **아이폰에서 1분 안에 새 판을 만드는 것**이 목표입니다. `[관리자] → 판 관리 → 새 판 만들기`.
 
@@ -440,7 +440,7 @@ C상 이상 봉인(`⚡ C상 이상 확정!`)을 깐 뒤, 결과 화면으로 �
 `handleUploadFile` · `shrinkImage` · `fillPointTier` · `clearAllBoardsFlow` · `Backend.clearAllBoards`),
 `assets/styles.css`(v4.0.6 블록), `index.html`(전체 비우기 카드)
 
-## 16. 통합 SQL 한 번 붙여넣기 (v4.0.6)
+## 16. 통합 SQL 한 번 붙여넣기 (v4.0.7)
 
 `attachments/2026-11-25/kujiking_setup_all.txt` 하나로 아래가 전부 설치됩니다.
 
