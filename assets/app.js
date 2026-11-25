@@ -1117,6 +1117,12 @@
     }
     return board;
   }
+  /* ---------- 구매확인 문구 정리 (v4.3.1) ----------
+     구매확인 요청 단계는 없어진다. DB에 남은 '구매확인 승인 · …' 같은 쿠폰 지급 메모는
+     화면에서 '교환 코드 지급 · …' 로 바꿔 그린다. */
+  function scrubClaimCopy(s) {
+    return String(s == null ? '' : s).replace(/구매\s*확인\s*승인/g, '교환 코드 지급');
+  }
   function hasPointTier(board) {
     return (board.tiers || []).some(function (t) {
       return !!t.pointOnly || String(t.grade).toUpperCase() === 'P' || Number(t.points_awarded || 0) > 0;
@@ -7821,7 +7827,7 @@
         '<div class="coupon-body">' +
           '<span class="coupon-kind">' + (c.boardId ? h(board ? board.category : '판 전용') + ' 전용' : '모든 판 사용') + '</span>' +
           '<strong class="coupon-title">' + h(board ? board.title : '쿠지 뽑기권 1장') + '</strong>' +
-          '<span class="coupon-note">' + h(c.note || '') + ' · ' + formatDate(c.grantedAt) + '</span>' +
+          '<span class="coupon-note">' + h(scrubClaimCopy(c.note || '')) + ' · ' + formatDate(c.grantedAt) + '</span>' +
         '</div>' +
         '<div class="coupon-side">' +
           (used
