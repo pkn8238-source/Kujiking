@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.3, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.4, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -4252,7 +4252,7 @@
     var el = $('#prizesPanel');
     if (!el) return;
     var total = board.tickets || 1;
-    var cards = board.tiers.map(function (t) {
+    var cardHtml = function (t) {
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
       var left = Math.max(0, Number(t.count) - sold);
       var pct = (t.count / total * 100).toFixed(1).replace(/\.0$/, '');
@@ -4268,10 +4268,23 @@
           '<span class="prize-body">' +
             '<b class="prize-name">' + h(t.label) + '</b>' +
             (t.desc ? '<span class="prize-desc">' + h(t.desc) + '</span>' : '') +
-            '<span class="prize-meta"><span>' + (isP ? '당첨 ' + fmt(t.count) + '장' : '수령 ' + fmt(t.count) + '개') + '</span><span>' + pct + '%</span><span>잔여 ' + fmt(left) + '</span></span>' +
+            '<span class="prize-meta"><span>' + (isP ? '당첨 ' + fmt(t.count) + '장' : '수령 ' + fmt(t.count) + '개') + '</span><span>' + pct + '%</span><span class="prize-left">잔여 ' + fmt(left) + '</span></span>' +
           '</span>' +
         '</button>';
-    }).join('');
+    };
+
+    /* v4.3.4 — 모바일 세로 스크롤 단축: 맨 윗줄은 A상·B상·라스트원 3개만 크게, 나머지 C~P상은 5열 컴팩트 카드.
+       나눌 하위 등급이 없으면 예전처럼 한 그리드로 보여 준다. */
+    var topCards = [], restCards = [];
+    board.tiers.forEach(function (t) {
+      var g = String(t.grade || '').toUpperCase();
+      (g === 'A' || g === 'B' ? topCards : restCards).push(cardHtml(t));
+    });
+    if (!topCards.length) { /* A·B상이 없는 판은 상위 2등급을 크게 */
+      restCards = [];
+      board.tiers.forEach(function (t, i) { (i < 2 ? topCards : restCards).push(cardHtml(t)); });
+    }
+    var denseCls = board.tiers.length > 6 ? ' is-dense' : '';
 
     var lo = '<button type="button" class="prize-card prize-last" data-action="zoom-last">' +
         '<span class="prize-media">' +
@@ -4282,7 +4295,7 @@
         '<span class="prize-body">' +
           '<b class="prize-name">' + h(board.lastOneLabel || '라스트원상') + '</b>' +
           (board.lastOneDesc ? '<span class="prize-desc">' + h(board.lastOneDesc) + '</span>' : '') +
-          '<span class="prize-meta"><span>' + (board.lastOneWinnerName ? '🏆 ' + h(board.lastOneWinnerName) : '마지막 1장') + '</span><span>' + (board.lastOneWinnerName ? '지급 완료' : '별도 지급') + '</span></span>' +
+          '<span class="prize-meta"><span class="prize-left">' + (board.lastOneWinnerName ? '🏆 ' + h(board.lastOneWinnerName) : '마지막 1장') + '</span><span>' + (board.lastOneWinnerName ? '지급 완료' : '별도 지급') + '</span></span>' +
         '</span>' +
       '</button>';
 
@@ -4296,7 +4309,10 @@
             : '등급 ' + board.tiers.length + '종 · 총 ' + fmt(board.tickets) + '장 구성입니다. ') +
           '실물 이미지를 누르면 크게 볼 수 있어요.</p></div></div>' +
         '<span class="prizes-count">' + board.tiers.length + '등급 + 라스트원</span></div>' +
-      '<div class="prize-gallery' + (board.tiers.length > 6 ? ' is-dense' : '') + '">' + cards + lo + '</div>' +
+      (restCards.length
+        ? '<div class="prize-gallery prize-gallery--top">' + topCards.join('') + lo + '</div>' +
+          '<div class="prize-gallery prize-gallery--rest">' + restCards.join('') + '</div>'
+        : '<div class="prize-gallery' + denseCls + '">' + topCards.join('') + lo + '</div>') +
       '<p class="prizes-note">등급·수량·확률은 각 상품 카드에서 바로 확인할 수 있고, 전체 확률 공시는 <a href="#/fairness" class="inline-link">공정성 검증</a>에서 볼 수 있어요.</p>';
   }
 

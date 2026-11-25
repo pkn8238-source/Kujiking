@@ -3786,3 +3786,55 @@ body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 }
 .prizes-note .inline-link{font-weight:900}
 @media (max-width:640px){.prizes-note{font-size:12px;padding:10px 12px}}
+
+/* ===== v4.3.4 — 상품 구성: 맨 윗줄 A·B·라스트원 3열 큰 카드 + 나머지(C~P) 5열 컴팩트 (모바일 세로 스크롤 단축) ===== */
+.prize-gallery.prize-gallery--top{grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.prize-gallery.prize-gallery--rest{grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-top:16px}
+.prize-gallery.prize-gallery--rest .prize-card{min-width:0}
+.prize-gallery.prize-gallery--rest .prize-body{min-width:0}
+.prize-gallery.prize-gallery--rest .prize-name{font-size:12px;line-height:1.3;min-width:0;overflow-wrap:anywhere}
+.prize-gallery.prize-gallery--rest .prize-desc{
+  font-size:11px;line-height:1.4;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:1;overflow:hidden;
+}
+@media (max-width:760px){
+  /* ── 맨 윗줄: A상 · B상 · 라스트원 = 3열 큰 카드 ── */
+  .prize-gallery.prize-gallery--top{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .prize-gallery.prize-gallery--top .prize-card{border-width:1.5px;border-radius:12px;min-width:0}
+  .prize-gallery.prize-gallery--top .prize-body{padding:7px 7px 8px;gap:3px;min-width:0}
+  .prize-gallery.prize-gallery--top .prize-name{
+    font-size:12px;font-weight:900;line-height:1.25;letter-spacing:-.02em;word-break:keep-all;min-width:0;min-height:2.5em;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+  }
+  .prize-gallery.prize-gallery--top .prize-meta{flex-wrap:nowrap;gap:0;margin-top:0;min-width:0}
+  .prize-gallery.prize-gallery--top .prize-meta>span{display:none}
+  .prize-gallery.prize-gallery--top .prize-meta>.prize-left{
+    display:block;font-size:9.5px;font-weight:900;letter-spacing:-.02em;padding:1px 5px;border-radius:5px;
+    min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .prize-gallery.prize-gallery--top .rank-badge{top:5px;left:5px;padding:2px 5px;font-size:9.5px;border-width:1.5px;border-radius:6px;box-shadow:none}
+  .prize-gallery.prize-gallery--top .prize-out{font-size:11px}
+  .prize-gallery.prize-gallery--top .prize-media-empty{font-size:32px}
+
+  /* ── 나머지: C~P상 = 5열 컴팩트 카드 ── */
+  .prize-gallery.prize-gallery--rest{grid-template-columns:repeat(5,minmax(0,1fr));gap:5px;margin-top:10px}
+  .prize-gallery.prize-gallery--rest .prize-card{border-width:1px;border-radius:8px;box-shadow:0 1px 4px rgba(23,18,14,.05);min-width:0}
+  .prize-gallery.prize-gallery--rest .prize-card:hover{transform:none;box-shadow:0 1px 4px rgba(23,18,14,.05);border-color:var(--line-strong)}
+  .prize-gallery.prize-gallery--rest .prize-card:hover .prize-media img{transform:none}
+  .prize-gallery.prize-gallery--rest .prize-media{aspect-ratio:1/1}
+  .prize-gallery.prize-gallery--rest .prize-body{padding:4px 4px 5px;gap:2px;min-width:0}
+  .prize-gallery.prize-gallery--rest .prize-name{
+    font-size:10px;font-weight:800;line-height:1.2;letter-spacing:-.03em;word-break:keep-all;overflow-wrap:anywhere;
+    min-width:0;min-height:2.4em;
+    display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;
+  }
+  .prize-gallery.prize-gallery--rest .prize-desc{display:none}
+  .prize-gallery.prize-gallery--rest .prize-meta{flex-wrap:nowrap;gap:0;margin-top:0;min-width:0;overflow:hidden}
+  .prize-gallery.prize-gallery--rest .prize-meta>span{display:none}
+  .prize-gallery.prize-gallery--rest .prize-meta>.prize-left{
+    display:block;font-size:8.5px;font-weight:900;letter-spacing:-.04em;padding:1px 3px;border-radius:4px;
+    min-width:0;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  }
+  .prize-gallery.prize-gallery--rest .rank-badge{top:3px;left:3px;padding:0 3px;font-size:8px;line-height:1.6;border-width:1px;border-radius:4px;box-shadow:none}
+  .prize-gallery.prize-gallery--rest .prize-media-empty{font-size:20px}
+  .prize-gallery.prize-gallery--rest .prize-out{font-size:9px;letter-spacing:0}
+}
