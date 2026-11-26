@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.7, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.8, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -5090,18 +5090,26 @@
         btn.setAttribute('aria-pressed', off ? 'false' : 'true');
         btn.title = off ? '개봉 효과음 켜기 (누르면 테스트음이 재생됩니다)' : '개봉 효과음 끄기';
       }
-      /* 상단 사운드 버튼 + 설정 팝오버도 같은 상태를 보여 준다 */
+      /* 상단 사운드 버튼 + 설정 팝오버도 같은 상태를 보여 준다 (SVG 아이콘 유지 — v4.3.8) */
       var hb = document.getElementById('soundBtn');
       if (hb) {
-        hb.textContent = off ? '🔇' : '🔊';
         hb.setAttribute('aria-pressed', off ? 'false' : 'true');
+        hb.setAttribute('aria-label', off ? '효과음 꺼짐 · 눌러서 설정' : '효과음 ' + pct + '% · 눌러서 설정');
         hb.title = off ? '효과음 꺼짐 · 눌러서 설정' : '효과음 ' + pct + '% · 눌러서 조절';
         hb.classList.toggle('is-off', off);
       }
       var pm = document.getElementById('soundPopMute');
-      if (pm) { pm.textContent = off ? '🔇 꺼짐' : '🔊 켜짐'; pm.setAttribute('aria-pressed', off ? 'false' : 'true'); }
+      if (pm) {
+        pm.setAttribute('aria-pressed', off ? 'false' : 'true');
+        pm.classList.toggle('is-off', off);
+      }
+      var pml = document.getElementById('soundPopMuteLabel');
+      if (pml) pml.textContent = off ? '꺼짐' : '켜짐';
       var r1 = document.getElementById('soundVolRange');
-      if (r1 && Number(r1.value) !== pct) r1.value = String(pct);
+      if (r1) {
+        if (Number(r1.value) !== pct) r1.value = String(pct);
+        r1.style.setProperty('--vol-fill', pct + '%');
+      }
       var r2 = document.getElementById('peelVolume');
       if (r2 && Number(r2.value) !== pct) r2.value = String(pct);
       var l1 = document.getElementById('soundVolPct');

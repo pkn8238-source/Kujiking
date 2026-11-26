@@ -202,22 +202,76 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .main-nav a:hover{background:var(--cream)}
 .main-nav a.active{background:var(--ink);color:#fff}
 .header-actions{margin-left:auto;display:flex;align-items:center;gap:10px;position:relative}
-/* 효과음 버튼 + 볼륨 설정 팝오버 (v4.2.8) */
-.sound-btn{width:40px;height:40px;display:grid;place-items:center;border:2px solid var(--ink);border-radius:12px;
-  background:var(--paper);font-size:17px;line-height:1;padding:0;box-shadow:0 3px 0 rgba(23,18,14,.12);flex:none}
-.sound-btn:hover{background:var(--cream)}
-.sound-btn.is-off{color:var(--muted);border-color:var(--line-strong);box-shadow:none}
-.sound-pop{position:absolute;top:calc(100% + 10px);right:0;width:min(248px,calc(100vw - 32px));z-index:80;
-  background:var(--paper);border:2px solid var(--ink);border-radius:16px;padding:14px;box-shadow:0 10px 22px rgba(23,18,14,.16)}
-.sound-pop-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
-.sound-pop-head b{font-size:14px;font-weight:900}
-.sound-pop-mute{border:2px solid var(--line-strong);background:var(--cream);border-radius:999px;padding:5px 10px;
-  font-size:12px;font-weight:900;color:var(--ink-soft)}
-.sound-pop-mute:hover{border-color:var(--ink)}
-.sound-vol{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:800;color:var(--muted)}
-.sound-vol input[type="range"]{flex:1;min-width:0;accent-color:var(--ink);height:22px}
-.sound-vol b{min-width:34px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);font-size:12.5px}
-.sound-pop-note{margin:9px 0 0;font-size:11px;line-height:1.5;color:var(--muted);font-weight:600}
+/* =========================================================
+   효과음 버튼 + 볼륨 설정 팝오버 (v4.3.8)
+   ─ 상단 사운드 토글을 스티커 버튼에서 '화이트·아이보리 글래스 필'로
+     다듬었다. 헤어라인 테두리 + 1.8px 스트로크 스피커 SVG,
+     켜짐은 음파 웨이브와 은은한 골드 워시, 꺼짐은 부드러운 뮤트 X.
+   ─ 폭은 PC 40px · 모바일 36px 그대로 유지 (v4.3.6 헤더 한 줄 유지).
+   ========================================================= */
+.sound-btn{position:relative;width:40px;height:40px;flex:none;display:grid;place-items:center;padding:0;
+  border:1px solid rgba(23,18,14,.13);border-radius:999px;
+  background:linear-gradient(180deg,#ffffff 0%,#fffdf7 58%,#f8f3e8 100%);
+  color:var(--ink);line-height:1;-webkit-tap-highlight-color:transparent;
+  box-shadow:0 1px 2px rgba(23,18,14,.05),0 8px 16px -10px rgba(23,18,14,.28),inset 0 1px 0 rgba(255,255,255,.95);
+  transition:border-color .18s ease,box-shadow .18s ease,background .18s ease,color .18s ease,transform .12s ease}
+.sound-btn::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(115% 115% at 78% 16%,rgba(245,184,0,.20) 0%,rgba(245,184,0,.07) 45%,rgba(245,184,0,0) 72%);
+  opacity:1;transition:opacity .22s ease}
+.sound-btn:hover{border-color:rgba(23,18,14,.26);
+  background:linear-gradient(180deg,#fff 0%,#fffdf7 58%,#faf5ea 100%);
+  box-shadow:0 1px 2px rgba(23,18,14,.07),0 12px 22px -12px rgba(23,18,14,.34),inset 0 1px 0 #fff}
+.sound-btn:active{transform:translateY(1px)}
+.sound-btn[aria-expanded="true"]{border-color:rgba(23,18,14,.32);
+  box-shadow:0 0 0 3px rgba(245,184,0,.16),0 10px 20px -12px rgba(23,18,14,.32),inset 0 1px 0 #fff}
+.sound-btn.is-off{color:var(--muted);border-color:rgba(23,18,14,.10);
+  background:linear-gradient(180deg,#fffefb 0%,#f7f4ec 100%);
+  box-shadow:0 1px 2px rgba(23,18,14,.04),inset 0 1px 0 rgba(255,255,255,.9)}
+.sound-btn.is-off::before{opacity:0}
+.sound-btn svg{width:20px;height:20px;display:block;overflow:visible}
+.sound-btn .sp-wave,.sound-btn .sp-mute{transition:opacity .18s ease}
+.sound-btn .sp-mute{opacity:0}
+.sound-btn.is-off .sp-wave{opacity:0}
+.sound-btn.is-off .sp-mute{opacity:1}
+@keyframes soundWaveBreath{0%,100%{opacity:.45}50%{opacity:1}}
+.sound-btn:not(.is-off) .sp-wave{animation:soundWaveBreath 2.8s ease-in-out infinite}
+.sound-btn:not(.is-off) .sp-wave-far{animation-delay:.45s}
+@media (prefers-reduced-motion:reduce){
+  .sound-btn:not(.is-off) .sp-wave{animation:none}
+  .sound-btn{transition:none}
+}
+.sound-pop{position:absolute;top:calc(100% + 12px);right:0;width:min(262px,calc(100vw - 28px));z-index:80;
+  background:linear-gradient(180deg,#ffffff 0%,#fffdf8 62%,#faf6ec 100%);
+  border:1px solid rgba(23,18,14,.12);border-radius:18px;padding:15px 15px 13px;
+  box-shadow:0 20px 44px -22px rgba(23,18,14,.38),0 2px 6px rgba(23,18,14,.05),inset 0 1px 0 #fff;
+  -webkit-backdrop-filter:blur(14px) saturate(1.12);backdrop-filter:blur(14px) saturate(1.12);
+  animation:soundPopIn .18s ease-out}
+@keyframes soundPopIn{from{opacity:0;transform:translateY(-5px) scale(.985)}to{opacity:1;transform:none}}
+.sound-pop-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px}
+.sound-pop-head b{font-size:13.5px;font-weight:900;letter-spacing:-.02em;color:var(--ink)}
+.sound-pop-mute{display:inline-flex;align-items:center;gap:6px;border:1px solid rgba(23,18,14,.14);
+  background:#fff;border-radius:999px;padding:5px 11px 5px 9px;font-size:11.5px;font-weight:800;
+  color:var(--ink-soft);letter-spacing:-.01em;
+  transition:border-color .16s ease,background .16s ease,color .16s ease}
+.sound-pop-mute:hover{border-color:rgba(23,18,14,.3)}
+.sound-pop-mute .spm-dot{width:6px;height:6px;border-radius:50%;flex:none;
+  background:linear-gradient(180deg,#ffd98a,var(--gold) 70%,#e0a400);
+  box-shadow:0 0 0 3px rgba(245,184,0,.14);transition:background .16s ease,box-shadow .16s ease}
+.sound-pop-mute.is-off{color:var(--muted);background:#faf7f0;border-color:rgba(23,18,14,.1)}
+.sound-pop-mute.is-off .spm-dot{background:#cdc3b2;box-shadow:none}
+.sound-vol{display:flex;align-items:center;gap:9px;font-size:11.5px;font-weight:800;color:var(--muted);letter-spacing:-.01em}
+.sound-vol input[type="range"]{-webkit-appearance:none;appearance:none;flex:1;min-width:0;height:18px;
+  background:transparent;cursor:pointer}
+.sound-vol input[type="range"]::-webkit-slider-runnable-track{height:4px;border-radius:999px;
+  background:linear-gradient(90deg,var(--ink) 0%,var(--ink) var(--vol-fill,38%),#e9e1d2 var(--vol-fill,38%),#e9e1d2 100%)}
+.sound-vol input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;margin-top:-5px;
+  border-radius:50%;background:#fff;border:1.5px solid var(--ink);box-shadow:0 1px 3px rgba(23,18,14,.22)}
+.sound-vol input[type="range"]::-moz-range-track{height:4px;border-radius:999px;background:#e9e1d2}
+.sound-vol input[type="range"]::-moz-range-progress{height:4px;border-radius:999px;background:var(--ink)}
+.sound-vol input[type="range"]::-moz-range-thumb{width:12px;height:12px;border-radius:50%;background:#fff;
+  border:1.5px solid var(--ink);box-shadow:0 1px 3px rgba(23,18,14,.22)}
+.sound-vol b{min-width:34px;text-align:right;font-variant-numeric:tabular-nums;color:var(--ink);font-size:12px;font-weight:900}
+.sound-pop-note{margin:11px 0 0;font-size:10.5px;line-height:1.55;color:var(--muted);font-weight:600;letter-spacing:-.005em}
 .peel-vol{display:inline-flex;align-items:center;gap:6px;flex:none}
 .peel-vol input[type="range"]{width:74px;accent-color:var(--ink);height:20px}
 .peel-vol b{font-size:10.5px;font-weight:900;color:var(--muted);min-width:30px;text-align:right}
@@ -3891,7 +3945,8 @@ body{max-width:100%}
   .brand-word{font-size:20px;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .header-actions{gap:6px;min-width:0;flex:1 1 auto;justify-content:flex-end}
   .yt-live-btn{padding:6px 10px 6px 8px;gap:5px;flex:none}
-  .sound-btn{width:36px;height:36px;border-radius:10px;font-size:15px}
+  .sound-btn{width:36px;height:36px;border-radius:999px;font-size:15px}
+  .sound-btn svg{width:18px;height:18px}
   .user-chip{gap:6px;padding:4px 9px 4px 5px;min-width:0;flex:0 1 auto}
   .user-avatar{width:26px;height:26px;font-size:12.5px;flex:none}
   .user-chip-body{min-width:0}
