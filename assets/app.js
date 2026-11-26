@@ -11126,6 +11126,20 @@
   /* =========================================================
      16. 시작
      ========================================================= */
+  /* v4.3.7 — 판 목록은 컬럼 권한 때문에 실시간 구독이 일부 이벤트를 못 받을 수 있다.
+     보고 있는 동안 60초마다 조용히 새로고침해 화면(남은 장수·판매 수)이 낡지 않게 한다.
+     입력 중(모달·포커스된 입력칸)과 관리자 화면에서는 건드리지 않는다. */
+  function startSafeRefresh() {
+    setInterval(function () {
+      if (Backend.mode !== 'supabase' || document.hidden || ui.draw) return;
+      if (!modalRoot || !modalRoot.hidden) return;
+      if (ui.view !== 'home' && ui.view !== 'board' && ui.view !== 'fairness' && ui.view !== 'winners') return;
+      var ae = document.activeElement;
+      if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName || '')) return;
+      Backend.refreshData().then(function () { renderAll(); }).catch(function () {});
+    }, 60000);
+  }
+
   async function init() {
     modalRoot = $('#modalRoot');
     modalPanel = $('#modalPanel');
@@ -11185,6 +11199,7 @@
     ui.ready = true;
     renderAll();
     route();
+    startSafeRefresh();
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

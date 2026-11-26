@@ -22,7 +22,8 @@
   `seed` 컬럼만 막힌 중간 상태에서는 seed 를 뺀 컬럼 목록으로 **3단계 폴백**합니다.
 - **조치 3 — 화면**: 공정성 화면은 시드가 없으면 `봉인 중` + "판 종료 후 공개", 매진됐지만 아직 종료 전이면 "판을 종료(마감)하면 시드가 공개됩니다" 로 안내합니다.
   관리자 판 등록·수정의 **시드 입력칸은 서버 모드에서 없앴습니다**(서버가 자동 생성, 관리자도 열람 불가). 데모(로컬) 모드에는 그대로 남습니다.
-- **같은 SQL 에 함께 넣은 잠금**: tickets(미판매 등급은 NULL · `buyer_id` 는 클라이언트에 비공개), coupons·profiles·draws·deliveries·purchase_claims·exchange_codes(각 본인/관리자만), `board_queue`(RPC 전용), `demo_code` 삭제.
+- **조치 4 — 실시간 보강**: 판 목록에서 seed 컬럼이 빠지면 Realtime 이 판 변경 이벤트를 못 받을 수 있어, 보고 있는 동안(홈·판·공정성·당첨자) **60초마다 조용히 새로고침**하는 안전망을 넣었습니다. 모달·입력 중·관리자 화면에서는 동작하지 않습니다.
+- **같은 SQL 에 함께 넣은 잠금**: coupons·profiles·draws·deliveries·purchase_claims·exchange_codes(각 본인/관리자만), `board_queue`(RPC 전용), `demo_code` 삭제, tickets 공개 범위 재확인.
   실서버 점검 결과 coupons·profiles·deliveries·purchase_claims·exchange_codes·board_queue 는 이미 권한 자체가 막혀 있었고, tickets 는 판매된 번호의 등급·마스킹 이름만 공개(정상)였습니다.
 - **실행 SQL**: `attachments/2026-11-26/kujiking_seed_security_sql.txt` — Supabase SQL Editor 에 붙여넣고 Run. 데이터는 지우지 않습니다.
 - `index.html`·`assets/app.js`·`assets/styles.css` 자산 버전 **4.3.7**, `protoTag` v4.3.7. 이미지 변경 없음 → `COVER_VER` 4.3.3 유지.
