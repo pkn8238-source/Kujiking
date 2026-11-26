@@ -10,6 +10,25 @@
 
 ---
 
+## v4.3.7 — 진행 중인 판의 시드(seed) 완전 비공개 (공정성 보안)
+
+- **증상(보안)**: `boards` RLS 가 `select using (true)` 라서, 진행 중인 판의 **`seed` 컬럼이 anon 키만으로 그대로 조회**됐습니다.
+  시드를 알면 `SHA-256(seed:n)` 으로 **미판매 번호의 등급을 전부 계산**할 수 있어(A상 번호만 골라 뽑기) 공정성이 무너집니다.
+  실서버 확인: `GET /rest/v1/boards?select=id,title,status,seed` → 두 판(갸루·크리스마스) 모두 open 인데 seed 가 그대로 내려왔습니다.
+- **조치 1 — 컬럼 권한**: `boards` 의 `select` 를 anon·authenticated 에서 회수하고 **seed 를 뺀 컬럼만** 다시 부여했습니다.
+  관리자도 같은 롤이라 REST 로는 seed 를 읽을 수 없습니다. (쓰기 권한은 그대로, 실제 반영은 RLS `is_admin()`)
+- **조치 2 — 공개 뷰 `public_boards`**: 판이 **`closed` 로 종료된 뒤에만** `seed` 가 채워지고, 진행 중(`open`)에는 `NULL` 입니다.
+  프런트(`Backend.loadBoardRows`)는 이 뷰를 먼저 읽고, 뷰가 없는 DB(SQL 실행 전)에서는 기존 `boards` 조회로,
+  `seed` 컬럼만 막힌 중간 상태에서는 seed 를 뺀 컬럼 목록으로 **3단계 폴백**합니다.
+- **조치 3 — 화면**: 공정성 화면은 시드가 없으면 `봉인 중` + "판 종료 후 공개", 매진됐지만 아직 종료 전이면 "판을 종료(마감)하면 시드가 공개됩니다" 로 안내합니다.
+  관리자 판 등록·수정의 **시드 입력칸은 서버 모드에서 없앴습니다**(서버가 자동 생성, 관리자도 열람 불가). 데모(로컬) 모드에는 그대로 남습니다.
+- **같은 SQL 에 함께 넣은 잠금**: tickets(미판매 등급은 NULL · `buyer_id` 는 클라이언트에 비공개), coupons·profiles·draws·deliveries·purchase_claims·exchange_codes(각 본인/관리자만), `board_queue`(RPC 전용), `demo_code` 삭제.
+  실서버 점검 결과 coupons·profiles·deliveries·purchase_claims·exchange_codes·board_queue 는 이미 권한 자체가 막혀 있었고, tickets 는 판매된 번호의 등급·마스킹 이름만 공개(정상)였습니다.
+- **실행 SQL**: `attachments/2026-11-26/kujiking_seed_security_sql.txt` — Supabase SQL Editor 에 붙여넣고 Run. 데이터는 지우지 않습니다.
+- `index.html`·`assets/app.js`·`assets/styles.css` 자산 버전 **4.3.7**, `protoTag` v4.3.7. 이미지 변경 없음 → `COVER_VER` 4.3.3 유지.
+
+---
+
 ## v4.3.6 — 모바일 가로 넘침(오른쪽 밀림·왼쪽 잘림) 수정
 
 - **증상**: 아이폰 실기기(414px)에서 상단 히어로·`KUJI BOARD`·`지금 열린 쿠지판`·티커 박스의 왼쪽이 잘리고, 페이지가 오른쪽으로 밀린 상태로 보였습니다.

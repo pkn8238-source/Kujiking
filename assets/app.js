@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.6, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.7, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -1185,6 +1185,7 @@
     });
   }
   function getMapping(board) {
+    if (!board || !board.seed) return Promise.resolve(null);   /* v4.3.7 — 진행 중인 판은 시드가 내려오지 않는다 */
     var key = [board.id, board.seed, board.tickets, board.tiers.map(function (t) {
       return t.grade + ':' + t.count;
     }).join(',')].join('|');
@@ -1496,7 +1497,11 @@
       var last = null;
       for (var attempt = 0; attempt < 2; attempt++) {
         try {
-          var res = await withTimeout(this.sb.from('boards').select('id').limit(1), 7000, 'Failed to fetch: timeout');
+          /* v4.3.7 — 공개 조회는 public_boards 뷰를 먼저 본다. 뷰가 아직 없는 DB(보안 SQL 실행 전)는 boards 로 확인 */
+          var res = await withTimeout(this.sb.from('public_boards').select('id').limit(1), 7000, 'Failed to fetch: timeout');
+          if (res.error && /PGRST205|PGRST200|Could not find the table|schema cache|does not exist/i.test(String(res.error.code || '') + ' ' + String(res.error.message || ''))) {
+            res = await withTimeout(this.sb.from('boards').select('id').limit(1), 7000, 'Failed to fetch: timeout');
+          }
           if (!res.error) return res;
           last = res;
           if (this.classify(res.error) === 'missing_tables') return res;
@@ -1535,6 +1540,25 @@
       }
     },
 
+    /* v4.3.7 — 판 목록 읽기
+       진행 중(open)인 판의 seed 는 서버가 내려 주지 않는다(관리자 포함). 공개 조회는
+       public_boards 뷰를 쓴다 — 판이 closed 로 끝난 뒤에만 seed 가 채워진다.
+       보안 SQL 을 아직 실행하지 않은 DB 에서는 뷰가 없으므로 기존 boards 조회로
+       안전하게 돌아가고, seed 컬럼 권한만 막힌 상태에서도 seed 를 뺀 컬럼으로 읽는다. */
+    async loadBoardRows() {
+      var sb = this.sb;
+      var opts = { ascending: false };
+      var viewRes = await sb.from('public_boards').select('*').order('created_at', opts);
+      if (!viewRes.error) return viewRes;
+      var boardsRes = await sb.from('boards').select('*').order('created_at', opts);
+      if (!boardsRes.error) return boardsRes;
+      var safeRes = await sb.from('boards')
+        .select('id,title,category,cover,price,ticket_count,tiers,last_one_label,last_one_image,last_one_desc,last_one_winner_id,last_one_winner_name,last_one_won_at,manual,status,seed_hash,created_at,sealed_at')
+        .order('created_at', opts);
+      if (!safeRes.error) return safeRes;
+      throw viewRes.error;
+    },
+
     /* ---------- 공통 ---------- */
     async refreshData() {
       if (this.mode === 'local') { buildLocalViews(); return; }
@@ -1544,8 +1568,7 @@
       var session = sess && sess.data ? sess.data.session : null;
       var myId = session && session.user ? session.user.id : null;
 
-      var boardsRes = await sb.from('boards').select('*').order('created_at', { ascending: false });
-      if (boardsRes.error) throw boardsRes.error;
+      var boardsRes = await this.loadBoardRows();
       var boards = (boardsRes.data || []).map(function (b) {
         var tiers = Array.isArray(b.tiers) ? b.tiers : [];
         return {
@@ -1556,7 +1579,7 @@
           lineupImage: (b.manual && b.manual.image) || '',
           lastOneWinnerId: b.last_one_winner_id || '', lastOneWinnerName: b.last_one_winner_name || '',
           lastOneWonAt: b.last_one_won_at || '',
-          seed: b.seed, seedHash: b.seed_hash,
+          seed: b.seed || '', seedHash: b.seed_hash,
           createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
         };
       });
@@ -2638,7 +2661,7 @@
       throw new Error('뽑기권(쿠폰) 또는 교환 코드가 필요합니다.');
     }
 
-    var map = await getMapping(board);
+    var map = (await getMapping(board)) || {};
     var grade = map[args.n] || board.tiers[board.tiers.length - 1].grade;
     var tier = tierOf(board, grade) || { label: '', points: 0 };
     var isLast = remaining(board) === 1;
@@ -8019,23 +8042,28 @@
     var hashEl = $('#fairHash');
     if (hashEl) hashEl.textContent = board.seedHash || '—';
 
+    /* v4.3.7 — seed 는 판이 종료(closed)된 뒤에만 서버에서 내려온다.
+       진행 중인 판은 관리자도 볼 수 없고, 공정성 화면은 봉인 해시만 보여 준다. */
+    var seedOpen = !!board.seed;
     var revealed = isRevealed(board);
     var badge = $('#fairSealBadge');
     if (badge) {
-      badge.textContent = revealed ? '시드 공개 완료' : '봉인 중';
-      badge.className = 'badge ' + (revealed ? 'badge-live' : '');
+      badge.textContent = seedOpen ? '시드 공개 완료' : '봉인 중';
+      badge.className = 'badge ' + (seedOpen ? 'badge-live' : '');
     }
     var hint = $('#fairSealHint');
     if (hint) {
-      hint.textContent = revealed
+      hint.textContent = seedOpen
         ? '판이 종료되어 시드가 공개되었습니다. 아래 시드로 해시와 번호별 배치를 직접 검증해 보세요.'
-        : '판매 중에는 시드가 공개되지 않습니다. 위 해시는 판매 전에 공개된 값이며, 판 종료 후 시드가 공개됩니다.';
+        : (revealed
+          ? '모든 번호가 판매되었습니다. 판을 종료(마감)하면 시드가 공개됩니다.'
+          : '판매 중에는 시드가 공개되지 않습니다. 위 해시는 판매 전에 공개된 값이며, 판 종료 후 시드가 공개됩니다.');
     }
     var seedBox = $('#fairSeedReveal');
     if (seedBox) {
-      seedBox.hidden = !revealed;
+      seedBox.hidden = !seedOpen;
       var seedEl = $('#fairSeed');
-      if (seedEl) seedEl.textContent = revealed ? board.seed : '—';
+      if (seedEl) seedEl.textContent = seedOpen ? board.seed : '판 종료 후 공개';
     }
     var metaList = $('#fairMeta');
     if (metaList) {
@@ -9399,10 +9427,14 @@
           '<label class="field"><span>실제 라인업 (한 줄에 1개)</span><textarea name="manualLineup" rows="4" placeholder="A상 손오공 MASTERLISE (약 20cm)">' + h((m.lineup || []).join('\n')) + '</textarea></label>' +
           '<label class="field"><span>유의사항 (한 줄에 1개)</span><textarea name="manualNotes" rows="3" placeholder="랜덤 지급 안내 등">' + h((m.notes || []).join('\n')) + '</textarea></label>' +
         '</div>' +
-        '<label class="field" style="margin-top:14px"><span>시드 (비우면 자동 생성)</span>' +
-          '<div class="seed-row"><input name="seed" type="text" value="' + h(editing ? editing.seed : '') + '" placeholder="자동 생성">' +
-          '<button type="button" class="btn btn-outline btn-sm" data-action="seed-regen">새로 생성</button></div>' +
-        '</label>' +
+        (Backend.mode === 'local'
+          ? '<label class="field" style="margin-top:14px"><span>시드 (비우면 자동 생성)</span>' +
+              '<div class="seed-row"><input name="seed" type="text" value="' + h(editing ? editing.seed : '') + '" placeholder="자동 생성">' +
+              '<button type="button" class="btn btn-outline btn-sm" data-action="seed-regen">새로 생성</button></div>' +
+            '</label>'
+          : '<div class="field" style="margin-top:14px"><span>시드 (비공개 · 자동 생성)</span>' +
+              '<p class="muted small" style="margin:4px 0 0;line-height:1.55">번호 배치를 정하는 시드는 <b>서버가 자동으로 만들고 아무에게도 보여 주지 않습니다.</b> 진행 중에는 관리자도 볼 수 없고, 판을 <b>종료</b>하면 공정성 검증 화면에서만 공개됩니다.</p>' +
+            '</div>') +
         '<p class="field-error" data-role="board-error" role="alert"></p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
@@ -9975,11 +10007,12 @@
         case 'reconnect-backend': reconnectBackend(); break;
 
         case 'copy-hash': { var b = getBoard(ui.fairnessBoardId) || state.boards[0]; if (b) copyText(b.seedHash, '봉인 해시를 복사했어요'); break; }
-        case 'copy-seed': { var b2 = getBoard(ui.fairnessBoardId) || state.boards[0]; if (b2) copyText(b2.seed, '시드를 복사했어요'); break; }
+        case 'copy-seed': { var b2 = getBoard(ui.fairnessBoardId) || state.boards[0]; if (b2 && b2.seed) copyText(b2.seed, '시드를 복사했어요'); else toast('판이 종료되면 시드가 공개됩니다.'); break; }
         case 'fill-seed': {
           var b3 = getBoard(ui.fairnessBoardId) || state.boards[0];
           var seedInput = $('#verifySeed');
-          if (b3 && seedInput) { seedInput.value = b3.seed; seedInput.focus(); toast('공개된 시드를 넣었어요. 계산을 눌러보세요.'); }
+          if (b3 && seedInput && b3.seed) { seedInput.value = b3.seed; seedInput.focus(); toast('공개된 시드를 넣었어요. 계산을 눌러보세요.'); }
+          else toast('판이 종료되면 시드가 공개됩니다.');
           break;
         }
         case 'copy-code': copyText(el.getAttribute('data-code'), '코드를 복사했어요'); break;
