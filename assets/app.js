@@ -2220,8 +2220,16 @@
       if (payload.id) {
         var current = getBoard(payload.id);
         var soldNow = current ? openedCount(current) : 0;
+        /* v4.3.7 — 종료(closed)된 판은 공정성 검증을 위해 시드가 공개돼 있다.
+           그 판을 그대로 다시 '판매 중'으로 열면 공개된 시드로 당첨 번호를 골라 뽑을 수 있으므로,
+           판매 기록이 없는 판만 새 시드로 다시 봉인해 열어 준다. */
+        var reopening = !!(current && current.status !== 'open' && payload.status === 'open');
+        if (reopening && soldNow > 0) {
+          throw new Error('이미 ' + fmt(soldNow) + '장이 팔린 종료 판은 다시 열 수 없어요. 새 판을 만들어 주세요.');
+        }
         var resize = !!(current && (Number(current.tickets) !== Number(payload.tickets) ||
           tierStructureKey(current.tiers) !== tierStructureKey(tiersNorm) ||
+          reopening ||
           (!!payload.seed && payload.seed !== current.seed)));
         if (resize && soldNow > 0) {
           throw new Error('이미 ' + fmt(soldNow) + '장이 팔린 판은 장수·등급을 바꿀 수 없어요.');
@@ -2350,7 +2358,20 @@
         buildLocalViews();
         return { mode: 'local', reset: sold };
       }
+      var curReset = getBoard(id);
+      var wasClosed = !!(curReset && curReset.status !== 'open');
       var res = await this.sb.rpc('admin_reset_board', { p_board_id: id });
+      if (!res.error && wasClosed) {
+        /* v4.3.7 — 종료됐던 판은 시드가 이미 공개됐으므로, 판매 초기화 뒤에는 새 시드로 다시 봉인한다.
+           (sold = 0 · draws = 0 이 된 뒤라 admin_resize_board 가 안전하게 새 seed·seed_hash 를 만든다) */
+        var bb = getBoard(id);
+        if (bb) {
+          var rr = await this.sb.rpc('admin_resize_board', {
+            p_board_id: id, p_ticket_count: bb.tickets, p_tiers: bb.tiers, p_seed: null
+          });
+          if (rr.error && !isMissingRpc(rr.error)) console.warn('[reset] 시드 다시 봉인 실패', rr.error);
+        }
+      }
       if (res.error) {
         var detail = String(res.error.code || '') + ' ' + String(res.error.message || '');
         if (/PGRST202|Could not find the function|schema cache|does not exist/i.test(detail)) {
