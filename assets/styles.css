@@ -1737,9 +1737,14 @@ html.is-page-hidden *{animation-play-state:paused !important}
   .sort-select .input{width:100%}
   .board-tabs{gap:5px}
   .board-tab{font-size:12.5px;padding:8px 12px}
-  .sales-row{grid-template-columns:1fr auto auto;gap:6px;padding:10px 2px}
-  .sales-row .sales-time{grid-column:1/-1;flex-direction:row;gap:8px}
-  .sales-row .sales-name{display:none}
+  /* v4.4.8 — 모바일에서도 구매자 닉네임이 보이게.
+     1줄: 뽑은 시각(+몇 분 전) / 2줄: 번호 · 닉네임 · 등급 배지 (긴 닉네임은 …로 자름) */
+  .sales-row{grid-template-columns:auto minmax(0,1fr) auto;gap:5px 8px;padding:10px 2px}
+  .sales-row .sales-time{grid-column:1/-1;flex-direction:row;align-items:baseline;gap:8px}
+  .sales-row .sales-num{grid-column:1;grid-row:2}
+  .sales-row .sales-name{grid-column:2;grid-row:2;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12.5px}
+  .sales-row .grade-badge{grid-column:3;grid-row:2}
+  .sales-row .badge{grid-column:1/-1;grid-row:3;justify-self:start;margin-top:3px}
   .sales-card,.prizes-card{padding:16px}
   .profile-card{padding:18px}
   .profile-avatar{width:46px;height:46px;font-size:20px}
