@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.6, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.7, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -1632,68 +1632,116 @@
       var session = sess && sess.data ? sess.data.session : null;
       var myId = session && session.user ? session.user.id : null;
 
-      var boardsRes = await this.loadBoardRows();
-      var boards = (boardsRes.data || []).map(function (b) {
-        var tiers = Array.isArray(b.tiers) ? b.tiers : [];
-        return {
-          id: b.id, title: b.title, category: b.category || '자체 스페셜',
-          price: b.price, tickets: b.ticket_count, tiers: tiers,
-          lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
-          lastOneImage: b.last_one_image || '', lastOneDesc: b.last_one_desc || '', manual: b.manual || null,
-          lineupImage: (b.manual && b.manual.image) || '',
-          lastOneWinnerId: b.last_one_winner_id || '', lastOneWinnerName: b.last_one_winner_name || '',
-          lastOneWonAt: b.last_one_won_at || '',
-          seed: b.seed || '', seedHash: b.seed_hash,
-          createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
-        };
-      });
+      /* v4.4.7 — 서버 왕복을 한 번에 모아 보낸다.
+         예전에는 판 → 번호 → 굿즈 → 설정 → 프로필 → 쿠폰 → 뽑기 → 배송…
+         순서로 10~11번을 차례로 기다려 첫 화면·새로고침이 2~3초씩 걸렸습니다.
+         (화면에 보이는 결과는 같습니다) */
+      var boardsP = (async function () {
+        var boardsRes = await Backend.loadBoardRows();
+        var boards = (boardsRes.data || []).map(function (b) {
+          var tiers = Array.isArray(b.tiers) ? b.tiers : [];
+          return {
+            id: b.id, title: b.title, category: b.category || '자체 스페셜',
+            price: b.price, tickets: b.ticket_count, tiers: tiers,
+            lastOneLabel: b.last_one_label, status: b.status, cover: b.cover || '',
+            lastOneImage: b.last_one_image || '', lastOneDesc: b.last_one_desc || '', manual: b.manual || null,
+            lineupImage: (b.manual && b.manual.image) || '',
+            lastOneWinnerId: b.last_one_winner_id || '', lastOneWinnerName: b.last_one_winner_name || '',
+            lastOneWonAt: b.last_one_won_at || '',
+            seed: b.seed || '', seedHash: b.seed_hash,
+            createdAt: b.created_at, sealedAt: b.sealed_at, opens: []
+          };
+        });
 
-      if (boards.length) {
-        var ids = boards.map(function (b) { return b.id; });
-        var tkRes = await sb.from('tickets')
-          .select('board_id,n,status,buyer_name,grade,drawn_at,is_last')
-          .in('board_id', ids).eq('status', 'sold');
-        /* is_last 컬럼이 아직 없는 DB(마이그레이션 전)에서도 판매 내역이 보이도록 한 번 더 */
-        if (tkRes.error) {
-          tkRes = await sb.from('tickets')
-            .select('board_id,n,status,buyer_name,grade,drawn_at')
+        if (boards.length) {
+          var ids = boards.map(function (b) { return b.id; });
+          var tkRes = await sb.from('tickets')
+            .select('board_id,n,status,buyer_name,grade,drawn_at,is_last')
             .in('board_id', ids).eq('status', 'sold');
-        }
-        if (!tkRes.error && tkRes.data) {
-          var byBoard = {};
-          tkRes.data.forEach(function (t) {
-            (byBoard[t.board_id] = byBoard[t.board_id] || []).push({
-              n: t.n, grade: t.grade, at: t.drawn_at, name: t.buyer_name || '익명',
-              userId: null, demo: false, last: !!t.is_last
+          /* is_last 컬럼이 아직 없는 DB(마이그레이션 전)에서도 판매 내역이 보이도록 한 번 더 */
+          if (tkRes.error) {
+            tkRes = await sb.from('tickets')
+              .select('board_id,n,status,buyer_name,grade,drawn_at')
+              .in('board_id', ids).eq('status', 'sold');
+          }
+          if (!tkRes.error && tkRes.data) {
+            var byBoard = {};
+            tkRes.data.forEach(function (t) {
+              (byBoard[t.board_id] = byBoard[t.board_id] || []).push({
+                n: t.n, grade: t.grade, at: t.drawn_at, name: t.buyer_name || '익명',
+                userId: null, demo: false, last: !!t.is_last
+              });
             });
-          });
-          boards.forEach(function (b) {
-            b.opens = (byBoard[b.id] || []).sort(function (x, y) { return new Date(y.at) - new Date(x.at); });
-          });
+            boards.forEach(function (b) {
+              b.opens = (byBoard[b.id] || []).sort(function (x, y) { return new Date(y.at) - new Date(x.at); });
+            });
+          }
         }
-      }
+        return boards;
+      })();
+
+      var goodsP = (async function () {
+        /* 굿즈샵 — 굿즈 목록은 공개 읽기(활성·품절 포함) */
+        var goodsRes = await sb.from('goods_items')
+          .select('id,name,points,stock,image_url,description,active,sort,created_at,updated_at')
+          .order('sort', { ascending: true }).order('created_at', { ascending: false });
+        if (goodsRes.error) {
+          /* 굿즈 SQL을 아직 실행하지 않은 DB여도 사이트는 그대로 뜨게 한다 */
+          if (!/PGRST205|Could not find the table|does not exist|schema cache/i.test(String(goodsRes.error.code || '') + ' ' + String(goodsRes.error.message || ''))) {
+            console.warn('[goods] 굿즈 목록을 불러오지 못했습니다', goodsRes.error);
+          }
+          return [];
+        }
+        return (goodsRes.data || []).map(mapGoodsItem);
+      })();
+
+      var settingsP = (async function () {
+        var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls', 'board_events']);
+        return (!setRes.error && setRes.data) ? setRes.data : [];
+      })();
+
+      /* 내 정보·뽑기권·보관함 — 로그인했을 때만, 역시 한꺼번에 */
+      var mineP = (async function () {
+        if (!myId) return null;
+        var out = {};
+        var profRes = await sb.from('profiles').select('*').eq('id', myId).single();
+        var p = profRes.data || {};
+        out.me = {
+          id: myId, email: p.email || (session.user.email || ''), nickname: p.nickname || '쿠지팬',
+          phone: p.phone || '', points: p.points || 0, isAdmin: !!p.is_admin,
+          createdAt: p.created_at
+        };
+        var rest = await Promise.all([
+          sb.from('coupons').select('*').eq('user_id', myId).order('granted_at', { ascending: false }),
+          sb.from('draws').select('*').eq('user_id', myId).order('created_at', { ascending: false }),
+          sb.from('purchase_claims').select('*').eq('user_id', myId).order('created_at', { ascending: false }),
+          sb.from('deliveries').select('*').eq('user_id', myId).order('requested_at', { ascending: false }),
+          sb.from('goods_orders').select('*').eq('user_id', myId).order('created_at', { ascending: false })
+        ]);
+        var cRes = rest[0], dRes = rest[1], clRes = rest[2], dlRes = rest[3], goRes = rest[4];
+        out.myCoupons = (cRes.data || []).map(function (c) {
+          return { id: c.id, userId: c.user_id, boardId: c.board_id, kind: c.kind, label: c.label, note: c.note, grantedAt: c.granted_at, usedAt: c.used_at, usedDrawId: c.used_draw_id };
+        });
+        out.myDraws = (dRes.data || []).map(function (d) {
+          return { id: d.id, boardId: d.board_id, n: d.n, userId: d.user_id, grade: d.grade, tierLabel: d.tier_label, points: d.points, itemStatus: d.item_status, source: d.source, at: d.created_at, last: d.is_last, lastOne: !!d.is_last_one };
+        });
+        out.myClaims = (clRes.data || []).map(mapClaim);
+        out.myDeliveries = (dlRes.data || []).map(mapDelivery);
+        out.myGoodsOrders = goRes.error ? [] : (goRes.data || []).map(mapGoodsOrder);
+        return out;
+      })();
+
+      var all = await Promise.all([boardsP, goodsP, settingsP, mineP]);
+      var boards = all[0], goodsItems = all[1], settingsRows = all[2], mine = all[3];
+
       state.boards = boards;
       state.loadError = '';
       if (Array.isArray(state.boards)) state.boards.forEach(scrubPointCopy);
+      state.goodsItems = goodsItems;
 
-      /* 굿즈샵 — 굿즈 목록은 공개 읽기(활성·품절 포함), 주문은 로그인 회원 본인 것만 */
-      var goodsRes = await sb.from('goods_items')
-        .select('id,name,points,stock,image_url,description,active,sort,created_at,updated_at')
-        .order('sort', { ascending: true }).order('created_at', { ascending: false });
-      if (goodsRes.error) {
-        /* 굿즈 SQL을 아직 실행하지 않은 DB여도 사이트는 그대로 뜨게 한다 */
-        if (!/PGRST205|Could not find the table|does not exist|schema cache/i.test(String(goodsRes.error.code || '') + ' ' + String(goodsRes.error.message || ''))) {
-          console.warn('[goods] 굿즈 목록을 불러오지 못했습니다', goodsRes.error);
-        }
-        state.goodsItems = [];
-      } else {
-        state.goodsItems = (goodsRes.data || []).map(mapGoodsItem);
-      }
-
-      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls', 'board_events']);
-      if (!setRes.error && setRes.data) {
+      if (settingsRows && settingsRows.length) {
         var settingsMap = {};
-        setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
+        settingsRows.forEach(function (row) { settingsMap[row.key] = row.value; });
         if (typeof settingsMap.youtube_live_url === 'string') state.settings.youtubeLiveUrl = settingsMap.youtube_live_url;
         if (typeof settingsMap.youtube_live_enabled === 'string') {
           state.settings.youtubeLiveEnabled = !/^(false|0|off|no)$/i.test(settingsMap.youtube_live_enabled.trim());
@@ -1715,34 +1763,13 @@
         }
       }
 
-      if (myId) {
-        var profRes = await sb.from('profiles').select('*').eq('id', myId).single();
-        var p = profRes.data || {};
-        state.me = {
-          id: myId, email: p.email || (session.user.email || ''), nickname: p.nickname || '쿠지팬',
-          phone: p.phone || '', points: p.points || 0, isAdmin: !!p.is_admin,
-          createdAt: p.created_at
-        };
-
-        var cRes = await sb.from('coupons').select('*').eq('user_id', myId).order('granted_at', { ascending: false });
-        state.myCoupons = (cRes.data || []).map(function (c) {
-          return { id: c.id, userId: c.user_id, boardId: c.board_id, kind: c.kind, label: c.label, note: c.note, grantedAt: c.granted_at, usedAt: c.used_at, usedDrawId: c.used_draw_id };
-        });
-
-        var dRes = await sb.from('draws').select('*').eq('user_id', myId).order('created_at', { ascending: false });
-        state.myDraws = (dRes.data || []).map(function (d) {
-          return { id: d.id, boardId: d.board_id, n: d.n, userId: d.user_id, grade: d.grade, tierLabel: d.tier_label, points: d.points, itemStatus: d.item_status, source: d.source, at: d.created_at, last: d.is_last, lastOne: !!d.is_last_one };
-        });
-
-        var clRes = await sb.from('purchase_claims').select('*').eq('user_id', myId).order('created_at', { ascending: false });
-        state.myClaims = (clRes.data || []).map(mapClaim);
-
-        var dlRes = await sb.from('deliveries').select('*').eq('user_id', myId).order('requested_at', { ascending: false });
-        state.myDeliveries = (dlRes.data || []).map(mapDelivery);
-
-        var goRes = await sb.from('goods_orders').select('*').eq('user_id', myId).order('created_at', { ascending: false });
-        state.myGoodsOrders = goRes.error ? [] : (goRes.data || []).map(mapGoodsOrder);
-
+      if (mine) {
+        state.me = mine.me;
+        state.myCoupons = mine.myCoupons;
+        state.myDraws = mine.myDraws;
+        state.myClaims = mine.myClaims;
+        state.myDeliveries = mine.myDeliveries;
+        state.myGoodsOrders = mine.myGoodsOrders;
         state.coupons = state.myCoupons;
         state.draws = state.myDraws;
         state.claims = state.myClaims;
@@ -2584,33 +2611,32 @@
       if (!this.sb) return;
       if (this._subscribed) return;
       this._subscribed = true;
-      var self = this;
-      var timer = null;
-      var kick = function () {
-        clearTimeout(timer);
-        /* 뽑기 연출이 도는 동안에는 전체 새로고침을 미룬다 — 연속 뽑기가 끊기지 않게 (v4.2.7) */
-        var d = ui.draw;
-        var busy = !!d && (d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing');
-        timer = setTimeout(async function () {
-          try {
-            await self.refreshData();
-            if (state.me && state.me.isAdmin && ui.view === 'admin' && ui.adminUnlocked) await self.loadAdmin();
-            renderAll();
-          } catch (e) { /* 실시간 갱신 실패는 조용히 무시 */ }
-        }, busy ? 1500 : 350);
-      };
+      live.status = 'connecting';
+      /* v4.4.7 — 테이블마다 다르게 받는다.
+         tickets(남이 뽑은 번호)는 전체 새로고침 없이 그 칸만 바로 칠하고,
+         나머지(판·쿠폰·배송·굿즈)는 8초에 한 번으로 묶어 전체를 맞춘다. */
+      var full = function (delay, gap) { return function () { requestFullSync(delay, gap); }; };
       try {
         this.sb.channel('kujiking-live')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'boards' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'draws' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'purchase_claims' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_items' }, kick)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_orders' }, kick)
-          .subscribe();
-      } catch (e) { console.warn('[쿠지킹] 실시간 구독 실패', e); }
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'tickets' }, function (payload) {
+            /* 관리자 화면은 표가 많아 전체 새로고침으로 맞춘다 */
+            if (ui.view !== 'admin' && liveApplyTicket(payload)) return;
+            requestFullSync(400, 6000);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'boards' }, full(500, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'coupons' }, full(600, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'draws' }, full(600, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'deliveries' }, full(600, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'purchase_claims' }, full(600, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_items' }, full(600, 8000))
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'goods_orders' }, full(600, 8000))
+          .subscribe(function (status) {
+            live.status = status || 'unknown';
+            /* 끊겼다가 다시 붙으면 그 사이 놓친 변경을 한 번에 따라잡는다 */
+            if (status === 'SUBSCRIBED') requestFullSync(1500, 15000);
+            else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') requestFullSync(800, 0);
+          });
+      } catch (e) { console.warn('[쿠지킹] 실시간 구독 실패', e); live.status = 'error'; }
     }
   };
 
@@ -3161,6 +3187,296 @@
     else scheduleXmasPopup(XMAS_POPUP_DELAY_MS);
   }
 
+  /* =========================================================
+     6.5 v4.4.7 — 실시간 반영 · 렌더 부담 줄이기
+     -------------------------------------------------
+     “홈페이지에 렉이 있고, 누가 뽑아도 늦게 보인다” 대응.
+     예전에는 tickets 한 줄이 바뀔 때마다 refreshData()(서버 왕복 4~11번)와
+     renderAll()(번호판 300칸·판매 내역·상품 카드 전부 다시 그리기)을 통째로
+     돌렸습니다. 이제는
+       · tickets 이벤트 → 그 번호 칸·카운터만 바로 칠하기 (서버 안 기다림)
+       · 판 화면을 보는 동안 5초마다 가벼운 조회로 놓친 변경 따라잡기
+       · 전체 새로고침은 8초에 한 번으로 묶기
+     로 동작합니다.
+     ========================================================= */
+  var live = {
+    status: 'off',
+    lastEventAt: 0,
+    lastFullAt: 0,
+    fullTimer: null,
+    busy: false,
+    pollTimer: null,
+    pollAt: 0,
+    polls: 0,
+    applied: 0
+  };
+
+  /* data-live="키" 자리에 들어 있는 숫자만 갈아 끼운다 */
+  function liveSetText(scope, key, value) {
+    if (!scope) return;
+    var nodes = scope.querySelectorAll('[data-live="' + key + '"]');
+    for (var i = 0; i < nodes.length; i++) {
+      if (key === 'fill') nodes[i].style.width = value + '%';
+      else nodes[i].textContent = value;
+    }
+  }
+
+  function liveOpenIndex(opens, n) {
+    for (var i = 0; i < opens.length; i++) if (Number(opens[i].n) === n) return i;
+    return -1;
+  }
+
+  /* 뽑힌 번호 한 칸만 다시 칠한다 — 판 화면을 보고 있을 때만 */
+  function livePaintCell(board, n, opened, flash) {
+    if (!board || ui.view !== 'board') return;
+    var cur = getBoard(ui.boardId);
+    if (!cur || cur.id !== board.id) return;
+    var grid = $('#ticketGrid');
+    if (!grid) return;
+    var cell = grid.querySelector('.ticket[data-n="' + n + '"]');
+    if (!cell) return;
+    var o = null;
+    if (opened) {
+      var idx = liveOpenIndex(board.opens || [], n);
+      if (idx < 0) return;
+      o = board.opens[idx];
+    }
+    if (opened && cell.classList.contains('is-open') && !flash) return;
+    if (!opened && !cell.classList.contains('is-open')) return;
+    cell.outerHTML = ticketCellHTML(n, o, !!flash);
+    /* 방금 뽑힌 칸을 잡깐 반짝여 누가 뽑았는지 바로 보이게 */
+    if (flash) {
+      setTimeout(function () {
+        var el = grid.querySelector('.ticket[data-n="' + n + '"].is-live');
+        if (el) el.classList.remove('is-live');
+      }, 1600);
+    }
+  }
+
+  /* 상품 카드의 그 등급 잔여 수만 고친다 */
+  function livePatchPrize(board, grade) {
+    if (!board || !grade) return;
+    var panel = $('#prizesPanel');
+    if (!panel) return;
+    var card = panel.querySelector('.prize-card[data-grade="' + grade + '"]');
+    if (!card) return;
+    var tier = (board.tiers || []).filter(function (t) { return String(t.grade) === String(grade); })[0];
+    if (!tier) return;
+    var soldN = (board.opens || []).filter(function (o) { return o.grade === grade; }).length;
+    var count = Number(tier.count) || 0;
+    var leftN = Math.max(0, count - soldN);
+    var span = card.querySelector('.prize-left');
+    if (span) {
+      span.textContent = leftN === 0 ? '품절' : fmt(leftN) + '/' + fmt(count);
+      span.classList.toggle('is-soldout', leftN === 0);
+    }
+    card.classList.toggle('is-out', leftN === 0);
+  }
+
+  /* 판매 내역 맨 위에 한 줄만 붙인다 (300줄 전체 다시 그리기 방지) */
+  function liveSalesAppend(board, entry) {
+    if (!entry || !board) return;
+    if (ui.view !== 'board') return;
+    var cur = getBoard(ui.boardId);
+    if (!cur || cur.id !== board.id) return;
+    var el = $('#salesPanel');
+    if (!el) return;
+    var list = el.querySelector('.sales-list');
+    if (!list) { el._kjSig = null; el._kjSale = null; el._kjSeen = null; renderSalesPanel(board); return; }
+    var seen = el._kjSeen || (el._kjSeen = {});
+    if (seen[entry.n]) return;
+    seen[entry.n] = 1;
+    list.insertAdjacentHTML('afterbegin', salesRowHTML(board, entry));
+    var domCount = list.children.length;
+    var stats = el.querySelector('.sales-stats');
+    if (stats) stats.innerHTML = '<span>판매 <b>' + fmt(domCount) + '</b>장</span><span>남은 <b>' + fmt(remaining(board)) + '</b>장</span>';
+    el._kjSale = { board: board.id, count: domCount };
+    el._kjSig = board.id + '|' + domCount + '|' + Math.floor(Date.now() / 60000);
+  }
+
+  /* 남은 장수·판매 수·진행률·카드 수량만 다시 칠한다 (전체 다시 그리기 없음) */
+  function liveSyncCounters(board) {
+    if (!board) return;
+    var left = remaining(board), sold = openedCount(board);
+    var pct = board.tickets ? Math.round(sold / board.tickets * 100) : 0;
+
+    if (ui.view === 'board') {
+      var cur = getBoard(ui.boardId);
+      if (cur && cur.id === board.id) {
+        paintGridCounters(board);
+        var hero = $('#boardHero');
+        liveSetText(hero, 'left', fmt(left));
+        liveSetText(hero, 'sold', fmt(sold));
+        liveSetText(hero, 'pct', pct + '% 진행');
+        liveSetText(hero, 'fill', pct);
+        var sw = $('#boardSwitch');
+        if (sw) {
+          var chip = sw.querySelector('[data-board="' + board.id + '"]');
+          if (chip) {
+            var small = chip.querySelector('small');
+            if (small) small.textContent = fmt(left) + '장';
+          }
+        }
+      }
+    } else if (ui.view === 'home') {
+      var openBoards = state.boards.filter(function (b) { return b.status === 'open'; });
+      var totalLeft = openBoards.reduce(function (s, b) { return s + remaining(b); }, 0);
+      var totalSold = state.boards.reduce(function (s, b) { return s + openedCount(b); }, 0);
+      var factRemaining = $('#factRemaining');
+      if (factRemaining) factRemaining.textContent = fmt(totalLeft);
+      var factSales = $('#factSales');
+      if (factSales) factSales.textContent = fmt(totalSold);
+      var card = document.querySelector('#boardList .board-card[data-board="' + board.id + '"]');
+      if (card) {
+        liveSetText(card, 'left', fmt(left));
+        liveSetText(card, 'fill', pct);
+      }
+      renderLiveTicker();
+    }
+  }
+
+  /* 실시간 tickets 이벤트 한 건을 화면 상태에 바로 반영한다. 반영했으면 true */
+  function liveApplyTicket(payload) {
+    if (!payload) return false;
+    var rec = payload.new || payload.record || null;
+    if (!rec || !rec.board_id) return false;
+    var board = getBoard(rec.board_id);
+    if (!board) return false;
+    var n = Number(rec.n);
+    if (!(n > 0)) return false;
+    var opens = board.opens || (board.opens = []);
+    var idx = liveOpenIndex(opens, n);
+    live.lastEventAt = Date.now();
+    if (rec.status === 'sold') {
+      var entry = {
+        n: n, grade: rec.grade || '', at: rec.drawn_at || nowISO(),
+        name: rec.buyer_name || '익명', userId: null, demo: false, last: !!rec.is_last
+      };
+      if (idx >= 0) opens[idx] = Object.assign({}, opens[idx], entry);
+      /* 목록은 최신순 — 실시간 판매 줄(renderLiveTicker)이 앞 4개를 쓴다 */
+      else opens.unshift(entry);
+    } else if (idx >= 0) {
+      opens.splice(idx, 1);
+    } else {
+      return true;   /* 이미 반영된 변경 — 화면은 그대로 */
+    }
+    live.applied++;
+    livePaintCell(board, n, rec.status === 'sold', true);
+    livePatchPrize(board, rec.grade);
+    liveSyncCounters(board);
+    if (rec.status === 'sold') liveSalesAppend(board, (board.opens || [])[liveOpenIndex(board.opens || [], n)]);
+    return true;
+  }
+
+  /* 전체 새로고침은 한 번에 묶어서 — 이벤트가 몰려도 서버를 두드리지 않는다 */
+  function requestFullSync(delay, minGap) {
+    if (Backend.mode !== 'supabase') return;
+    if (live.fullTimer) return;
+    var gap = minGap == null ? 8000 : Number(minGap) || 0;
+    var since = live.lastFullAt ? Date.now() - live.lastFullAt : 1e9;
+    var wait = Math.max(Number(delay) || 0, gap - since, 0);
+    live.fullTimer = setTimeout(function () {
+      live.fullTimer = null;
+      if (live.busy) { requestFullSync(1500, 0); return; }
+      liveFullSync();
+    }, wait);
+  }
+
+  function liveFullSync() {
+    if (Backend.mode !== 'supabase' || live.busy) return Promise.resolve();
+    live.busy = true;
+    /* 뽑기 연출이 도는 동안에는 미룬다 — 연속 뽑기가 끊기지 않게 */
+    var d = ui.draw;
+    var busyDraw = !!d && (d.step === 'peel' || d.step === 'seal' || d.step === 'promote' || d.step === 'drawing');
+    if (busyDraw) { live.busy = false; requestFullSync(1500, 0); return Promise.resolve(); }
+    return Backend.refreshData().then(function () {
+      if (state.me && state.me.isAdmin && ui.view === 'admin' && ui.adminUnlocked) return Backend.loadAdmin();
+    }).then(function () {
+      live.lastFullAt = Date.now();
+      live.busy = false;
+      renderAll();
+    }).catch(function () {
+      live.busy = false;
+    });
+  }
+
+  /* 판 화면을 보는 동안 5초마다: 이 판의 팔린 번호만 가볍게 받아 따라잡는다.
+     (실시간 웹소켓이 끊긴 모바일에서도 남이 뽑은 번호가 5초 안에 뜬다) */
+  async function livePollTickets() {
+    if (Backend.mode !== 'supabase' || document.hidden || ui.draw) return;
+    if (!modalRoot || !modalRoot.hidden) return;
+    if (ui.view !== 'board') return;
+    var board = getBoard(ui.boardId);
+    if (!board || !Backend.sb || live.busy) return;
+    live.polls++;
+    var sb = Backend.sb;
+    try {
+      var res = await sb.from('tickets')
+        .select('n,grade,buyer_name,drawn_at,is_last')
+        .eq('board_id', board.id).eq('status', 'sold');
+      if (res.error) {
+        res = await sb.from('tickets').select('n,grade,buyer_name,drawn_at')
+          .eq('board_id', board.id).eq('status', 'sold');
+        if (res.error) return;
+      }
+      live.pollAt = Date.now();
+      if (ui.view !== 'board' || document.hidden) return;
+      var cur = getBoard(ui.boardId);
+      if (!cur || cur.id !== board.id) return;
+      var rows = res.data || [];
+      var prev = {}, added = [], removed = [];
+      (cur.opens || []).forEach(function (o) { prev[Number(o.n)] = o; });
+      rows.forEach(function (r) {
+        var n = Number(r.n), p = prev[n];
+        if (!p) added.push(r);
+        else if (p.grade !== r.grade || (p.name || '익명') !== (r.buyer_name || '익명') || (!!p.last) !== (!!r.is_last)) added.push(r);
+      });
+      (cur.opens || []).forEach(function (o) { if (!rows.some(function (r) { return Number(r.n) === Number(o.n); })) removed.push(Number(o.n)); });
+      /* 판 자체(상태·장수)가 바뀌었는지는 15초에 한 번만 확인 */
+      if (!added.length && !removed.length) {
+        if (live.polls % 3 === 0) {
+          var bres = await sb.from('public_boards').select('id,status,ticket_count').eq('id', board.id);
+          var brow = bres && !bres.error ? (bres.data || [])[0] : null;
+          if (brow && (brow.status !== board.status || Number(brow.ticket_count) !== Number(board.tickets))) requestFullSync(0, 0);
+        }
+        return;
+      }
+      var nextOpens = rows.slice().sort(function (x, y) { return new Date(y.drawn_at || 0) - new Date(x.drawn_at || 0); }).map(function (r) {
+        return { n: Number(r.n), grade: r.grade, at: r.drawn_at, name: r.buyer_name || '익명',
+                 userId: null, demo: false, last: !!r.is_last };
+      });
+      cur.opens = nextOpens;
+      var flashOne = added.length === 1 && !removed.length;
+      removed.forEach(function (n) { livePaintCell(cur, n, false, false); });
+      added.forEach(function (r) { livePaintCell(cur, Number(r.n), true, flashOne); });
+      live.applied += added.length + removed.length;
+      liveSyncCounters(cur);
+      if (!removed.length) {
+        added.forEach(function (r) {
+          var hit = null;
+          for (var i = 0; i < nextOpens.length; i++) if (nextOpens[i].n === Number(r.n)) { hit = nextOpens[i]; break; }
+          if (hit) liveSalesAppend(cur, hit);
+        });
+      }
+    } catch (e) { /* 폴링 실패는 조용히 넘기고 다음 주기에 다시 시도 */ }
+  }
+
+  function startLiveWatch() {
+    if (live.pollTimer) return;
+    live.pollTimer = setInterval(livePollTickets, 5000);
+    /* 탭으로 돌아왔을 때는 바로 한 번 따라잡는다 (모바일 백그라운드에서 웹소켓이 끊긴 사이) */
+    document.addEventListener('visibilitychange', function () {
+      if (document.hidden) {
+        document.documentElement.classList.add('is-page-hidden');
+        return;
+      }
+      document.documentElement.classList.remove('is-page-hidden');
+      if (Backend.mode !== 'supabase') return;
+      livePollTickets();
+      if (Date.now() - live.lastFullAt > 30000) requestFullSync(600, 0);
+    });
+  }
+
   function renderAll() {
     renderHeader();
     if (!ui.ready) return;
@@ -3305,12 +3621,9 @@
     if (!cur || cur.id !== board.id) return;
     var opened = (cur.opens || []).filter(function (o) { return o.n === n; })[0];
     if (!opened) return;
-    var cell = document.querySelector('#ticketGrid .ticket[data-n="' + n + '"]');
-    if (cell && !cell.classList.contains('is-open')) cell.outerHTML = ticketCellHTML(n, opened);
-    var summary = $('#gridSummary');
-    if (summary) summary.textContent = fmt(cur.tickets) + '장 중 ' + fmt(remaining(cur)) + '장 남음 · 판매 ' + fmt(openedCount(cur)) + '장';
-    var sc = $('#salesCount');
-    if (sc) sc.textContent = fmt(openedCount(cur));
+    /* v4.4.7 — 이 칸 하나만 갈아 끼우고 나머지 카운터를 맞춘다 */
+    livePaintCell(cur, n, true, false);
+    liveSyncCounters(cur);
     renderPrizesPanel(cur);
     renderBoardHero(cur);
     renderQueuePanel(cur);
@@ -3347,7 +3660,8 @@
     clearTimeout(bgRefreshTimer);
     bgRefreshTimer = setTimeout(function () {
       bgRefreshTimer = null;
-      Backend.refreshData().then(function () { renderAll(); }).catch(function () {});
+      /* v4.4.7 — 다른 실시간 이벤트와 묶어서 8초에 한 번만 (예전: 뽑기마다 1회) */
+      requestFullSync(0, 3000);
     }, Number(delay) || 1200);
   }
 
@@ -3923,7 +4237,7 @@
         '<span class="cover-sub">' + h(board.sub || board.title.replace(/^\[[^\]]*\]\s*/, '')) + '</span>';
     /* v4.0.9 — 이미지 · 제목 · 남은 수량/가격 · CTA 만 남긴 간결한 카드 */
     return '' +
-      '<article class="board-card' + (low ? ' is-lowstock' : '') + (soldout ? ' is-soldout' : '') + (closed ? ' is-closed' : '') + '">' +
+      '<article class="board-card' + (low ? ' is-lowstock' : '') + (soldout ? ' is-soldout' : '') + (closed ? ' is-closed' : '') + '" data-board="' + h(board.id) + '">' +
         '<a class="board-card-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '" href="#/board/' + h(board.id) + '" aria-label="' + h(board.title) + ' 열기">' +
           coverInner +
           '<span class="badge cover-tag">' + h(board.category || '자체 스페셜') + '</span>' +
@@ -3939,8 +4253,8 @@
           '<h3><a href="#/board/' + h(board.id) + '">' + h(board.title) + '</a></h3>' +
           '<p class="board-card-line"><b>1장 ' + won(board.price) +
             (ev && ev.origPrice ? ' <s class="price-was">' + won(ev.origPrice) + '</s>' : '') +
-            '</b><span>남은 <b>' + fmt(left) + '</b>장</span></p>' +
-          '<div class="progress"><div class="progress-track"><div class="progress-fill" style="width:' + (board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0) + '%"></div></div></div>' +
+            '</b><span>남은 <b data-live="left">' + fmt(left) + '</b>장</span></p>' +
+          '<div class="progress"><div class="progress-track"><div class="progress-fill" data-live="fill" style="width:' + (board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0) + '%"></div></div></div>' +
           '<div class="board-card-foot">' +
             (soldout
               ? '<span class="btn btn-outline" aria-disabled="true">전량 소진</span>'
@@ -4152,7 +4466,7 @@
     el.hidden = false;
     el.innerHTML = open.map(function (b) {
       var active = b.id === board.id;
-      return '<a class="board-chip' + (active ? ' is-active' : '') + '" href="#/board/' + encodeURIComponent(b.id) + '"' +
+      return '<a class="board-chip' + (active ? ' is-active' : '') + '" data-board="' + h(b.id) + '" href="#/board/' + encodeURIComponent(b.id) + '"' +
         (active ? ' aria-current="page"' : '') + '>' +
         '<span>' + h(boardShortName(b)) + '</span>' +
         '<small>' + fmt(Math.max(0, Number(b.tickets || 0) - openedCount(b))) + '장</small>' +
@@ -4169,11 +4483,25 @@
     var lo = lastOneStatus(board);
     var ev = boardEventOf(board);
     var pointReward = pointRewardOf(board);
+    /* v4.4.7 — 장수만 바뀌었으면 표지 사진까지 다시 그리지 않고
+       남은 수·판매 수·진행률만 갈아 끼운다 (사진 재디코딩·깜빡임 방지) */
+    var sig = [board.id, board.title, board.category, board.price, board.tickets,
+      board.status, board.cover, board.sub || '', low ? 1 : 0, left > 0 ? 1 : 0,
+      lo && lo.won ? 'w' + lo.name : '', lo && lo.soon ? 's' + lo.left : '',
+      ev ? ev.label : '', ev && ev.origPrice ? ev.origPrice : '', pointReward].join('|');
+    if (el._kjSig === sig) {
+      liveSetText(el, 'left', fmt(left));
+      liveSetText(el, 'sold', fmt(openedCount(board)));
+      liveSetText(el, 'pct', pct + '% 진행');
+      liveSetText(el, 'fill', pct);
+      return;
+    }
+    el._kjSig = sig;
     el.classList.toggle('is-lowstock', low);
     el.innerHTML = '' +
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
         (board.cover
-          ? '<img class="cover-img" src="' + h(coverSrc(board.cover)) + '" alt="' + h(board.category + ' 상품 이미지') + '">' +
+          ? '<img class="cover-img" src="' + h(coverSrc(board.cover)) + '" alt="' + h(board.category + ' 상품 이미지') + '" decoding="async">' +
             '<span class="cover-scrim" aria-hidden="true"></span>'
           : '<span class="cover-kicker">KUJIKING KUJI</span>' +
             '<strong class="cover-title">' + h(board.category) + '</strong>' +
@@ -4189,13 +4517,13 @@
         '<div class="board-meta">' +
           '<span>1장 <b>' + won(board.price) + '</b></span>' +
           '<span>총 <b>' + fmt(board.tickets) + '</b>장</span>' +
-          '<span>남은 번호 <b>' + fmt(left) + '</b>장</span>' +
+          '<span>남은 번호 <b data-live="left">' + fmt(left) + '</b>장</span>' +
           '<span>P상 <b>' + fmt(pointReward) + 'P</b></span>' +
           '<span>라스트원상 포함</span>' +
         '</div>' +
         '<div class="progress">' +
-          '<div class="progress-track"><div class="progress-fill" style="width:' + pct + '%"></div></div>' +
-          '<div class="progress-labels"><span>판매 ' + fmt(openedCount(board)) + ' / ' + fmt(board.tickets) + '</span><span>' + pct + '% 진행</span></div>' +
+          '<div class="progress-track"><div class="progress-fill" data-live="fill" style="width:' + pct + '%"></div></div>' +
+          '<div class="progress-labels"><span>판매 <span data-live="sold">' + fmt(openedCount(board)) + '</span> / ' + fmt(board.tickets) + '</span><span data-live="pct">' + pct + '% 진행</span></div>' +
         '</div>' +
       '</div>' +
       '<div class="board-hero-cta">' +
@@ -4235,9 +4563,9 @@
           '<div class="aside-note">다른 판 전용 쿠폰은 해당 판에서만 쓸 수 있어요.</div>');
   }
 
-  function ticketCellHTML(n, o) {
+  function ticketCellHTML(n, o, liveFlash) {
     if (o) {
-      return '<button class="ticket is-open" style="--ticket-color:' + gradeColor(o.grade) + '" ' +
+      return '<button class="ticket is-open' + (liveFlash ? ' is-live' : '') + '" style="--ticket-color:' + gradeColor(o.grade) + '" ' +
         'data-action="ticket-info" data-n="' + n + '" title="' + h(o.name + ' · ' + timeAgo(o.at)) + '" ' +
         'aria-label="' + n + '번, ' + h(o.grade) + '상 판매 완료">' +
         '<span class="ticket-grade">' + h(o.grade) + '</span>' +
@@ -4252,21 +4580,62 @@
       '</button>';
   }
 
-  function renderTicketGrid(board) {
-    var grid = $('#ticketGrid');
-    if (!grid) return;
-    var sold = new Map();
-    (board.opens || []).forEach(function (o) { sold.set(o.n, o); });
-    var html = '';
-    for (var n = 1; n <= board.tickets; n++) {
-      html += ticketCellHTML(n, sold.get(n));
-    }
-    grid.classList.toggle('is-dense', board.tickets > 100);
-    grid.innerHTML = html;
+  /* v4.4.7 — 그리드는 '바뀐 칸'만 갈아 끼운다.
+     예전에는 남이 한 장 뽑을 때마다 300칸 innerHTML 을 통째로 다시 만들어
+     번호판이 깜빡이고 스크롤이 버벅였습니다. */
+  function gridCellKey(o) { return o ? (o.grade + '/' + o.name + '/' + (o.last ? 1 : 0)) : ''; }
+
+  function paintGridCounters(board) {
     var summary = $('#gridSummary');
     if (summary) summary.textContent = fmt(board.tickets) + '장 중 ' + fmt(remaining(board)) + '장 남음 · 판매 ' + fmt(openedCount(board)) + '장';
     var sc = $('#salesCount');
     if (sc) sc.textContent = fmt(openedCount(board));
+  }
+
+  function gridSignature(board) {
+    var opens = (board.opens || []).slice().sort(function (a, b) { return Number(a.n) - Number(b.n); });
+    var ns = [], gs = [];
+    opens.forEach(function (o) { ns.push(Number(o.n)); gs.push(gridCellKey(o)); });
+    return board.id + '|' + board.tickets + '|' + ns.join(',') + '|' + gs.join(',');
+  }
+
+  function replaceGridCell(grid, n, o) {
+    var cell = grid.querySelector('.ticket[data-n="' + n + '"]');
+    if (!cell) return;
+    cell.outerHTML = ticketCellHTML(n, o);
+  }
+
+  function renderTicketGrid(board) {
+    var grid = $('#ticketGrid');
+    if (!grid) return;
+    var sig = gridSignature(board);
+    var prevMap = grid._kjMap || null;
+    grid.classList.toggle('is-dense', board.tickets > 100);
+    if (grid._kjSig === sig) { paintGridCounters(board); return; }
+    if (prevMap && grid._kjBoard === board.id && grid._kjTickets === board.tickets) {
+      var nextMap = new Map();
+      (board.opens || []).forEach(function (o) { nextMap.set(Number(o.n), o); });
+      prevMap.forEach(function (v, n) { if (!nextMap.has(n)) replaceGridCell(grid, n, null); });
+      nextMap.forEach(function (o, n) {
+        var p = prevMap.get(n);
+        if (!p || gridCellKey(p) !== gridCellKey(o)) replaceGridCell(grid, n, o);
+      });
+    } else {
+      var sold = new Map();
+      (board.opens || []).forEach(function (o) { sold.set(Number(o.n), o); });
+      var html = '';
+      for (var n = 1; n <= board.tickets; n++) {
+        html += ticketCellHTML(n, sold.get(n));
+      }
+      grid.innerHTML = html;
+    }
+    var map = new Map();
+    (board.opens || []).forEach(function (o) { map.set(Number(o.n), { n: Number(o.n), grade: o.grade, name: o.name, last: o.last }); });
+    grid._kjMap = map;
+    grid._kjSig = sig;
+    grid._kjBoard = board.id;
+    grid._kjTickets = board.tickets;
+    paintGridCounters(board);
   }
 
   /* =========================================================
@@ -4583,36 +4952,69 @@
     renderDrawModal();
   }
 
+  function salesRowHTML(board, o) {
+    var tier = tierOf(board, o.grade);
+    return '<div class="sales-row">' +
+      '<span class="sales-time">' + formatDateTime(o.at) + '<em>' + timeAgo(o.at) + '</em></span>' +
+      '<span class="sales-num">' + o.n + '번</span>' +
+      '<span class="sales-name">' + h(o.name) + (o.demo ? ' <i class="demo-i">체험</i>' : '') + '</span>' +
+      '<span class="grade-badge sm" style="background:' + gradeColor(o.grade) + '">' + h(o.grade) + '</span>' +
+      '<span class="sales-prize">' + h(tier ? tier.label : '') + '</span>' +
+      (o.last ? '<span class="badge">' + icon('crown') + ' 라스트원</span>' : '') +
+    '</div>';
+  }
+
   function renderSalesPanel(board) {
     var el = $('#salesPanel');
     if (!el) return;
     var rows = (board.opens || []).slice().sort(function (a, b) { return new Date(b.at) - new Date(a.at); });
     if (!rows.length) {
+      if (el._kjSig === board.id + '|empty') return;
+      el._kjSig = board.id + '|empty';
       el.innerHTML = '<div class="empty"><span class="empty-icon">' + icon('clock') + '</span><p>아직 판매 내역이 없어요. 첫 번째로 이 판의 번호를 뽑아보세요!</p>' +
         '<button class="btn btn-primary" data-action="scroll-grid">번호 고르기</button></div>';
+      el._kjSale = null;
+      el._kjSeen = null;
+      return;
+    }
+    /* v4.4.7 — 한 장 늘었으면 그 줄만 맨 위에 붙인다(판매 내역 300줄 다시 그리기 방지).
+       그 밖에는 1분에 한 번만(‘몇 분 전’ 표기 새로고침용) 전체를 다시 그린다. */
+    var minute = Math.floor(Date.now() / 60000);
+    var sig = board.id + '|' + rows.length + '|' + minute;
+    if (el._kjSig === sig) return;
+    var list = el.querySelector('.sales-list');
+    if (el._kjSale && el._kjSale.board === board.id && list && el._kjSale.count + 1 === rows.length) {
+      list.insertAdjacentHTML('afterbegin', salesRowHTML(board, rows[0]));
+      var stats = el.querySelector('.sales-stats');
+      if (stats) stats.innerHTML = '<span>판매 <b>' + fmt(rows.length) + '</b>장</span><span>남은 <b>' + fmt(remaining(board)) + '</b>장</span>';
+      el._kjSig = sig;
+      el._kjSale = { board: board.id, count: rows.length };
+      var seen = el._kjSeen || (el._kjSeen = {});
+      seen[rows[0].n] = 1;
       return;
     }
     el.innerHTML = '<div class="sales-head">' +
         '<div><h2>실제 판매 내역</h2><p class="muted">구매자 닉네임은 개인정보 보호를 위해 마스킹해서 표시합니다.</p></div>' +
         '<div class="sales-stats"><span>판매 <b>' + fmt(rows.length) + '</b>장</span><span>남은 <b>' + fmt(remaining(board)) + '</b>장</span></div>' +
       '</div>' +
-      '<div class="sales-list">' + rows.map(function (o) {
-        var tier = tierOf(board, o.grade);
-        return '<div class="sales-row">' +
-          '<span class="sales-time">' + formatDateTime(o.at) + '<em>' + timeAgo(o.at) + '</em></span>' +
-          '<span class="sales-num">' + o.n + '번</span>' +
-          '<span class="sales-name">' + h(o.name) + (o.demo ? ' <i class="demo-i">체험</i>' : '') + '</span>' +
-          '<span class="grade-badge sm" style="background:' + gradeColor(o.grade) + '">' + h(o.grade) + '</span>' +
-          '<span class="sales-prize">' + h(tier ? tier.label : '') + '</span>' +
-          (o.last ? '<span class="badge">' + icon('crown') + ' 라스트원</span>' : '') +
-        '</div>';
-      }).join('') + '</div>';
+      '<div class="sales-list">' + rows.map(function (o) { return salesRowHTML(board, o); }).join('') + '</div>';
+    el._kjSig = sig;
+    el._kjSale = { board: board.id, count: rows.length };
+    el._kjSeen = {};
+    rows.forEach(function (o) { el._kjSeen[o.n] = 1; });
   }
 
   function renderPrizesPanel(board) {
     var el = $('#prizesPanel');
     if (!el) return;
     var total = board.tickets || 1;
+    /* v4.4.7 — 남의 뽑기 한 건마다 상품 카드(사진 10여 장)를 다시 그리지 않도록,
+       이미 같은 내용이면 건너뛰고 잔여 수만 고친다 (livePatchPrize) */
+    var prizeSig = [board.id, board.tickets, openedCount(board),
+      board.lastOneWinnerName || '', board.lastOneImage || '', board.lastOneLabel || '',
+      (board.tiers || []).map(function (t) { return t.grade + ':' + t.count + ':' + (t.image || ''); }).join(',')].join('|');
+    if (el._kjSig === prizeSig) return;
+    el._kjSig = prizeSig;
     var cardHtml = function (t) {
       var sold = (board.opens || []).filter(function (o) { return o.grade === t.grade; }).length;
       var count = Number(t.count) || 0;
@@ -11669,7 +12071,7 @@
 
     bindEvents();
     initCouponFab();   /* v4.4.2 — '쿠폰 구매하기' 플로팅 버튼(드래그 이동) */
-    window.KUJIKING = { version: '2.0', mode: 'local' };
+    window.KUJIKING = { version: '2.0', mode: 'local', live: live };
 
     var mode = 'local';
     try {
@@ -11721,6 +12123,7 @@
     renderAll();
     route();
     startSafeRefresh();
+    startLiveWatch();   /* v4.4.7 — 판 화면 5초 폴링·백그라운드 복귀 시 따라잡기 */
   }
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

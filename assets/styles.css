@@ -187,8 +187,9 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 
 .site-header{
   position:sticky;top:0;z-index:60;
-  background:rgba(255,253,246,.94);
-  backdrop-filter:blur(10px);
+  /* v4.4.7 — 스크롤할 때마다 뒤 화면을 흐리게 다시 계산하던 backdrop-filter 를 걷어냈다
+     (모바일에서 스크롤 버벅임의 주범). 배경은 거의 불투명해서 보이는 모습은 같다 */
+  background:rgba(255,253,246,.975);
   border-bottom:2px solid var(--line-strong);
 }
 .header-inner{display:flex;align-items:center;gap:26px;min-height:var(--header-h)}
@@ -527,8 +528,10 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .board-toolbar{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 18px;margin-bottom:16px;flex-wrap:wrap}
 .toolbar-info{display:flex;align-items:center;gap:9px;font-size:14px}
 .toolbar-info strong{font-size:15px;font-weight:900}
-.live-dot{width:9px;height:9px;border-radius:50%;background:var(--red);box-shadow:0 0 0 0 rgba(239,59,45,.6);animation:livedot 1.8s infinite}
-@keyframes livedot{0%{box-shadow:0 0 0 0 rgba(239,59,45,.55)}70%{box-shadow:0 0 0 9px rgba(239,59,45,0)}100%{box-shadow:0 0 0 0 rgba(239,59,45,0)}}
+.live-dot{position:relative;display:inline-block;flex:none;width:9px;height:9px;border-radius:50%;background:var(--red)}
+/* v4.4.7 — box-shadow 를 매 프레임 다시 칠하던 파동을 transform·opacity(합성 레이어)로 바꿨다 */
+.live-dot::after{content:"";position:absolute;inset:0;border-radius:50%;background:rgba(239,59,45,.5);animation:livedot-ring 1.8s ease-out infinite}
+@keyframes livedot-ring{0%{transform:scale(1);opacity:.55}70%{transform:scale(2.6);opacity:0}100%{transform:scale(2.6);opacity:0}}
 .legend{display:flex;gap:14px;font-size:12.5px;color:var(--muted);font-weight:600}
 .legend-item{display:inline-flex;align-items:center;gap:6px}
 .swatch{width:14px;height:14px;border-radius:4px;border:2px solid var(--ink);display:inline-block}
@@ -570,6 +573,20 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 }
 .ticket.is-open .ticket-hint{color:rgba(255,255,255,.72);font-size:8.5px}
 .ticket .last-flag{position:absolute;top:3px;right:3px;font-size:10px;line-height:1}
+
+/* v4.4.7 — 방금 남이 뽑은 칸을 잠깐 강조 (실시간 반영이 눈에 보이게) */
+.ticket.is-live{animation:ticketLive .9s ease-out both}
+@keyframes ticketLive{
+  0%{box-shadow:0 0 0 0 rgba(255,213,30,.95),0 2px 0 rgba(23,18,14,.18);transform:scale(1.14)}
+  55%{box-shadow:0 0 0 6px rgba(255,213,30,.35),0 2px 0 rgba(23,18,14,.18);transform:scale(1)}
+  100%{box-shadow:0 2px 0 rgba(23,18,14,.18);transform:scale(1)}
+}
+@media (prefers-reduced-motion:reduce){
+  .ticket.is-live{animation:none}
+}
+
+/* v4.4.7 — 탭이 뒤로 가면 끝없이 도는 장식 애니메이션을 멈춰 배터리·CPU 를 아낀다 */
+html.is-page-hidden *{animation-play-state:paused !important}
 
 .notice-card{margin-top:20px;padding:22px 24px;background:var(--cream);border:2px solid var(--line-strong)}
 .notice-card h3{font-size:15.5px;font-weight:900;margin-bottom:10px}
@@ -3473,10 +3490,10 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
 .store-bar{
   position:fixed;left:0;right:0;bottom:0;z-index:95;
   padding:9px 16px calc(9px + env(safe-area-inset-bottom,0px));
-  background:rgba(255,253,246,.94);
+  /* v4.4.7 — 화면 아래에 늘 떠 있는 바의 backdrop-filter 제거(스크롤 프레임 드랍) */
+  background:rgba(255,253,246,.975);
   border-top:2px solid var(--ink);
   box-shadow:0 -8px 24px rgba(23,18,14,.10);
-  -webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);
 }
 .store-bar-inner{display:flex;gap:9px;width:100%;max-width:640px;margin:0 auto}
 .store-bar-btn{
