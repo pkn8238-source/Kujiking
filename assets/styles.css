@@ -1516,6 +1516,15 @@ code{font-family:var(--font-mono);font-size:.92em;background:var(--cream);border
 .pay-head b{font-size:14px;font-weight:900}
 .pay-desc{font-size:12.5px;color:var(--muted);margin-bottom:10px;line-height:1.55}
 .pay-desc .pay-gap{color:var(--red-deep);font-weight:900}
+/* ---------- 굿즈 포인트로 뽑기 (v4.4.6 부활) ---------- */
+.pay-option.is-points{border-color:#d29b16;background:linear-gradient(150deg,#fffbee 0%,#fff1c9 100%);
+  box-shadow:0 3px 0 rgba(184,135,31,.35)}
+.pay-option.is-points.is-off{background:#f8f5ee;border-color:var(--line-strong);border-style:dashed;box-shadow:none}
+.pay-badge.is-points{background:linear-gradient(135deg,#ffd863,#e08a00);color:#2a1a00}
+.pay-option.is-points .pay-head{justify-content:flex-start;gap:10px}
+.pay-need{display:block;font-size:13.5px;line-height:1.38}
+.pay-need em{display:block;font-style:normal;font-size:11.5px;font-weight:800;color:#8a5b00;letter-spacing:0}
+.pay-option.is-off .pay-need em{color:var(--muted)}
 .pay-divider{display:flex;align-items:center;gap:10px;margin:4px 0 12px;color:var(--muted);font-size:11.5px;font-weight:800}
 .pay-divider::before,.pay-divider::after{content:"";flex:1;height:1px;background:var(--line-strong)}
 .aside-hint{font-size:12.5px;color:var(--muted);line-height:1.6;margin-bottom:12px}

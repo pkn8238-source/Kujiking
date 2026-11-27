@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.5, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.6, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -492,7 +492,7 @@
           image: 'assets/products/dragonball-saiyan/tier_j.jpg',
           desc: '약 24cm · 전 9종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 손오공&손오반 MASTERLISE PLUS',
       lastOneImage: 'assets/products/dragonball-saiyan/last_one.jpg',
@@ -568,7 +568,7 @@
           image: 'assets/products/hunter-chimera-ant/tier_i.jpg',
           desc: '약 5~47cm · 전 10종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 곤 ~성장ver.~ MASTERLISE EXTRA',
       lastOneImage: 'assets/products/hunter-chimera-ant/last_one.jpg',
@@ -652,7 +652,7 @@
           image: 'assets/products/jojo-rivals/tier_l.jpg',
           desc: '약 6~14cm · 전 13종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 228, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 디에고 브란도 MASTERLISE',
       lastOneImage: 'assets/products/jojo-rivals/last_one.jpg',
@@ -727,7 +727,7 @@
           image: 'assets/products/apothecary-secret/tier_h.jpg',
           desc: '약 13cm · 전 5종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 마오마오 피규어',
       lastOneImage: 'assets/products/apothecary-secret/last_one.jpg',
@@ -798,7 +798,7 @@
           image: 'assets/products/chiikawa/tier_h.jpg',
           desc: '파우치 약 22cm · 타월 약 25~60cm / 전 6종 중 1종' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 함께 포근포근♪ 목욕 후 쿠션',
       lastOneImage: 'assets/products/chiikawa/last_one.jpg',
@@ -869,7 +869,7 @@
           image: 'assets/products/kimetsu/tier_h.jpg',
           desc: '약 5.5cm · 전 22종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 152, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 도마 MASTERLISE 라스트원 ver.',
       lastOneImage: 'assets/products/kimetsu/last_one.jpg',
@@ -946,7 +946,7 @@
           image: 'assets/products/jujutsu/tier_j.jpg',
           desc: '약 6cm · 전 17종 중 1종 랜덤' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 190, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 고조 사토루 MASTERLISE',
       lastOneImage: 'assets/products/jujutsu/last_one.jpg',
@@ -1022,7 +1022,7 @@
           image: 'assets/products/myhero/tier_i.jpg',
           desc: '메모·엽서 3장·학생증풍 카드 5장 / 전 8종' },
         { grade: 'P', label: '굿즈 포인트 1,200P', count: 171, points: 1200, pointOnly: true,
-          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환' }
+          desc: '실물 대신 굿즈 포인트 1,200P 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능' }
       ],
       lastOneLabel: '라스트원상 · 미도리야 이즈쿠 -10th ANNIVERSARY- MASTERLISE',
       lastOneImage: 'assets/products/myhero/last_one.jpg',
@@ -1101,7 +1101,7 @@
      DB(tiers)에 예전 고정값 1,200 이 남아 있어도 화면·데모 뽑기는 이 규칙으로 맞춘다.
      (서버가 실제로 지급하는 값은 Supabase SQL 이 tiers.points 를 같은 값으로 고친다) */
   var POINT_RATE = 0.1;
-  var POINT_DESC_TAIL = ' 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환';
+  var POINT_DESC_TAIL = ' 바로 적립 · 포인트 뽑기·굿즈샵 교환 사용 가능';
   function pointRewardOf(board) {
     var price = Math.max(0, Number(board && board.price) || 0);
     return Math.round(price * POINT_RATE);
@@ -1134,10 +1134,10 @@
     return '실물 대신 굿즈 포인트 ' + fmt(p) + 'P' + POINT_DESC_TAIL;
   }
   function pointNoteFor(reward) {
-    return 'P상은 실물 대신 굿즈 포인트 ' + fmt(reward) + 'P가 즉시 적립됩니다. 모은 포인트는 굿즈샵에서 원하는 굿즈로 교환할 수 있어요.';
+    return 'P상은 실물 대신 굿즈 포인트 ' + fmt(reward) + 'P가 즉시 적립됩니다. 모은 포인트는 포인트 뽑기와 굿즈샵 교환에 쓸 수 있어요.';
   }
   /* 판 한 개의 P상 표기(포인트·이름·설명)와 상품 설명서를 10% 규칙으로 맞춘다.
-     포인트는 뽑기 결제가 아니라 굿즈 교환에 쓰므로 문구는 '굿즈샵에서 교환'으로 통일한다. */
+     포인트는 포인트 뽑기와 굿즈샵 교환 양쪽에 쓰므로 문구는 '포인트 뽑기·굿즈샵 교환'으로 통일한다. */
   function scrubPointCopy(board) {
     if (!board) return board;
     var reward = pointRewardOf(board);
@@ -1912,13 +1912,22 @@
         p_board_id: args.boardId,
         p_ticket_no: args.n,
         p_coupon_id: args.couponId || null,
-        p_code: args.code || null
+        p_code: args.code || null,
+        p_use_points: !!args.usePoints
       };
       var res = await this.sb.rpc('draw_ticket', body);
-      /* v4.2.6 — 포인트 뽑기는 없앴다. 서버 함수가 p_use_points 를 기본값 없이 요구하는
-         구버전이면 false 로 한 번 더 시도해 뽑기가 막히지 않게 한다. */
+      /* v4.4.6 — 포인트 뽑기 부활. 서버 함수가 아직 4인자(포인트 인자 없음)라면
+         포인트가 아닐 때만 기존 인자로 한 번 더 시도해 뽑기가 막히지 않게 한다. */
       if (res.error && /PGRST202|p_use_points|Could not find the function/i.test(String(res.error.code || '') + ' ' + String(res.error.message || ''))) {
-        res = await this.sb.rpc('draw_ticket', Object.assign({}, body, { p_use_points: false }));
+        if (args.usePoints) {
+          throw new Error('포인트로 뽑기는 DB 준비가 필요해요. supabase/kujiking_enable_point_draw.sql 을 Supabase SQL Editor 에서 한 번 실행해 주세요.');
+        }
+        res = await this.sb.rpc('draw_ticket', {
+          p_board_id: body.p_board_id,
+          p_ticket_no: body.p_ticket_no,
+          p_coupon_id: body.p_coupon_id,
+          p_code: body.p_code
+        });
       }
       if (res.error) throw new Error(res.error.message || '뽑기에 실패했어요.');
       var r = res.data || {};
@@ -2748,8 +2757,19 @@
       rec.usedN = args.n;
       rec.usedBy = state.me ? state.me.id : null;
       source = 'code';
+    } else if (args.usePoints) {
+      /* v4.4.6 — 포인트로 뽑기: 판 1장 가격과 똑같은 포인트를 차감한다 */
+      if (!state.me) throw new Error('포인트로 뽑으려면 로그인이 필요합니다.');
+      var meU = userById(state.me.id);
+      if (!meU) throw new Error('회원 정보를 찾을 수 없습니다. 다시 로그인해 주세요.');
+      var priceP = Number(board.price) || 0;
+      var balP = Number(meU.points) || 0;
+      if (priceP <= 0) throw new Error('이 판은 포인트로 뽑을 수 없습니다.');
+      if (balP < priceP) throw new Error('굿즈 포인트가 부족합니다. (필요 ' + fmt(priceP) + 'P · 보유 ' + fmt(balP) + 'P)');
+      meU.points = balP - priceP;
+      source = 'points';
     } else {
-      throw new Error('뽑기권(쿠폰) 또는 교환 코드가 필요합니다.');
+      throw new Error('뽑기권(쿠폰) · 교환 코드 · 굿즈 포인트 중 하나가 필요합니다.');
     }
 
     var map = (await getMapping(board)) || {};
@@ -4512,8 +4532,9 @@
     var buttons = MULTI_COUNTS.map(function (n) {
       var short = ms.left < n;
       var canCoupon = ms.mine.length >= n;
+      var canPoints = ms.price > 0 && ms.have >= ms.price * n;
       var payState = short ? ('잔여 ' + fmt(ms.left) + '장')
-        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : '뽑기권 필요');
+        : (canCoupon ? ('쿠폰 ' + fmt(n) + '장') : (canPoints ? ('포인트 ' + fmt(ms.price * n) + 'P') : '뽑기권 필요'));
       return '<button class="md-btn' + (short ? ' is-off' : '') + '" type="button" data-action="multi-draw" data-count="' + n + '"' +
         (short ? ' disabled aria-disabled="true"' : '') + '>' +
         '<span class="md-n">' + n + '<em>연뽑</em></span>' +
@@ -4538,7 +4559,7 @@
         '</div>' +
       '</div>' +
       '<div class="md-row">' + buttons + restBtn + '</div>' +
-      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 교환 코드는 코드에 담긴 장수만큼 뽑기권이 한 번에 들어와요.</p>';
+      '<p class="md-foot">쿠폰은 보유한 뽑기권에서 차례로 쓰고, 포인트는 1장 가격 × 장수만큼 차감돼요. 교환 코드는 코드에 담긴 장수만큼 뽑기권이 한 번에 들어와요.</p>';
   }
 
   function openMultiDraw(count) {
@@ -4745,7 +4766,7 @@
       '<li>그 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</li>' +
       '<li>뽑기권은 스마트스토어 <b>결제 후 1분 내 휴대폰 문자로 자동 발송되는 교환 코드</b>를 입력하면 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
-      '<li>뽑기는 <b>뽑기권(쿠폰)</b> 또는 <b>교환 코드</b>로만 할 수 있습니다. 모은 굿즈 포인트(P)는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 굿즈로 교환합니다.</li>' +
+      '<li>뽑기는 <b>뽑기권(쿠폰)</b> · <b>교환 코드</b> · <b>굿즈 포인트</b>로 할 수 있습니다. 포인트로 뽑으면 이 판 1장 가격(' + won(board.price) + ')과 똑같은 포인트가 차감됩니다. 모은 P는 <a href="#/goods" class="inline-link">굿즈샵</a>에서 실물 굿즈로도 교환할 수 있어요.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
@@ -4833,6 +4854,10 @@
   function drawSourceHTML(board, d) {
     var user = me();
     var mine = couponsFor(board);
+    var price = Math.max(0, Number(board.price) || 0);
+    var have = user ? Number(user.points || 0) : 0;
+    var gap = Math.max(0, price - have);
+    var canPoints = !!user && price > 0 && have >= price;
     var html = '<h2 class="modal-title" id="modalTitle">' + d.n + '번 뽑기</h2>' +
       '<p class="modal-sub">' + h(board.title) + ' · ' + won(board.price) + '</p>';
 
@@ -4855,9 +4880,31 @@
       '</div>';
     }
 
-    /* v4.2.6 — 포인트로 뽑기는 없어졌다. 뽑기는 뽑기권(쿠폰)·교환 코드로만.
-       모은 포인트는 [굿즈] 메뉴에서 실물 굿즈로 교환한다. */
-    html += '<p class="pay-points-note">굿즈 포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. 모은 P는 <a class="inline-link" href="#/goods">굿즈</a>에서 확인하세요.</p>' +
+    /* v4.4.6 — 포인트로 뽑기 부활: 판 1장 가격과 같은 포인트를 쓰면 바로 뽑을 수 있다.
+       (모은 P는 굿즈샵에서 실물 굿즈로도 교환할 수 있다) */
+    if (price > 0) {
+      if (user) {
+        html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
+          '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+          '<b class="pay-need">포인트로 1장 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: ' + fmt(have) + 'P)</em></b></div>' +
+          '<p class="pay-desc">' + (canPoints
+            ? '1장 가격과 똑같은 <b>' + fmt(price) + 'P</b>를 쓰면 바로 뽑을 수 있어요.'
+            : '<b class="pay-gap">' + fmt(gap) + 'P</b> 부족해요. P상에 당첨되면 바로 쌓이고, 내 보관함에서 당첨 상품을 <b>포인트 전환</b>해도 됩니다.') + '</p>' +
+          (canPoints
+            ? '<button class="btn btn-gold btn-block" data-action="draw-points">포인트로 뽑기 (' + fmt(price) + 'P 사용)</button>'
+            : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>') +
+        '</div>';
+      } else {
+        html += '<div class="pay-option is-points is-off">' +
+          '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+          '<b class="pay-need">포인트로 1장 뽑기 <em>(필요: ' + fmt(price) + 'P · 보유: 0P)</em></b></div>' +
+          '<p class="pay-desc">로그인하면 모은 포인트로도 바로 뽑을 수 있어요.</p>' +
+          '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>' +
+        '</div>';
+      }
+    }
+
+    html += '<p class="pay-points-note">모은 포인트(P)는 <a class="inline-link" href="#/goods">굿즈샵</a>에서 실물 굿즈로도 교환할 수 있어요.</p>' +
       '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
       '<p class="sms-line"><span aria-hidden="true">📩</span><span>결제 후 1분 내 <b>휴대폰 문자</b>로 온 교환 코드(<b>KJ-XXXX-XXXX</b>, 발신 <b>010-8383-9273</b>·<b>[쿠지킹]</b>)를 넣어 주세요.</span></p>' +
       '<form class="code-form" data-form="draw-code" novalidate>' +
@@ -4878,6 +4925,7 @@
     var n = d.count;
     var need = ms.price * n;
     var canCoupon = ms.mine.length >= n;
+    var canPoints = ms.price > 0 && ms.have >= need;
     var html = '<h2 class="modal-title" id="modalTitle">무작위 ' + n + '연뽑</h2>' +
       '<p class="modal-sub">' + h(board.title) + ' · 1장 ' + won(ms.price) + ' · <b>' + n + '장 ' + won(need) + '</b></p>' +
       '<div class="md-how"><span class="md-how-dice" aria-hidden="true">🎲</span>' +
@@ -4894,8 +4942,23 @@
         : '<button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 입력</button>') +
     '</div>';
 
-    /* v4.2.6 — 포인트로 뽑기는 없어졌다. 연뽑도 뽑기권(쿠폰)·교환 코드로만. */
-    html += '<p class="pay-points-note">포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. <a class="inline-link" href="#/goods">굿즈 보러 가기</a></p>' +
+    /* v4.4.6 — 포인트로 뽑기 부활: 연뽑도 1장 가격 × 장수만큼 포인트로 바로 뽑는다 */
+    if (ms.price > 0) {
+      html += '<div class="pay-option is-points' + (canPoints ? '' : ' is-off') + '">' +
+        '<div class="pay-head"><span class="pay-badge is-points">굿즈 포인트</span>' +
+        '<b class="pay-need">포인트로 ' + n + '장 뽑기 <em>(필요: ' + fmt(need) + 'P · 보유: ' + fmt(ms.have) + 'P)</em></b></div>' +
+        '<p class="pay-desc">' + (canPoints
+          ? '<b>' + n + '장</b>을 뽑으면 <b>' + fmt(need) + 'P</b>가 차감됩니다. (1장 ' + fmt(ms.price) + 'P × ' + n + ')'
+          : '<b class="pay-gap">' + fmt(Math.max(0, need - ms.have)) + 'P</b> 부족해요. 내 보관함에서 당첨 상품을 포인트로 전환하거나 장수를 줄여 주세요.') + '</p>' +
+        (ms.user
+          ? (canPoints
+            ? '<button class="btn btn-gold btn-block" data-action="multi-points">포인트로 ' + n + '장 뽑기 (' + fmt(need) + 'P)</button>'
+            : '<button class="btn btn-outline btn-block btn-sm" data-action="go-my-points">내 보관함에서 포인트 전환하기</button>')
+          : '<button class="btn btn-outline btn-block btn-sm" data-action="open-auth">로그인하고 포인트로 뽑기</button>') +
+      '</div>';
+    }
+
+    html += '<p class="pay-points-note">포인트(P)는 <a class="inline-link" href="#/goods">굿즈샵</a>에서 실물 굿즈로도 교환할 수 있어요.</p>' +
       '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
       '<p class="sms-line"><span aria-hidden="true">📩</span><span>결제 후 1분 내 <b>휴대폰 문자</b>로 온 교환 코드(<b>KJ-XXXX-XXXX</b>)를 넣으면 장수만큼 뽑기권이 들어와요.</span></p>' +
       '<form class="code-form" data-form="multi-code" novalidate>' +
@@ -5228,7 +5291,8 @@
     var picked = rows.filter(function (r) { return String(r.grade || '').toUpperCase() !== 'LAST'; });
     var missing = Math.max(0, (d.count || picked.length) - picked.length);
     var pay = d.pay || {};
-    var payLabel = pay.code ? '교환 코드' : ('뽑기권 ' + picked.length + '장');
+    var payLabel = pay.usePoints ? ('굿즈 포인트 ' + fmt((Number(board.price) || 0) * picked.length) + 'P')
+      : (pay.code ? '교환 코드' : ('뽑기권 ' + picked.length + '장'));
 
     /* 최고 등급 실물 */
     var bestPhys = physical[0] || null;
@@ -6682,7 +6746,7 @@
         '</span>' +
       '</div>' +
       '<button class="peel-fallback" type="button" data-action="peel-snap">드래그가 안 되면 바로 뜯기</button>' +
-      '<p class="result-meta">' + (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || ''))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
+      '<p class="result-meta">' + (d.usePoints ? '굿즈 포인트 ' + fmt(board.price) + 'P 사용' : (d.couponId ? '뽑기권 1장 사용' : '사용 코드 ' + h(maskCode(d.code || '')))) + (d.demo ? ' · 체험 모드' : '') + '</p>' +
     '</div>';
   }
 
@@ -6703,6 +6767,7 @@
       boardId: d.boardId, n: d.n, step: 'peel',
       couponId: opts.couponId || null,
       code: opts.code || null,
+      usePoints: !!opts.usePoints,
       demo: !!opts.demo, busy: true, ready: false, revealing: false, result: null
     };
     renderDrawModal();
@@ -6718,7 +6783,8 @@
       var res = await Backend.draw({
         boardId: board.id, n: d.n,
         couponId: d.couponId || null,
-        code: d.code || null
+        code: d.code || null,
+        usePoints: !!d.usePoints
       });
       var tuned = tierOf(board, res.grade);
       if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
@@ -6807,6 +6873,7 @@
     d.pay = {
       couponIds: pay.couponIds ? pay.couponIds.slice(0, d.count) : null,
       code: pay.code || null,
+      usePoints: !!pay.usePoints,
       demo: !!pay.demo
     };
     d.demo = !!pay.demo;
@@ -6843,7 +6910,8 @@
         var res = await Backend.draw({
           boardId: board.id, n: no,
           couponId: cid,
-          code: pay.code || null
+          code: pay.code || null,
+          usePoints: !!pay.usePoints
         });
         var tuned = tierOf(board, res.grade);
         if (tuned) { res.tierImage = tuned.image || ''; res.tierDesc = tuned.desc || ''; }
@@ -7737,6 +7805,7 @@
     var pts = Number(r.points) || 0;
     var user = me();
     var bal = user ? (Number(user.points) || 0) : 0;
+    var price = Math.max(0, Number(board.price) || 0);
 
     var sparks = '';
     for (var i = 0; i < 12; i++) {
@@ -7747,10 +7816,11 @@
     var wallet = user
       ? '<div class="pc-wallet"><span>보유 포인트</span><b>' + fmt(bal) + 'P</b></div>' +
         '<div class="pc-goods">' +
-          '<span class="pc-goods-copy">모은 P로 <b>굿즈샵에서 원하는 굿즈</b>와 교환하세요.</span>' +
-          '<button class="btn btn-gold btn-sm" data-action="go-goods">굿즈 보러 가기</button>' +
+          '<span class="pc-goods-copy">모은 P로 <b>포인트 뽑기</b>와 <b>굿즈샵 교환</b> 둘 다 할 수 있어요.' +
+            (price > 0 ? '<br>1장 값 <b>' + fmt(price) + 'P</b>만큼 모으면 바로 1장 뽑기!' : '') + '</span>' +
+          '<button class="btn btn-gold btn-sm" data-action="go-goods">굿즈샵 보기</button>' +
         '</div>'
-      : '<div class="pc-guest">로그인하지 않아 포인트가 계정에 쌓이지 않았어요. 로그인하고 뽑으면 적립된 포인트로 굿즈를 교환할 수 있어요.</div>';
+      : '<div class="pc-guest">로그인하지 않아 포인트가 계정에 쌓이지 않았어요. 로그인하고 뽑으면 적립된 포인트로 포인트 뽑기·굿즈 교환을 할 수 있어요.</div>';
 
     return '<div class="result-wrap is-point">' +
       '<div class="pc-stage" id="revealStage">' +
@@ -7758,7 +7828,7 @@
         '<div class="pc-coin" aria-hidden="true"><b>P</b><i>상</i></div>' +
         '<p class="pc-kicker">POINT PRIZE · P상</p>' +
         '<h3 class="pc-title">굿즈 포인트 <em>+' + fmt(pts) + 'P</em> 적립!</h3>' +
-        '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모은 P는 굿즈샵에서 실물 굿즈로 교환할 수 있어요.</p>' +
+        '<p class="pc-desc">보유 포인트에 바로 적립됐어요!<br>모은 P는 포인트 뽑기와 굿즈샵 교환에 쓸 수 있어요.</p>' +
         wallet +
         '<p class="remaining-line">남은 번호 <b>' + fmt(r.remaining) + '</b>장' + (r.remaining === 0 ? ' · 이 판은 전량 소진되었습니다' : '') + '</p>' +
         lastOneBannerHTML(r, board) +
@@ -10227,6 +10297,18 @@
           startMultiDraw({ couponIds: mCoupons.slice(0, ui.draw.count).map(function (c) { return c.id; }) });
           break;
         }
+        case 'multi-points': {
+          /* v4.4.6 — 보유 포인트(1장 가격 × 장수)로 연뽑 */
+          if (!ui.draw || !ui.draw.batch || ui.draw.step !== 'source') break;
+          var mpBoard = getBoard(ui.draw.boardId);
+          if (!mpBoard) break;
+          var mpNeed = Math.max(0, Number(mpBoard.price) || 0) * ui.draw.count;
+          if (mpNeed <= 0) { toast('이 판은 포인트로 뽑을 수 없어요', 'err'); break; }
+          if (!me()) { openAuthModal('login'); break; }
+          if (Number(me().points || 0) < mpNeed) { toast('포인트가 부족해요 (필요 ' + fmt(mpNeed) + 'P · 보유 ' + fmt(Number(me().points || 0)) + 'P)', 'err'); break; }
+          startMultiDraw({ usePoints: true });
+          break;
+        }
         case 'zoom-tier': showTierZoom(el.getAttribute('data-grade')); break;
         case 'zoom-last': showTierZoom('LAST'); break;
         case 'ticket-info': showTicketInfo(n); break;
@@ -10250,6 +10332,17 @@
         case 'draw-coupon': {
           if (!ui.draw || ui.draw.step !== 'source') break;
           enterPeel({ couponId: id });
+          break;
+        }
+        case 'draw-points': {
+          /* v4.4.6 — 보유 포인트(1장 가격)로 바로 뽑기 */
+          if (!ui.draw || ui.draw.step !== 'source') break;
+          var dpBoard = getBoard(ui.draw.boardId);
+          var dpNeed = dpBoard ? Math.max(0, Number(dpBoard.price) || 0) : 0;
+          if (dpNeed <= 0) { toast('이 판은 포인트로 뽑을 수 없어요', 'err'); break; }
+          if (!me()) { openAuthModal('login'); break; }
+          if (Number(me().points || 0) < dpNeed) { toast('포인트가 부족해요 (필요 ' + fmt(dpNeed) + 'P · 보유 ' + fmt(Number(me().points || 0)) + 'P)', 'err'); break; }
+          enterPeel({ usePoints: true });
           break;
         }
         case 'go-my-points': {
