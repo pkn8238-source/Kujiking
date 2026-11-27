@@ -4002,7 +4002,7 @@ body.has-evt-popup{overflow:hidden}
 .evt-popup-backdrop{position:absolute;inset:0;background:rgba(23,18,14,.66);
   -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:fade .18s ease}
 .evt-popup-card{
-  position:relative;display:flex;flex-direction:column;
+  position:relative;
   width:min(380px,100%);max-height:88vh;overflow:hidden;
   background:var(--paper);border:var(--stroke) solid var(--ink);border-radius:22px;
   box-shadow:0 14px 0 rgba(23,18,14,.32);
@@ -4017,10 +4017,15 @@ body.has-evt-popup{overflow:hidden}
   box-shadow:0 3px 0 rgba(23,18,14,.35);
 }
 .evt-popup-x:hover{background:var(--cream)}
-.evt-popup-poster{display:block;position:relative;flex:1 1 auto;min-height:0;aspect-ratio:1/1;
-  background:#ffeef3;cursor:pointer}
-.evt-popup-poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
-.evt-popup-foot{flex:0 0 auto;display:flex;align-items:stretch;gap:8px;
+.evt-popup-poster{display:block;background:#ffeef3;cursor:pointer}
+/* 높이: 액션 바(약 70px)+카드 테두리를 뺀 만큼만 포스터가 차지한다.
+   화면이 짧으면 사진만 줄고(레터박스) 액션 바는 그대로 보인다.
+   svh 는 iOS 주소창이 떠 있는 실제 화면 높이 기준(모르는 브라우저는 vh). */
+.evt-popup-poster img{
+  display:block;width:100%;height:auto;object-fit:contain;background:#ffeef3;
+  max-height:calc(88vh - 76px);max-height:calc(88svh - 76px);
+}
+.evt-popup-foot{display:flex;align-items:stretch;gap:8px;
   padding:10px 12px;border-top:2px solid var(--line);background:var(--paper)}
 .evt-popup-hide{
   flex:0 0 auto;padding:0 12px;min-height:44px;border-radius:999px;
@@ -4039,7 +4044,8 @@ body.has-evt-popup{overflow:hidden}
 .evt-popup-cta:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
 @media (max-width:414px){
   .evt-popup{padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
-  .evt-popup-card{max-height:90vh}
+  .evt-popup-card{max-height:90vh;max-height:90svh}
+  .evt-popup-poster img{max-height:calc(90vh - 74px);max-height:calc(90svh - 74px)}
   .evt-popup-foot{gap:6px;padding:9px 10px}
   .evt-popup-hide{padding:0 10px;font-size:12px}
   .evt-popup-cta{font-size:14.5px;padding:0 10px}
