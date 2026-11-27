@@ -1929,7 +1929,15 @@
           p_code: body.p_code
         });
       }
-      if (res.error) throw new Error(res.error.message || '뽑기에 실패했어요.');
+      if (res.error) {
+        var dmsg = String(res.error.message || '');
+        /* v4.4.6 — DB 에 아직 포인트 뽑기 차단 함수가 남아 있으면 그대로 보여 주지 않고
+           무엇을 하면 되는지 알려 준다. (SQL 실행 뒤에는 이 메시지가 나오지 않는다) */
+        if (/포인트로 뽑기는 종료|포인트 뽑기.*종료/.test(dmsg)) {
+          throw new Error('포인트 뽑기 설정이 아직 DB에 없어요. Supabase SQL Editor에서 supabase/kujiking_enable_point_draw.sql 을 한 번 실행해 주세요.');
+        }
+        throw new Error(dmsg || '뽑기에 실패했어요.');
+      }
       var r = res.data || {};
       return {
         grade: r.grade, tierLabel: r.tier_label, points: r.points || 0,
