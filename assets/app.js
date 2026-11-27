@@ -3356,6 +3356,8 @@
       /* 목록은 최신순 — 실시간 판매 줄(renderLiveTicker)이 앞 4개를 쓴다 */
       else opens.unshift(entry);
     } else if (idx >= 0) {
+      /* 상태가 'sold' 가 아니면 취소·초기화된 번호 — status 를 알 수 없는 payload 면 손대지 않는다 */
+      if (!rec.status) return false;
       opens.splice(idx, 1);
     } else {
       return true;   /* 이미 반영된 변경 — 화면은 그대로 */
