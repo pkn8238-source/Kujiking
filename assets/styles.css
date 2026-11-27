@@ -3986,3 +3986,69 @@ body{max-width:100%}
 @media (max-width:345px){
   .user-chip-label{display:none}
 }
+
+/* =========================================================
+   v4.3.10 — 크리스마스 치이카와 9,900원 오픈 이벤트 팝업
+   ─ 홈(#/)에 들어오면 카드형 팝업을 띄운다.
+   ─ 다른 창(모달·주소검색·뽑기)보다 위(z-index 130)에 얹되,
+     app.js 가 그 창들이 닫힌 뒤에만 띄운다.
+   ─ 380px 카드 · 360~414px 폰에서도 88vh 안에 들어오고,
+     화면이 짧으면 포스터만 줄고 액션 바는 그대로 보인다.
+   ========================================================= */
+body.has-evt-popup{overflow:hidden}
+.evt-popup{position:fixed;inset:0;z-index:130;display:grid;place-items:center;
+  padding:calc(14px + env(safe-area-inset-top,0px)) 14px calc(14px + env(safe-area-inset-bottom,0px))}
+.evt-popup[hidden]{display:none}
+.evt-popup-backdrop{position:absolute;inset:0;background:rgba(23,18,14,.66);
+  -webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:fade .18s ease}
+.evt-popup-card{
+  position:relative;display:flex;flex-direction:column;
+  width:min(380px,100%);max-height:88vh;overflow:hidden;
+  background:var(--paper);border:var(--stroke) solid var(--ink);border-radius:22px;
+  box-shadow:0 14px 0 rgba(23,18,14,.32);
+  animation:pop .24s cubic-bezier(.2,1.2,.4,1);
+}
+.evt-popup-card:focus{outline:none}
+.evt-popup-card:focus-visible{outline:3px solid var(--blue);outline-offset:3px}
+.evt-popup-x{
+  position:absolute;top:10px;right:10px;z-index:3;width:34px;height:34px;border-radius:50%;
+  display:grid;place-items:center;font-size:13px;font-weight:900;line-height:1;
+  background:rgba(255,255,255,.94);color:var(--ink);border:2px solid var(--ink);
+  box-shadow:0 3px 0 rgba(23,18,14,.35);
+}
+.evt-popup-x:hover{background:var(--cream)}
+.evt-popup-poster{display:block;position:relative;flex:1 1 auto;min-height:0;aspect-ratio:1/1;
+  background:#ffeef3;cursor:pointer}
+.evt-popup-poster img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;display:block}
+.evt-popup-foot{flex:0 0 auto;display:flex;align-items:stretch;gap:8px;
+  padding:10px 12px;border-top:2px solid var(--line);background:var(--paper)}
+.evt-popup-hide{
+  flex:0 0 auto;padding:0 12px;min-height:44px;border-radius:999px;
+  border:2px solid var(--line-strong);background:var(--paper);
+  font-size:12.5px;font-weight:800;letter-spacing:-.02em;color:var(--muted);white-space:nowrap;
+}
+.evt-popup-hide:hover{background:var(--cream);color:var(--ink)}
+.evt-popup-cta{
+  flex:1 1 auto;min-height:46px;padding:0 14px;border-radius:999px;
+  border:var(--stroke) solid var(--ink);background:var(--yellow);color:var(--ink);
+  font-size:15px;font-weight:900;letter-spacing:-.02em;white-space:nowrap;
+  box-shadow:0 4px 0 var(--ink);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.evt-popup-cta:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg);background:#ffe14a}
+.evt-popup-cta:active{transform:translateY(2px);box-shadow:0 1px 0 var(--ink)}
+@media (max-width:414px){
+  .evt-popup{padding:calc(12px + env(safe-area-inset-top,0px)) 12px calc(12px + env(safe-area-inset-bottom,0px))}
+  .evt-popup-card{max-height:90vh}
+  .evt-popup-foot{gap:6px;padding:9px 10px}
+  .evt-popup-hide{padding:0 10px;font-size:12px}
+  .evt-popup-cta{font-size:14.5px;padding:0 10px}
+}
+@media (max-width:360px){
+  .evt-popup-hide{font-size:11px;padding:0 8px}
+  .evt-popup-cta{font-size:13.5px;padding:0 8px}
+}
+@media (prefers-reduced-motion:reduce){
+  .evt-popup-card,.evt-popup-backdrop{animation:none}
+  .evt-popup-cta{transition:none}
+}

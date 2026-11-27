@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.3.9">
+<link rel="stylesheet" href="assets/styles.css?v=4.3.10">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -877,7 +877,7 @@
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
     <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. <b>만 19세 이상 성인 전용 서비스</b>로, 미성년자는 이용할 수 없습니다.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.9</span></p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.3.10</span></p>
   </div>
 </footer>
 
@@ -889,6 +889,22 @@
   <span class="kakao-fab-word">카톡 문의</span>
 </a>
 
+<!-- v4.3.10 — 크리스마스 치이카와 9,900원 오픈 이벤트 팝업 (홈 첫 진입, app.js 가 띄운다) -->
+<div class="evt-popup" id="xmasOpenPopup" hidden aria-hidden="true">
+  <div class="evt-popup-backdrop" data-action="evt-popup-close"></div>
+  <div class="evt-popup-card" role="dialog" aria-modal="true" aria-labelledby="xmasPopupTitle" tabindex="-1">
+    <h2 class="sr-only" id="xmasPopupTitle">크리스마스 치이카와 쿠지 오픈 이벤트 — 1장 9,900원 한정 특가</h2>
+    <button type="button" class="evt-popup-x" data-action="evt-popup-close" aria-label="오픈 이벤트 팝업 닫기">✕</button>
+    <a class="evt-popup-poster" href="#/board/2deaf258-1531-4c44-ba28-922c8a1fd1ba" data-action="evt-popup-go" aria-label="크리스마스 치이카와 9,900원 오픈 이벤트 판 열기">
+      <img src="assets/events/xmas-open-9900.jpg" alt="쿠지킹 크리스마스 오픈 이벤트 — 크리스마스 치이카와 쿠지 1장 9,900원 한정 특가" width="1000" height="1000" decoding="async">
+    </a>
+    <div class="evt-popup-foot">
+      <button type="button" class="evt-popup-hide" data-action="evt-popup-hide">오늘 하루 보지 않기</button>
+      <button type="button" class="evt-popup-cta" data-action="evt-popup-go">9,900원 바로 뽑기 →</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-root" id="modalRoot" hidden>
   <div class="modal-backdrop" data-action="close-modal"></div>
   <div class="modal-shell" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
@@ -898,6 +914,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.3.9" defer></script>
+<script src="assets/app.js?v=4.3.10" defer></script>
 </body>
 </html>

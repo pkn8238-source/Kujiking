@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.9, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.10, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -2968,6 +2968,100 @@
   }
 
   /* =========================================================
+     4-2. 오픈 이벤트 팝업 (v4.3.10)
+     ---------------------------------------------------------
+     크리스마스 치이카와 9,900원 오픈 이벤트 카드를 홈(#/) 첫 진입에 띄운다.
+     · #/board/… 같은 상세 URL로 바로 들어온 방문자에게는 방해하지 않는다(홈에서만).
+     · 회원가입·약관·코드입력·뽑기·주소검색 창이 떠 있으면 겹치지 않게
+       그 창이 닫힌 뒤에 띄운다(최대 30초 기다리고, 그래도 안 되면 이번 방문은 넘긴다).
+     · '오늘 하루 보지 않기' → 24시간 숨김(localStorage).
+     · 한 번 띄운 뒤에는 다시 방해하지 않는다(새로고침하면 다시 뜬다).
+     ========================================================= */
+  var XMAS_POPUP_ID = '2deaf258-1531-4c44-ba28-922c8a1fd1ba';   /* [치이카와] 크리스마스 쿠지 이벤트 판 */
+  var XMAS_POPUP_HIDE_KEY = 'kujiking_popup_hide_xmas_9900';
+  var XMAS_POPUP_HIDE_MS = 24 * 60 * 60 * 1000;                  /* 오늘 하루 보지 않기 = 24시간 */
+  var XMAS_POPUP_DELAY_MS = 450;                                 /* 홈이 그려진 뒤 살짝 뒤에 */
+  var XMAS_POPUP_RETRY_MS = 900;
+  var XMAS_POPUP_RETRY_MAX = 34;                                 /* 다른 창을 기다리는 상한(약 30초) */
+  var xmasPopup = { el: null, card: null, shown: false, tries: 0, timer: null, lastFocus: null };
+
+  function xmasPopupHiddenUntil() {
+    var raw = null;
+    try { raw = window.localStorage.getItem(XMAS_POPUP_HIDE_KEY); } catch (e) { return 0; }
+    var until = Number(raw);
+    return isFinite(until) && until > 0 ? until : 0;
+  }
+  function xmasPopupSnoozed() {
+    return xmasPopupHiddenUntil() > Date.now();
+  }
+  function xmasPopupOpen() {
+    return !!(xmasPopup.el && !xmasPopup.el.hidden);
+  }
+  /* 다른 창이 떠 있나 — 있으면 팝업은 양보한다 */
+  function xmasPopupBusy() {
+    if (modalRoot && !modalRoot.hidden) return true;
+    if (document.getElementById('postcodeLayer')) return true;
+    if (ui.draw) return true;
+    return false;
+  }
+
+  function openXmasPopup() {
+    if (!xmasPopup.el || xmasPopupOpen()) return;
+    if (ui.view !== 'home') return;
+    if (xmasPopupBusy()) return;
+    xmasPopup.el.hidden = false;
+    xmasPopup.el.setAttribute('aria-hidden', 'false');
+    document.body.classList.add('has-evt-popup');
+    xmasPopup.lastFocus = document.activeElement;
+    if (xmasPopup.card) { try { xmasPopup.card.focus(); } catch (e) {} }
+  }
+
+  function closeXmasPopup() {
+    if (!xmasPopup.el || xmasPopup.el.hidden) return;
+    xmasPopup.el.hidden = true;
+    xmasPopup.el.setAttribute('aria-hidden', 'true');
+    document.body.classList.remove('has-evt-popup');
+    var back = xmasPopup.lastFocus;
+    xmasPopup.lastFocus = null;
+    if (back && back.focus) { try { back.focus(); } catch (e) {} }
+  }
+
+  /* 오늘 하루 보지 않기 — 24시간 저장하고 닫는다 */
+  function snoozeXmasPopup() {
+    try { window.localStorage.setItem(XMAS_POPUP_HIDE_KEY, String(Date.now() + XMAS_POPUP_HIDE_MS)); } catch (e) {}
+    closeXmasPopup();
+  }
+
+  /* 포스터·CTA — 팝업을 닫고 크리스마스 판 상세로 */
+  function goXmasPopupBoard() {
+    closeXmasPopup();
+    var target = '#/board/' + XMAS_POPUP_ID;
+    if (location.hash === target) route();
+    else location.hash = target;
+  }
+
+  function scheduleXmasPopup(delay) {
+    if (!xmasPopup.el || xmasPopup.shown) return;
+    if (xmasPopup.timer) return;
+    xmasPopup.timer = setTimeout(tryShowXmasPopup, delay == null ? XMAS_POPUP_DELAY_MS : delay);
+  }
+
+  function tryShowXmasPopup() {
+    xmasPopup.timer = null;
+    if (!xmasPopup.el || xmasPopup.shown) return;
+    if (!ui.ready || ui.view !== 'home') return;
+    if (xmasPopupSnoozed()) { xmasPopup.shown = true; return; }
+    if (xmasPopupBusy()) {
+      xmasPopup.tries += 1;
+      if (xmasPopup.tries >= XMAS_POPUP_RETRY_MAX) { xmasPopup.shown = true; return; }
+      xmasPopup.timer = setTimeout(tryShowXmasPopup, XMAS_POPUP_RETRY_MS);
+      return;
+    }
+    xmasPopup.shown = true;
+    openXmasPopup();
+  }
+
+  /* =========================================================
      5. 라우팅
      ========================================================= */
   function parseRoute() {
@@ -3009,6 +3103,9 @@
     window.scrollTo({ top: 0, behavior: 'auto' });
     renderView();
     renderHeader();
+    /* v4.3.10 — 홈으로 들어오면 오픈 이벤트 팝업을 한 번 띄우고, 홈을 벗어나면 닫는다 */
+    if (ui.view !== 'home') closeXmasPopup();
+    else scheduleXmasPopup(XMAS_POPUP_DELAY_MS);
   }
 
   function renderAll() {
@@ -9840,6 +9937,10 @@
 
       switch (action) {
         case 'close-modal': closeModal(); break;
+        /* v4.3.10 — 크리스마스 9,900원 오픈 이벤트 팝업 */
+        case 'evt-popup-close': closeXmasPopup(); break;
+        case 'evt-popup-hide': snoozeXmasPopup(); break;
+        case 'evt-popup-go': e.preventDefault(); goXmasPopupBoard(); break;
         case 'confirm-yes': if (confirmResolve) { var yes = confirmResolve; confirmResolve = null; closeModal(); yes(true); } break;
         case 'confirm-no': if (confirmResolve) { var no = confirmResolve; confirmResolve = null; closeModal(); no(false); } break;
 
@@ -10658,6 +10759,20 @@
         kujiImportFlow();
         return;
       }
+      /* v4.3.10 — 오픈 이벤트 팝업이 떠 있으면 ESC 는 팝업부터 닫는다 */
+      if (e.key === 'Escape' && xmasPopupOpen()) {
+        closeXmasPopup();
+        return;
+      }
+      /* 팝업 안에서 Tab 이 뒤 페이지로 빠져나가지 않게 */
+      if (e.key === 'Tab' && xmasPopupOpen() && xmasPopup.el) {
+        var pites = Array.prototype.slice.call(xmasPopup.el.querySelectorAll('button, a[href]'));
+        if (pites.length) {
+          var pfirst = pites[0], plast = pites[pites.length - 1], pnow = document.activeElement;
+          if (e.shiftKey && (pnow === pfirst || pnow === xmasPopup.card)) { e.preventDefault(); plast.focus(); }
+          else if (!e.shiftKey && pnow === plast) { e.preventDefault(); pfirst.focus(); }
+        }
+      }
       if (e.key === 'Escape' && modalRoot && !modalRoot.hidden) {
         if (document.getElementById('postcodeLayer')) { closePostcodeLayer(); return; }
         if (confirmResolve) { var r = confirmResolve; confirmResolve = null; closeModal(); r(false); }
@@ -11263,6 +11378,9 @@
     modalRoot = $('#modalRoot');
     modalPanel = $('#modalPanel');
     modalShell = $('.modal-shell');
+    /* v4.3.10 — 오픈 이벤트 팝업 (index.html 의 #xmasOpenPopup) */
+    xmasPopup.el = $('#xmasOpenPopup');
+    xmasPopup.card = xmasPopup.el ? xmasPopup.el.querySelector('.evt-popup-card') : null;
 
     try { ui.adminUnlocked = sessionStorage.getItem(ADMIN_KEY) === '1'; } catch (e) {}
 
