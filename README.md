@@ -10,6 +10,21 @@
 
 ---
 
+## v4.4.1 — 기본 배송비 3,500원 → 4,000원
+
+- **요청**: 기남 님 "택배비 4,000원 수정" (11-27). 스마트스토어는 이미 `4,000원`이고, 홈페이지 기본 배송비 문구만 `3,500원`으로 남아 있었습니다.
+- **수정**: `SHIP_NOTICE_DEFAULT`(`assets/app.js`), 이용 안내 4항 문단, `index.html` 의 `data-ship-notice` 2곳·관리자 설정 `textarea[name="shipping"]` placeholder 를 모두 `기본 배송비 4,000원`으로 교체. 제주·도서산간 **+3,000원**과 합배송 3건 무료 조건은 그대로입니다.
+- **자산 버전**: `index.html` 의 `styles.css?v=`·`app.js?v=` 와 `protoTag` 를 **4.4.1** 로 올렸습니다. `COVER_VER` 는 상품 커버 그림 캐시라서 이번 수정에서는 그대로 `4.4.0`(텍스트만 바뀌어 커버 재다운로드가 필요 없음).
+- **DB**: `app_settings.shipping_fee_notice` 가 비어 있으면 코드 기본값이 바로 나가고, 값이 저장돼 있으면 그 값이 우선합니다 → 관리자 > 설정 · 연결 > 고객센터 · 배송비 설정에서 `4,000원`으로 저장하거나 아래 SQL 을 실행하세요.
+
+```sql
+update public.app_settings
+   set value = '기본 배송비 4,000원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)'
+ where key = 'shipping_fee_notice';
+```
+
+---
+
 ## v4.4.0 — 크리스마스 판 9,900원·990P 잔여 표기 마무리 (P상 카드 그림까지)
 
 - **요청**: 기남 님 "크리스마스 판에 남은 `1,550P`·`1장 가격 15,500원`·`p15500.jpg` 도 9,900원·990P 로" (11-27).
@@ -469,7 +484,7 @@ git add -A && git commit -m "쿠지킹 v2" && git push origin main
 방문자가 배송 규칙과 문의 창구를 **결제·배송 신청 직전 화면에서** 바로 볼 수 있게 했습니다.
 
 - **배송비 · 합배송 안내 문구** — 기본값
-  `기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)`
+  `기본 배송비 4,000원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)`
   - 노출 위치: 푸터(한 줄 요약 + 고객센터 버튼), 뽑기판 **이용 안내** 카드와 사이드 안내, **공정성 검증 → 확률 · 이용 안내 6항**,
     **내 보관함**(목록 맨 위), **배송 신청 모달**(주소 입력 아래).
   - Supabase `app_settings` 의 `shipping_fee_notice` 값으로 바꿀 수 있고, 비우면 기본 문구가 나갑니다.
@@ -482,7 +497,7 @@ git add -A && git commit -m "쿠지킹 v2" && git push origin main
 ```sql
 insert into public.app_settings (key, value) values
   ('kakao_openchat_url', 'https://open.kakao.com/o/xxxxxxxx'),
-  ('shipping_fee_notice', '기본 배송비 3,500원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)')
+  ('shipping_fee_notice', '기본 배송비 4,000원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)')
 on conflict (key) do update set value = excluded.value;
 ```
 
