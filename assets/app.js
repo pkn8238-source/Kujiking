@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.1, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.2, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -21,6 +21,8 @@
   /* ---------- 스토어 · 카카오톡 채널 링크 (2026-11-24 개설) ---------- */
   var STORE_URL = 'https://smartstore.naver.com/kujiking';
   var STORE_PRODUCT_URL = 'https://smartstore.naver.com/kujiking/products/13893473264';
+  /* v4.4.2 — 크리스마스 치이카와 9,900원 오픈 이벤트 판 (스마트스토어 상품번호 13896155551) */
+  var STORE_XMAS_URL = 'https://smartstore.naver.com/kujiking/products/13896155551';
   var KAKAO_CHAT_URL = 'https://pf.kakao.com/_xnxhmvX/chat';
 
   /* ---------- 회원가입 이메일 제한 ----------
@@ -3115,6 +3117,8 @@
       el.classList.toggle('active', el.getAttribute('data-view') === ui.view);
     });
     if (ui.view !== 'board') document.body.classList.remove('has-store-bar');
+    /* v4.4.2 — 관리자 화면에서는 '쿠폰 구매하기' 버튼을 감춘다 */
+    document.body.classList.toggle('hide-coupon-fab', ui.view === 'admin');
     $$('.main-nav a').forEach(function (a) {
       a.classList.toggle('active', a.getAttribute('data-nav') === ui.view);
     });
@@ -3557,6 +3561,132 @@
       '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">확인</button></div>' +
       '</div>');
     return false;
+  }
+
+  /* =========================================================
+     v4.4.2 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+     · 버튼을 끌어(마우스·터치) 화면 안 원하는 곳으로 옮길 수 있고 위치는 이 브라우저에 기억한다.
+     · 스마트스토어는 X-Frame-Options 로 iframe 이 막혀 있어, 사이트 안 모달에서
+       상품 3개(크리스마스·갸루·전체 보기)를 새 창/새 탭으로 바로 연다.
+     ========================================================= */
+  var COUPON_FAB_POS_KEY = 'kujiking.couponFab.pos.v1';
+
+  function couponStoreModalHTML() {
+    return '<div class="store-pop">' +
+      '<p class="store-pop-kicker">Naver Smartstore</p>' +
+      '<h2 class="modal-title" id="modalTitle">쿠폰 구매하기</h2>' +
+      '<p class="modal-sub">네이버 스마트스토어에서 <b>1장 = 1쿠폰</b>으로 바로 살 수 있어요. 결제하면 카카오톡으로 <b>교환 코드</b>가 오고, 그 코드를 넣으면 판에서 바로 뽑을 수 있습니다.</p>' +
+      '<a class="store-pop-item is-hot" href="' + STORE_XMAS_URL + '" target="_blank" rel="noopener noreferrer">' +
+        '<span class="store-pop-item-emoji" aria-hidden="true">🎄</span>' +
+        '<span class="store-pop-item-body">' +
+          '<span class="store-pop-tag">오픈 이벤트</span>' +
+          '<span class="store-pop-name">크리스마스 치이카와</span>' +
+          '<span class="store-pop-price"><s>15,500원</s><b>9,900원</b><em>1장</em></span>' +
+        '</span>' +
+        '<span class="store-pop-go">구매 →</span>' +
+      '</a>' +
+      '<a class="store-pop-item" href="' + STORE_PRODUCT_URL + '" target="_blank" rel="noopener noreferrer">' +
+        '<span class="store-pop-item-emoji" aria-hidden="true">🎀</span>' +
+        '<span class="store-pop-item-body">' +
+          '<span class="store-pop-name">갸루 치이카와</span>' +
+          '<span class="store-pop-price"><b>15,500원</b><em>1장</em></span>' +
+        '</span>' +
+        '<span class="store-pop-go">구매 →</span>' +
+      '</a>' +
+      '<a class="store-pop-all" href="' + STORE_URL + '" target="_blank" rel="noopener noreferrer">쿠지킹 스마트스토어 전체 보기 ↗</a>' +
+      '<p class="store-pop-note"><b>구매 후</b> 받은 교환 코드는 판 상세의 <b>교환 코드 입력</b>에 넣으면 코드에 담긴 장수만큼 뽑기권이 한 번에 들어옵니다. 휴대폰에서는 네이버 스마트스토어 앱으로 열릴 수 있어요.</p>' +
+      '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">닫기</button></div>' +
+    '</div>';
+  }
+
+  function openCouponStore() { openModal(couponStoreModalHTML()); }
+
+  function couponFabBounds(el) {
+    var r = el.getBoundingClientRect();
+    var w = el.offsetWidth || r.width || 88;
+    var hgt = el.offsetHeight || r.height || 88;
+    var pad = 6;
+    return {
+      pad: pad, w: w, h: hgt,
+      maxLeft: Math.max(pad, window.innerWidth - w - pad),
+      maxTop: Math.max(pad, window.innerHeight - hgt - pad)
+    };
+  }
+
+  /* 화면 밖으로 나가지 않게 잠그고 left/top 으로 놓는다. */
+  function couponFabPlace(el, left, top, save) {
+    var b = couponFabBounds(el);
+    var l = Math.min(Math.max(b.pad, left), b.maxLeft);
+    var t = Math.min(Math.max(b.pad, top), b.maxTop);
+    el.style.left = l + 'px';
+    el.style.top = t + 'px';
+    el.style.right = 'auto';
+    el.style.bottom = 'auto';
+    if (save) {
+      try { localStorage.setItem(COUPON_FAB_POS_KEY, JSON.stringify({ left: l, top: t })); } catch (e) {}
+    }
+    return { left: l, top: t };
+  }
+
+  function couponFabRestore(el) {
+    var saved = null;
+    try { saved = JSON.parse(localStorage.getItem(COUPON_FAB_POS_KEY) || 'null'); } catch (e) {}
+    if (!saved || typeof saved.left !== 'number' || typeof saved.top !== 'number') return;
+    couponFabPlace(el, saved.left, saved.top, false);
+  }
+
+  /* 실제로 끈 뒤 300ms 안에 오는 click 은 무시한다 (드래그와 클릭 구분) */
+  function initCouponFab() {
+    var el = $('#couponFab');
+    if (!el) return;
+    var drag = null;
+    var lastDragAt = 0;
+
+    el.addEventListener('pointerdown', function (e) {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      var r = el.getBoundingClientRect();
+      drag = { id: e.pointerId, x: e.clientX, y: e.clientY, left: r.left, top: r.top, moved: false };
+      try { el.setPointerCapture(e.pointerId); } catch (err) {}
+    });
+
+    el.addEventListener('pointermove', function (e) {
+      if (!drag || drag.id !== e.pointerId) return;
+      if (e.pointerType === 'mouse' && e.buttons === 0) return;
+      var dx = e.clientX - drag.x;
+      var dy = e.clientY - drag.y;
+      /* 6px 를 넘게 끌면 드래그로 본다 — 그 아래는 그냥 누른 것으로 둔다 */
+      if (!drag.moved && Math.sqrt(dx * dx + dy * dy) < 6) return;
+      if (!drag.moved) { drag.moved = true; el.classList.add('is-dragging'); }
+      couponFabPlace(el, drag.left + dx, drag.top + dy, true);
+      if (e.cancelable) e.preventDefault();
+    });
+
+    function endDrag(e) {
+      if (!drag || drag.id !== e.pointerId) return;
+      var moved = drag.moved;
+      drag = null;
+      el.classList.remove('is-dragging');
+      try { el.releasePointerCapture(e.pointerId); } catch (err) {}
+      if (moved) lastDragAt = Date.now();
+    }
+    el.addEventListener('pointerup', endDrag);
+    el.addEventListener('pointercancel', endDrag);
+
+    el.addEventListener('click', function (e) {
+      if (Date.now() - lastDragAt < 300) { e.preventDefault(); e.stopPropagation(); return; }
+      openCouponStore();
+    });
+
+    /* 화면 크기가 바뀌어도(회전·창 조절) 버튼이 화면 밖에 남지 않게 */
+    function reclamp() {
+      if (!el.style.left || el.style.left === 'auto') return;
+      couponFabPlace(el, parseFloat(el.style.left) || 0, parseFloat(el.style.top) || 0, false);
+    }
+    window.addEventListener('resize', reclamp);
+    window.addEventListener('orientationchange', function () { setTimeout(reclamp, 220); });
+
+    couponFabRestore(el);
+    requestAnimationFrame(function () { couponFabRestore(el); });
   }
 
   /* 방문자 화면(푸터·이용 안내·보관함·배송 신청)의 배송비 문구를 지금 설정값으로 맞춘다. */
@@ -11406,6 +11536,7 @@
     try { ui.adminUnlocked = sessionStorage.getItem(ADMIN_KEY) === '1'; } catch (e) {}
 
     bindEvents();
+    initCouponFab();   /* v4.4.2 — '쿠폰 구매하기' 플로팅 버튼(드래그 이동) */
     window.KUJIKING = { version: '2.0', mode: 'local' };
 
     var mode = 'local';

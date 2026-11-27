@@ -3777,7 +3777,8 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
   --kakao-yellow-hi:#FFEB4D;
   --kakao-ink:#191600;
   --fab-bottom:calc(20px + env(safe-area-inset-bottom,0px));
-  --fab-gap:64px;
+  /* v4.4.2 — 플로팅 '쿠폰 구매하기' 버튼(카톡 버튼 위 88px)까지 비켜 가도록 토스트를 더 올린다 */
+  --fab-gap:164px;
 }
 body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 
@@ -4057,4 +4058,97 @@ body.has-evt-popup{overflow:hidden}
 @media (prefers-reduced-motion:reduce){
   .evt-popup-card,.evt-popup-backdrop{animation:none}
   .evt-popup-cta{transition:none}
+}
+
+/* =========================================================
+   v4.4.2 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+   · 기본은 오른쪽 아래, 카톡 문의 버튼(kakao-fab) 바로 위.
+     판 상세 하단 고정바(.store-bar)가 있으면 --fab-bottom 을 따라 함께 올라간다.
+   · 끌어서(마우스·터치) 화면 안 원하는 곳으로 옮길 수 있고, 위치는 이 브라우저에 기억된다.
+   ========================================================= */
+.coupon-fab{
+  position:fixed;right:16px;bottom:calc(var(--fab-bottom) + 66px);z-index:97;
+  width:88px;height:88px;padding:0;border-radius:50%;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
+  border:2.5px solid var(--ink);
+  background:radial-gradient(circle at 32% 24%,#fff6c4 0%,var(--yellow) 44%,#f0a200 100%);
+  color:var(--ink);text-align:center;line-height:1.05;letter-spacing:-.04em;
+  font-weight:900;font-size:12.5px;
+  box-shadow:0 5px 0 var(--ink),0 14px 24px rgba(23,18,14,.24);
+  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
+  animation:couponFabFloat 3.6s ease-in-out infinite;
+  transition:box-shadow .15s ease,filter .15s ease;
+  will-change:transform;
+}
+.coupon-fab-emoji{font-size:23px;line-height:1;filter:drop-shadow(0 1px 0 rgba(255,255,255,.55))}
+.coupon-fab-word{display:block;font-size:12.5px;font-weight:900;letter-spacing:-.05em}
+.coupon-fab:hover{filter:saturate(1.1) brightness(1.02);box-shadow:0 7px 0 var(--ink),0 18px 28px rgba(23,18,14,.28)}
+.coupon-fab:focus-visible{outline:3px solid var(--ink);outline-offset:4px}
+.coupon-fab.is-dragging{animation:none;cursor:grabbing;transform:scale(1.04);
+  box-shadow:0 9px 0 rgba(23,18,14,.85),0 22px 34px rgba(23,18,14,.32)}
+.coupon-fab.is-dragging:hover{filter:none}
+/* 관리자 화면처럼 방해가 되면 body 에 hide-coupon-fab 을 붙여 숨긴다 */
+body.hide-coupon-fab .coupon-fab{display:none}
+@keyframes couponFabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@media (max-width:420px){
+  .coupon-fab{right:12px;bottom:calc(var(--fab-bottom) + 62px);width:80px;height:80px;gap:2px}
+  .coupon-fab-emoji{font-size:20px}
+  .coupon-fab-word{font-size:11.5px}
+}
+@media (prefers-reduced-motion:reduce){
+  .coupon-fab{animation:none}
+}
+
+/* ---- 팝업 (스마트스토어는 iframe 이 안 열려 사이트 안 모달로 안내한다) ---- */
+.store-pop-kicker{
+  margin:0 0 6px;font-size:11px;font-weight:900;letter-spacing:.14em;
+  color:var(--red-deep);text-transform:uppercase;
+}
+.store-pop-item{
+  display:flex;align-items:center;gap:12px;
+  margin-top:11px;padding:12px 13px;border-radius:16px;
+  border:2px solid var(--ink);background:var(--paper);color:var(--ink);text-decoration:none;
+  box-shadow:0 3px 0 var(--ink);
+  transition:transform .12s ease,box-shadow .12s ease,background .12s ease;
+}
+.store-pop-item:hover{transform:translateY(-2px);box-shadow:0 5px 0 var(--ink);background:var(--cream)}
+.store-pop-item:active{transform:translateY(1px);box-shadow:0 1px 0 var(--ink)}
+.store-pop-item:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.store-pop-item.is-hot{background:linear-gradient(180deg,#fff9e6 0%,#ffe8a4 100%)}
+.store-pop-item-emoji{flex:none;font-size:26px;line-height:1}
+.store-pop-item-body{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.store-pop-tag{
+  align-self:flex-start;padding:2px 8px;border-radius:999px;
+  background:var(--red);color:#fff;font-size:10.5px;font-weight:900;letter-spacing:.02em;
+}
+.store-pop-name{font-size:15.5px;font-weight:900;letter-spacing:-.03em;line-height:1.25;word-break:keep-all}
+.store-pop-price{display:flex;align-items:baseline;gap:6px;font-variant-numeric:tabular-nums}
+.store-pop-price s{color:var(--muted);font-weight:700;font-size:12px}
+.store-pop-price b{font-size:16.5px;font-weight:900;color:var(--red-deep);letter-spacing:-.03em}
+.store-pop-price em{font-style:normal;color:var(--muted);font-weight:800;font-size:11.5px}
+.store-pop-go{
+  flex:none;align-self:center;padding:7px 11px;border-radius:999px;
+  border:2px solid var(--ink);background:var(--yellow);
+  font-size:12px;font-weight:900;letter-spacing:-.03em;white-space:nowrap;
+}
+.store-pop-all{
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  margin-top:12px;min-height:46px;padding:0 14px;border-radius:999px;
+  border:2px solid var(--line-strong);background:var(--paper);color:var(--ink);text-decoration:none;
+  font-size:13.5px;font-weight:900;letter-spacing:-.02em;
+  transition:background .12s ease,border-color .12s ease;
+}
+.store-pop-all:hover{background:var(--cream);border-color:var(--ink)}
+.store-pop-all:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
+.store-pop-note{
+  margin:14px 0 0;padding:11px 13px;border-radius:12px;
+  background:var(--cream);border:2px dashed var(--line-strong);
+  font-size:12.5px;line-height:1.6;font-weight:700;color:var(--ink-soft);
+}
+.store-pop-note b{color:var(--ink)}
+@media (max-width:420px){
+  .store-pop-item{padding:11px 11px;gap:10px}
+  .store-pop-name{font-size:14.5px}
+  .store-pop-go{padding:6px 9px;font-size:11.5px}
+  .store-pop-price b{font-size:15.5px}
 }
