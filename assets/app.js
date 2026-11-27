@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.3, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.4, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -3564,7 +3564,7 @@
   }
 
   /* =========================================================
-     v4.4.3 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+     v4.4.3 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업 (v4.4.4 문자 자동 발송 안내)
      · 카톡 문의 버튼과 같은 알약형·같은 크기, 색만 코랄 오렌지로 구분.
      · 버튼을 끌어(마우스·터치) 화면 안 원하는 곳으로 옮길 수 있고 위치는 이 브라우저에 기억한다.
      · 스마트스토어는 X-Frame-Options 로 iframe 이 막혀 있어, 사이트 안 모달에서
@@ -3576,7 +3576,13 @@
     return '<div class="store-pop">' +
       '<p class="store-pop-kicker">Naver Smartstore</p>' +
       '<h2 class="modal-title" id="modalTitle">쿠폰 구매하기</h2>' +
-      '<p class="modal-sub">네이버 스마트스토어에서 <b>1장 = 1쿠폰</b>으로 바로 살 수 있어요. 구매한 뒤 <b>교환 코드</b>를 받아 판에 넣으면 바로 뽑을 수 있습니다.</p>' +
+      '<p class="modal-sub">네이버 스마트스토어에서 <b>1장 = 1쿠폰</b>으로 바로 살 수 있어요.</p>' +
+      /* v4.4.4 — 결제 후 코드가 문자로 자동 발송된다는 안내를 팝업 맨 위에 크게 둔다 */
+      '<div class="sms-notice">' +
+        '<p class="sms-notice-title">📩 결제 후 1분 내 <span class="sms-notice-key">문자로 교환 코드</span>가 즉시 자동 발송됩니다!</p>' +
+        '<p class="sms-notice-body">휴대폰 문자(<b>010-8383-9273</b> · <b>[쿠지킹]</b>)를 확인하신 뒤, 홈페이지 <b>교환 코드 입력</b>에 넣으면 바로 뽑으실 수 있어요.</p>' +
+        '<p class="sms-notice-sub">※ 2분 이상 문자가 안 오면 스팸함을 확인한 뒤 카카오톡 채널 또는 네이버 톡톡으로 문의해 주세요.</p>' +
+      '</div>' +
       '<a class="store-pop-item is-hot" href="' + STORE_XMAS_URL + '" target="_blank" rel="noopener noreferrer">' +
         '<span class="store-pop-item-emoji" aria-hidden="true">🎄</span>' +
         '<span class="store-pop-item-body">' +
@@ -3596,8 +3602,9 @@
       '</a>' +
       '<a class="store-pop-all" href="' + STORE_URL + '" target="_blank" rel="noopener noreferrer">쿠지킹 스마트스토어 전체 보기 ↗</a>' +
       '<div class="store-pop-note">' +
-        '<span class="store-pop-note-title">구매 후 교환 코드 받는 방법</span>' +
-        '<p>스마트스토어에서 구매하신 뒤 카카오톡 채널(<b>쿠지킹</b>) 또는 네이버 톡톡으로 메시지를 보내주시면 <b>교환 코드</b>를 발급해 드립니다. 받은 교환 코드를 판 상세의 <b>교환 코드 입력</b>에 넣으면 장수만큼 뽑기권이 지급됩니다.</p>' +
+        '<span class="store-pop-note-title">구매 후 교환 코드 받는 순서</span>' +
+        '<p><b>①</b> 스마트스토어에서 결제 → <b>②</b> 1분 내 휴대폰 문자로 <b>교환 코드(KJ-XXXX-XXXX)</b> 도착 → <b>③</b> 홈페이지 <b>교환 코드 입력</b>에 코드를 넣으면 장수만큼 뽑기권이 한 번에 지급됩니다.</p>' +
+        '<p style="margin-top:7px">카카오톡 채널·네이버 톡톡으로 먼저 코드를 받으신 경우에도 같은 자리에 넣으시면 됩니다. 문자가 오지 않으면 이 채널로 문의해 주세요.</p>' +
         '<div class="store-pop-note-cta">' + kakaoPillHTML('') + '</div>' +
       '</div>' +
       '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">닫기</button></div>' +
@@ -4171,7 +4178,7 @@
           ? '<span class="btn btn-outline" aria-disabled="true">전량 소진</span>'
           : '<button class="btn btn-primary" data-action="scroll-grid">번호 골라 뽑기</button>') +
         '<button class="btn btn-outline btn-sm" data-action="open-code-modal">교환 코드 입력</button>' +
-        '<small>' + (left === 0 ? '이 판은 전량 소진되었습니다' : '번호를 고르면 쿠폰 또는 코드로 뽑을 수 있어요') + '</small>' +
+        '<small>' + (left === 0 ? '이 판은 전량 소진되었습니다' : '결제 후 교환 코드는 1분 내 문자로 도착해요 · 번호를 고르면 쿠폰 또는 코드로 뽑을 수 있어요') + '</small>' +
       '</div>';
   }
 
@@ -4195,7 +4202,7 @@
             return '<li><b>' + h(c.boardId ? '이 판 전용' : '전체 사용') + '</b><span>' + h(c.label || '') + '</span></li>';
           }).join('') + '</ul>' +
           '<button class="btn btn-primary btn-block btn-sm" data-action="scroll-grid">쿠폰으로 뽑기</button>'
-        : '<p class="aside-hint">이 판에 쓸 수 있는 뽑기권이 없어요. 스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 넣으면 뽑기권이 바로 지급됩니다.</p>' +
+        : '<p class="aside-hint">이 판에 쓸 수 있는 뽑기권이 없어요. 스마트스토어에서 결제한 뒤 <b>1분 내 휴대폰 문자</b>로 받은 교환 코드를 넣으면 뽑기권이 바로 지급됩니다.</p>' +
           '<button class="btn btn-outline btn-block btn-sm" data-action="open-code-modal">교환 코드 입력</button>' +
           '<div class="aside-note">다른 판 전용 쿠폰은 해당 판에서만 쓸 수 있어요.</div>');
   }
@@ -4736,7 +4743,7 @@
       '<li><b>마지막 10장 순번제</b> — 남은 티켓이 <b>10장 이하</b>가 되면 여러 장을 한꺼번에 뽑는 <b>연뽑(5·10·15·20장)은 자동으로 잠깁니다.</b></li>' +
       '<li>이때는 <b>줄서기(대기 순번)</b>에 참여한 뒤 <b>본인 차례에 60초 안에 1장씩</b>만 뽑을 수 있습니다. 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다.</li>' +
       '<li>그 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</li>' +
-      '<li>뽑기권은 스마트스토어 구매 후 카카오톡으로 받은 <b>교환 코드</b>를 입력하면 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
+      '<li>뽑기권은 스마트스토어 <b>결제 후 1분 내 휴대폰 문자로 자동 발송되는 교환 코드</b>를 입력하면 계정에 지급되며, 이 판 전용 또는 모든 판 사용권으로 나뉩니다.</li>' +
       '<li>교환 코드는 1회용이며, 개봉(사용) 후에는 재사용할 수 없습니다. 코드에 담긴 장수만큼 뽑기권이 한 번에 지급되는 경우, 지급된 뽑기권은 계정에서 사용합니다.</li>' +
       '<li>뽑기는 <b>뽑기권(쿠폰)</b> 또는 <b>교환 코드</b>로만 할 수 있습니다. 모은 굿즈 포인트(P)는 <a href="#/goods" class="inline-link">굿즈</a>에서 실물 굿즈로 교환합니다.</li>' +
       '<li>당첨 상품은 <a href="#/my" class="inline-link">내 보관함</a>에서 배송 신청 또는 굿즈 포인트 전환을 선택할 수 있습니다.</li>' +
@@ -4844,7 +4851,7 @@
     } else {
       html += '<div class="pay-option">' +
         '<div class="pay-head"><span class="pay-badge">보유 뽑기권</span><b>0장</b></div>' +
-        '<p class="pay-desc">스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 아래에 넣으면 뽑기권이 바로 지급됩니다.</p>' +
+        '<p class="pay-desc">스마트스토어에서 결제하면 <b>1분 내 휴대폰 문자</b>로 교환 코드가 자동 발송됩니다. 받은 코드를 아래에 넣으면 뽑기권이 바로 지급됩니다.</p>' +
       '</div>';
     }
 
@@ -4852,6 +4859,7 @@
        모은 포인트는 [굿즈] 메뉴에서 실물 굿즈로 교환한다. */
     html += '<p class="pay-points-note">굿즈 포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. 모은 P는 <a class="inline-link" href="#/goods">굿즈</a>에서 확인하세요.</p>' +
       '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+      '<p class="sms-line"><span aria-hidden="true">📩</span><span>결제 후 1분 내 <b>휴대폰 문자</b>로 온 교환 코드(<b>KJ-XXXX-XXXX</b>, 발신 <b>010-8383-9273</b>·<b>[쿠지킹]</b>)를 넣어 주세요.</span></p>' +
       '<form class="code-form" data-form="draw-code" novalidate>' +
       '<label class="sr-only" for="drawCodeInput">교환 코드</label>' +
       '<input id="drawCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
@@ -4889,6 +4897,7 @@
     /* v4.2.6 — 포인트로 뽑기는 없어졌다. 연뽑도 뽑기권(쿠폰)·교환 코드로만. */
     html += '<p class="pay-points-note">포인트(P)는 뽑기 결제가 아니라 <b>굿즈 교환</b>에 쓰여요. <a class="inline-link" href="#/goods">굿즈 보러 가기</a></p>' +
       '<div class="pay-divider"><span>또는 교환 코드</span></div>' +
+      '<p class="sms-line"><span aria-hidden="true">📩</span><span>결제 후 1분 내 <b>휴대폰 문자</b>로 온 교환 코드(<b>KJ-XXXX-XXXX</b>)를 넣으면 장수만큼 뽑기권이 들어와요.</span></p>' +
       '<form class="code-form" data-form="multi-code" novalidate>' +
         '<label class="sr-only" for="multiCodeInput">교환 코드</label>' +
         '<input id="multiCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX">' +
@@ -8164,7 +8173,7 @@
     var list = (state.myCoupons || []);
     if (!list.length) {
       el.innerHTML = '<div class="card empty"><span class="empty-icon">' + icon('ticket2') + '</span>' +
-        '<p>아직 받은 뽑기권이 없어요.<br>스마트스토어에서 구매한 뒤 카카오톡으로 받은 교환 코드를 입력하면 뽑기권이 바로 지급됩니다.</p>' +
+        '<p>아직 받은 뽑기권이 없어요.<br>스마트스토어에서 결제한 뒤 <b>1분 내 휴대폰 문자</b>로 온 교환 코드를 입력하면 뽑기권이 바로 지급됩니다.</p>' +
         '<button class="btn btn-primary" data-action="open-code-modal">교환 코드 입력하기</button></div>';
       return;
     }
@@ -8351,7 +8360,7 @@
       '<h3>2. 청약철회 제한</h3>' +
       '<p>「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라, 소비자의 사용 또는 일부 소비로 재판매가 곤란한 경우 청약철회가 제한됩니다. 교환 코드를 사용해 개봉한 경우가 이에 해당하며, 개봉 전에는 주문 취소가 가능합니다.</p>' +
       '<h3>3. 쿠폰(뽑기권)과 교환 코드</h3>' +
-      '<p>뽑기권은 스마트스토어 구매 후 카카오톡으로 받은 교환 코드를 입력하면 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
+      '<p>뽑기권은 스마트스토어 결제 후 <b>휴대폰 문자(SMS)로 자동 발송되는 교환 코드</b>를 입력하면 회원 계정에 지급되는 1회용 쿠폰입니다. 교환 코드는 구매 1건당 1개가 발급되는 1회용 코드이며, 코드에 담긴 장수(예: 5장)만큼 뽑기권이 한 번에 지급됩니다. 모두 사용 후에는 재사용할 수 없습니다.</p>' +
       '<h3>4. 등급 및 상품</h3>' +
       '<p>등급별 상품 구성과 수량은 판마다 다르며, 판 화면에 공개됩니다. 실물 등급은 대부분 등급마다 1개씩이고, 하위 등급은 굿즈 포인트(P상)로 대체 지급됩니다. 라스트원상은 확률 추첨이 아니라 판의 마지막 1장을 뽑은 분께 추가로 지급되는 상입니다.</p>' +
       '<h3>5. 마지막 10장 순번제</h3>' +
@@ -10022,7 +10031,7 @@
       closeModal();
       renderAll();
       if (ui.pendingBulkCode) { await settlePendingBulkCode(); return; }
-      toast(nickname + ' 님, 환영합니다! 스마트스토어 구매 후 카카오톡으로 받은 교환 코드를 입력하면 뽑기권이 들어옵니다.', 'ok');
+      toast(nickname + ' 님, 환영합니다! 스마트스토어 결제 후 1분 내 휴대폰 문자로 온 교환 코드를 입력하면 뽑기권이 들어옵니다.', 'ok');
       location.hash = '#/my';
     } catch (e) {
       if (errEl) errEl.textContent = errMsg(e);
@@ -11313,15 +11322,15 @@
       '<h3>제1조 (목적)</h3>' +
       '<p>이 약관은 쿠지킹(이하 “회사”)이 운영하는 온라인 쿠지 서비스 kujiking.co.kr의 이용 조건과 절차, 회사와 회원의 권리·의무를 정합니다.</p>' +
       '<h3>제2조 (용어)</h3>' +
-      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 교환 코드로 지급되는 1회용 쿠폰, “교환 코드”는 네이버 스마트스토어 결제 후 카카오톡으로 발급되는 1회용 코드(코드마다 정해진 장수만큼 뽑기권 일괄 지급), “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
+      '<p>“쿠지판”은 실제 이치방쿠지 상품을 등급별로 나누어 번호로 판매하는 단위이고, “뽑기권”은 교환 코드로 지급되는 1회용 쿠폰, “교환 코드”는 네이버 스마트스토어 결제 후 휴대폰 문자(SMS)로 자동 발송되는 1회용 코드(코드마다 정해진 장수만큼 뽑기권 일괄 지급), “굿즈 포인트”는 P상으로 적립되는 포인트입니다.</p>' +
       '<h3>제3조 (서비스 내용)</h3>' +
-      '<p>회사는 네이버 스마트스토어에서 뽑기권을 판매하고, 결제가 확인되면 카카오톡으로 교환 코드를 발급합니다. 회원이 사이트에서 교환 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 계정에 지급되고, 회원이 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
+      '<p>회사는 네이버 스마트스토어에서 뽑기권을 판매하고, 결제가 확인되면 휴대폰 문자(SMS)로 교환 코드를 자동 발송합니다. 회원이 사이트에서 교환 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 계정에 지급되고, 회원이 번호를 골라 종이를 개봉하면 등급에 해당하는 상품 또는 굿즈 포인트를 지급합니다. 상품은 보관함에서 배송 신청하거나 포인트로 전환할 수 있습니다.</p>' +
       '<h3>제4조 (이용자격 · 성인 확인)</h3>' +
       '<p>이 서비스는 <b>만 19세 이상 성인 전용</b>입니다. 회원은 가입 시 만 19세 이상 성인임을 확인·보증하여야 하며, 회사는 회원가입 단계에서 성인 여부를 확인합니다. 만 19세 미만 미성년자는 회원가입·결제·이용을 할 수 없습니다. 타인의 정보를 도용하거나 1인이 여러 계정으로 참여하는 행위는 제한될 수 있습니다.</p>' +
       '<h3>제4조의2 (미성년자 결제 제한)</h3>' +
       '<p>① 회사는 미성년자의 결제를 받지 않습니다. ② 미성년자가 법정대리인의 동의 없이 결제하거나, 성인인 것처럼 나이·신분을 속여 가입·결제한 경우 회사는 해당 거래를 취소하거나 계정 이용을 제한할 수 있습니다. ③ 위 ②에 해당하는 거래라도 이미 교환 코드를 사용해 랜덤 뽑기를 개봉(사용)한 경우에는 「전자상거래 등에서의 소비자보호에 관한 법률」 제17조 제2항 제2호에 따라 청약철회 및 환불이 제한됩니다. ④ 타인의 명의·정보를 도용해 성인인 것처럼 가입·결제한 경우 그 책임은 해당 가입자에게 있으며, 회사는 계정을 정지하고 관계 기관에 통보할 수 있습니다.</p>' +
       '<h3>제5조 (결제와 뽑기권)</h3>' +
-      '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 회사는 결제 확인 후 카카오톡으로 교환 코드를 발급하며, 회원이 사이트에서 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 지급됩니다. 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
+      '<p>결제는 네이버 스마트스토어를 통해 이루어집니다. 회사는 결제 확인 후 휴대폰 문자(SMS)로 교환 코드를 자동 발송하며, 문자가 오지 않은 경우 카카오톡 채널·네이버 톡톡으로 재발송받을 수 있습니다. 회원이 사이트에서 코드를 입력하면 코드에 담긴 장수만큼 뽑기권이 지급됩니다. 뽑기권은 지급된 판 또는 모든 판에서 사용할 수 있습니다.</p>' +
       '<h3>제5조의2 (마지막 10장 순번제)</h3>' +
       '<p>남은 티켓이 10장 이하가 되면 여러 장을 한꺼번에 뽑는 연뽑(5·10·15·20장)은 자동으로 잠깁니다. 이때는 줄서기(대기 순번)에 참여한 뒤 본인 차례에 60초 안에 1장씩 뽑을 수 있으며, 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다. 판의 마지막 1장을 뽑은 회원에게는 라스트원 상품이 지급됩니다.</p>' +
       '<h3>제6조 (청약철회)</h3>' +
@@ -11429,8 +11438,14 @@
 
   function openCodeModal() {
     var board = getBoard(ui.boardId) || firstBoard();
+    /* v4.4.4 — 코드를 어디서 받는지(문자)를 입력창 바로 위에 먼저 보여 준다 */
     openModal('<h2 class="modal-title" id="modalTitle">교환 코드 입력</h2>' +
-      '<p class="modal-sub">구매 후 받은 1회용 코드를 넣으면 뽑기판에서 바로 사용할 수 있어요. 코드는 한 번만 쓸 수 있으며, 코드에 담긴 장수만큼 뽑기권이 한 번에 들어옵니다.</p>' +
+      '<p class="modal-sub">스마트스토어에서 결제한 뒤 <b>휴대폰 문자로 받은 교환 코드</b>를 이 자리에 넣으면 뽑기판에서 바로 쓸 수 있어요. 코드는 한 번만 쓸 수 있으며, 코드에 담긴 장수만큼 뽑기권이 한 번에 들어옵니다.</p>' +
+      '<div class="sms-notice is-compact">' +
+        '<p class="sms-notice-title">📩 결제 후 1분 내 <span class="sms-notice-key">문자로 교환 코드</span>가 자동 발송됩니다</p>' +
+        '<p class="sms-notice-body">휴대폰 문자(<b>010-8383-9273</b> · <b>[쿠지킹]</b>)를 확인하고 <b>교환 코드(KJ-XXXX-XXXX)</b>를 입력해 주세요.</p>' +
+        '<p class="sms-notice-sub">※ 2분 이상 문자가 안 오면 스팸함 확인 후 카카오톡 채널 또는 네이버 톡톡으로 문의해 주세요.</p>' +
+      '</div>' +
       '<form class="code-form" data-form="code-strip" novalidate>' +
         '<label class="sr-only" for="quickCodeInput">교환 코드</label>' +
         '<input id="quickCodeInput" class="code-input" name="code" type="text" inputmode="text" autocomplete="off" spellcheck="false" maxlength="24" placeholder="KJ-XXXX-XXXX" value="' + h(ui.pendingCode || '') + '">' +
