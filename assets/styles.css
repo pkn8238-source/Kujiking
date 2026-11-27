@@ -3777,8 +3777,8 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
   --kakao-yellow-hi:#FFEB4D;
   --kakao-ink:#191600;
   --fab-bottom:calc(20px + env(safe-area-inset-bottom,0px));
-  /* v4.4.2 — 플로팅 '쿠폰 구매하기' 버튼(카톡 버튼 위 88px)까지 비켜 가도록 토스트를 더 올린다 */
-  --fab-gap:164px;
+  /* v4.4.3 — 플로팅 '쿠폰 구매하기'(카톡 버튼 위 알약형)까지 비켜 가도록 토스트를 더 올린다 */
+  --fab-gap:128px;
 }
 body.has-store-bar{--fab-bottom:calc(88px + env(safe-area-inset-bottom,0px))}
 
@@ -4061,39 +4061,42 @@ body.has-evt-popup{overflow:hidden}
 }
 
 /* =========================================================
-   v4.4.2 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
-   · 기본은 오른쪽 아래, 카톡 문의 버튼(kakao-fab) 바로 위.
+   v4.4.3 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+   · 카톡 문의 버튼(.kakao-fab)과 똑같은 알약형(pill) 크기·여백·테두리·글자 크기.
+     색만 코랄 오렌지 그라데이션으로 달라 한눈에 구분된다.
+   · 기본은 오른쪽 아래, 카톡 문의 버튼 바로 위(간격 12px, 오른쪽 정렬 일치).
      판 상세 하단 고정바(.store-bar)가 있으면 --fab-bottom 을 따라 함께 올라간다.
    · 끌어서(마우스·터치) 화면 안 원하는 곳으로 옮길 수 있고, 위치는 이 브라우저에 기억된다.
    ========================================================= */
 .coupon-fab{
-  position:fixed;right:16px;bottom:calc(var(--fab-bottom) + 66px);z-index:97;
-  width:88px;height:88px;padding:0;border-radius:50%;
-  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;
-  border:2.5px solid var(--ink);
-  background:radial-gradient(circle at 32% 24%,#fff6c4 0%,var(--yellow) 44%,#f0a200 100%);
-  color:var(--ink);text-align:center;line-height:1.05;letter-spacing:-.04em;
-  font-weight:900;font-size:12.5px;
-  box-shadow:0 5px 0 var(--ink),0 14px 24px rgba(23,18,14,.24);
+  position:fixed;right:18px;bottom:calc(var(--fab-bottom) + 64px);z-index:97;
+  display:inline-flex;align-items:center;gap:8px;
+  min-height:52px;padding:12px 18px 12px 14px;
+  border:2px solid var(--ink);border-radius:999px;
+  background:linear-gradient(180deg,#ff9a4d 0%,#ff6b4a 100%);
+  color:var(--ink);text-decoration:none;text-align:left;
+  font-weight:900;font-size:14.5px;letter-spacing:-.02em;line-height:1;white-space:nowrap;
+  box-shadow:0 4px 0 var(--ink),0 10px 22px rgba(23,18,14,.22);
   cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;-webkit-tap-highlight-color:transparent;
   animation:couponFabFloat 3.6s ease-in-out infinite;
-  transition:box-shadow .15s ease,filter .15s ease;
-  will-change:transform;
+  transition:box-shadow .15s ease,filter .15s ease;will-change:transform;
 }
-.coupon-fab-emoji{font-size:23px;line-height:1;filter:drop-shadow(0 1px 0 rgba(255,255,255,.55))}
-.coupon-fab-word{display:block;font-size:12.5px;font-weight:900;letter-spacing:-.05em}
-.coupon-fab:hover{filter:saturate(1.1) brightness(1.02);box-shadow:0 7px 0 var(--ink),0 18px 28px rgba(23,18,14,.28)}
-.coupon-fab:focus-visible{outline:3px solid var(--ink);outline-offset:4px}
+.coupon-fab-emoji{display:grid;place-items:center;width:24px;height:24px;flex:none;font-size:19px;line-height:1;
+  filter:drop-shadow(0 1px 0 rgba(255,255,255,.45))}
+.coupon-fab-word{line-height:1}
+.coupon-fab:hover{filter:saturate(1.06) brightness(1.04);box-shadow:0 6px 0 var(--ink),0 14px 26px rgba(23,18,14,.26)}
+.coupon-fab:active{box-shadow:0 2px 0 var(--ink),0 6px 14px rgba(23,18,14,.20)}
+.coupon-fab:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .coupon-fab.is-dragging{animation:none;cursor:grabbing;transform:scale(1.04);
-  box-shadow:0 9px 0 rgba(23,18,14,.85),0 22px 34px rgba(23,18,14,.32)}
+  box-shadow:0 8px 0 rgba(23,18,14,.85),0 20px 32px rgba(23,18,14,.32)}
 .coupon-fab.is-dragging:hover{filter:none}
 /* 관리자 화면처럼 방해가 되면 body 에 hide-coupon-fab 을 붙여 숨긴다 */
 body.hide-coupon-fab .coupon-fab{display:none}
-@keyframes couponFabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-7px)}}
+@keyframes couponFabFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+/* 카톡 버튼과 같은 축(오른쪽 12px)으로 줄이고, 간격도 50px + 12px 로 유지 */
 @media (max-width:420px){
-  .coupon-fab{right:12px;bottom:calc(var(--fab-bottom) + 62px);width:80px;height:80px;gap:2px}
-  .coupon-fab-emoji{font-size:20px}
-  .coupon-fab-word{font-size:11.5px}
+  .coupon-fab{right:12px;bottom:calc(var(--fab-bottom) + 62px);min-height:50px;padding:11px 16px 11px 13px;font-size:13.5px;gap:7px}
+  .coupon-fab-emoji{width:21px;height:21px;font-size:17px}
 }
 @media (prefers-reduced-motion:reduce){
   .coupon-fab{animation:none}
@@ -4141,11 +4144,15 @@ body.hide-coupon-fab .coupon-fab{display:none}
 .store-pop-all:hover{background:var(--cream);border-color:var(--ink)}
 .store-pop-all:focus-visible{outline:3px solid var(--ink);outline-offset:3px}
 .store-pop-note{
-  margin:14px 0 0;padding:11px 13px;border-radius:12px;
-  background:var(--cream);border:2px dashed var(--line-strong);
-  font-size:12.5px;line-height:1.6;font-weight:700;color:var(--ink-soft);
+  margin:14px 0 0;padding:12px 13px 13px;border-radius:14px;
+  background:#fff7ea;border:2px dashed #ffbb8a;
+  font-size:12.5px;line-height:1.68;font-weight:700;color:var(--ink-soft);
 }
 .store-pop-note b{color:var(--ink)}
+.store-pop-note-title{display:block;margin-bottom:5px;font-size:12.5px;font-weight:900;letter-spacing:-.02em;color:var(--ink)}
+.store-pop-note p{margin:0}
+.store-pop-note-cta{display:flex;margin-top:10px}
+.store-pop-note-cta .kakao-pill{width:100%;justify-content:center}
 @media (max-width:420px){
   .store-pop-item{padding:11px 11px;gap:10px}
   .store-pop-name{font-size:14.5px}

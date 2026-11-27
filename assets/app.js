@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.2, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.3, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -3564,7 +3564,8 @@
   }
 
   /* =========================================================
-     v4.4.2 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+     v4.4.3 — '쿠폰 구매하기' 플로팅 버튼 + 네이버 스마트스토어 팝업
+     · 카톡 문의 버튼과 같은 알약형·같은 크기, 색만 코랄 오렌지로 구분.
      · 버튼을 끌어(마우스·터치) 화면 안 원하는 곳으로 옮길 수 있고 위치는 이 브라우저에 기억한다.
      · 스마트스토어는 X-Frame-Options 로 iframe 이 막혀 있어, 사이트 안 모달에서
        상품 3개(크리스마스·갸루·전체 보기)를 새 창/새 탭으로 바로 연다.
@@ -3575,7 +3576,7 @@
     return '<div class="store-pop">' +
       '<p class="store-pop-kicker">Naver Smartstore</p>' +
       '<h2 class="modal-title" id="modalTitle">쿠폰 구매하기</h2>' +
-      '<p class="modal-sub">네이버 스마트스토어에서 <b>1장 = 1쿠폰</b>으로 바로 살 수 있어요. 결제하면 카카오톡으로 <b>교환 코드</b>가 오고, 그 코드를 넣으면 판에서 바로 뽑을 수 있습니다.</p>' +
+      '<p class="modal-sub">네이버 스마트스토어에서 <b>1장 = 1쿠폰</b>으로 바로 살 수 있어요. 구매한 뒤 <b>교환 코드</b>를 받아 판에 넣으면 바로 뽑을 수 있습니다.</p>' +
       '<a class="store-pop-item is-hot" href="' + STORE_XMAS_URL + '" target="_blank" rel="noopener noreferrer">' +
         '<span class="store-pop-item-emoji" aria-hidden="true">🎄</span>' +
         '<span class="store-pop-item-body">' +
@@ -3594,7 +3595,11 @@
         '<span class="store-pop-go">구매 →</span>' +
       '</a>' +
       '<a class="store-pop-all" href="' + STORE_URL + '" target="_blank" rel="noopener noreferrer">쿠지킹 스마트스토어 전체 보기 ↗</a>' +
-      '<p class="store-pop-note"><b>구매 후</b> 받은 교환 코드는 판 상세의 <b>교환 코드 입력</b>에 넣으면 코드에 담긴 장수만큼 뽑기권이 한 번에 들어옵니다. 휴대폰에서는 네이버 스마트스토어 앱으로 열릴 수 있어요.</p>' +
+      '<div class="store-pop-note">' +
+        '<span class="store-pop-note-title">구매 후 교환 코드 받는 방법</span>' +
+        '<p>스마트스토어에서 구매하신 뒤 카카오톡 채널(<b>쿠지킹</b>) 또는 네이버 톡톡으로 메시지를 보내주시면 <b>교환 코드</b>를 발급해 드립니다. 받은 교환 코드를 판 상세의 <b>교환 코드 입력</b>에 넣으면 장수만큼 뽑기권이 지급됩니다.</p>' +
+        '<div class="store-pop-note-cta">' + kakaoPillHTML('') + '</div>' +
+      '</div>' +
       '<div class="modal-actions"><button class="btn btn-dark" type="button" data-action="close-modal">닫기</button></div>' +
     '</div>';
   }
@@ -3603,8 +3608,8 @@
 
   function couponFabBounds(el) {
     var r = el.getBoundingClientRect();
-    var w = el.offsetWidth || r.width || 88;
-    var hgt = el.offsetHeight || r.height || 88;
+    var w = el.offsetWidth || r.width || 160;
+    var hgt = el.offsetHeight || r.height || 52;
     var pad = 6;
     return {
       pad: pad, w: w, h: hgt,
