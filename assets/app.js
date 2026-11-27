@@ -3605,12 +3605,15 @@
   }
 
   function openCouponStore() {
-    openModal(couponStoreModalHTML());
-    /* 자동 포커스가 아래 '1:1 카카오톡 문의' 버튼으로 가면서 팝업이 아래로 스크롤되는 것을 막는다 —
-       열자마자 맨 위 상품부터 보이게 항상 맨 위로 되돌린다. */
-    setTimeout(function () {
-      if (!modalRoot.hidden) { try { modalShell.scrollTop = 0; } catch (e) {} }
-    }, 90);
+    openModal(couponStoreModalHTML(), { noAutofocus: true });
+    /* 안내 박스의 카카오 버튼이 자동 포커스를 받으면 팝업이 아래로 스크롤된다 —
+       포커스는 위쪽 닫기(✕) 버튼에 두고, 팝업은 늘 맨 위 상품부터 보이게 한다. */
+    var closeBtn = modalRoot ? modalRoot.querySelector('.modal-close') : null;
+    if (closeBtn) {
+      try { closeBtn.focus({ preventScroll: true }); }
+      catch (e) { try { closeBtn.focus(); } catch (e2) {} }
+    }
+    if (modalShell) { try { modalShell.scrollTop = 0; } catch (e3) {} }
   }
 
   function couponFabBounds(el) {
