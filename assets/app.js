@@ -3604,7 +3604,14 @@
     '</div>';
   }
 
-  function openCouponStore() { openModal(couponStoreModalHTML()); }
+  function openCouponStore() {
+    openModal(couponStoreModalHTML());
+    /* 자동 포커스가 아래 '1:1 카카오톡 문의' 버튼으로 가면서 팝업이 아래로 스크롤되는 것을 막는다 —
+       열자마자 맨 위 상품부터 보이게 항상 맨 위로 되돌린다. */
+    setTimeout(function () {
+      if (!modalRoot.hidden) { try { modalShell.scrollTop = 0; } catch (e) {} }
+    }, 90);
+  }
 
   function couponFabBounds(el) {
     var r = el.getBoundingClientRect();
