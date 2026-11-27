@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.10, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.0, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -124,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.3.9';
+  var COVER_VER = '4.4.0';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -1107,6 +1107,25 @@
   function isPointTierRow(t) {
     return !!t && (!!t.pointOnly || String(t.grade || '').toUpperCase() === 'P');
   }
+  /* v4.4.0 — P상 카드 그림은 포인트 숫자가 그림 안에 박혀 있다.
+     판에 직접 넣은 다른 그림은 그대로 쓰고, 기본 포인트 카드(assets/products/point/)만
+     포인트 값에 맞는 그림으로 골라 준다. (예전 p15500.jpg 가 실제로는 1,200P 로 그려져
+     있던 문제 때문에 숫자와 그림이 어긋나지 않게 한다) */
+  function isDefaultPointImage(url) {
+    return !url || /^(?:\.\/)?assets\/products\/point\//.test(String(url));
+  }
+  function pointImageFor(points) {
+    var p = Number(points) || 0;
+    if (p === 990) return 'assets/products/point/p9900.jpg';
+    if (p === 1550) return 'assets/products/point/p15500.jpg';
+    return POINT_IMG;
+  }
+  function tierImageOf(t) {
+    if (!t) return '';
+    var img = t.image ? String(t.image) : '';
+    if (isPointTierRow(t) && isDefaultPointImage(img)) return pointImageFor(t.points);
+    return img;
+  }
   function pointLabelFor(reward) { return '굿즈 포인트 ' + fmt(reward) + 'P'; }
   function pointDescFor(tier, board) {
     var p = Number(tier && tier.points) || pointRewardOf(board);
@@ -1125,6 +1144,8 @@
       t.points = reward;
       t.label = pointLabelFor(reward);
       t.desc = pointDescFor(t, board);
+      /* 기본 포인트 카드 그림이면 그림 안 숫자도 포인트에 맞춘다 (v4.4.0) */
+      if (isDefaultPointImage(t.image)) t.image = pointImageFor(reward);
     });
     var m = board.manual;
     if (m && Array.isArray(m.notes)) {
@@ -4420,12 +4441,12 @@
       var isP = String(t.grade).toUpperCase() === 'P' || !!t.pointOnly;
       /* v4.3.5 — 등급 현황 표를 걷어내고 카드 하나에 (남은 수)/(전체 수)와 품절을 담는다 */
       var stock = out ? '품절' : fmt(left) + '/' + fmt(count);
+      var media = tierImageOf(t);
       return '<button type="button" class="prize-card' + (out ? ' is-out is-soldout' : '') + (isP ? ' is-point' : '') + '" data-action="zoom-tier" data-grade="' + h(t.grade) + '" title="' + h(t.label + ' · ' + (out ? '품절' : '남은 ' + fmt(left) + ' / 전체 ' + fmt(count))) + '">' +
           '<span class="prize-media">' +
-            (t.image ? '<img src="' + h(coverSrc(t.image)) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
-                     : (isP ? '<img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P" loading="lazy" decoding="async">'
-                            : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>')) +
-            (t.image ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
+            (media ? '<img src="' + h(coverSrc(media)) + '" alt="' + h(t.label) + '" loading="lazy" decoding="async">'
+                   : '<span class="prize-media-empty" style="color:' + gradeColor(t.grade) + '">' + h(t.grade) + '</span>') +
+            (media ? '' : '<span class="rank-badge grade-' + h(String(t.grade).toLowerCase()) + '">' + h(t.grade) + '상</span>') +
             (left === 0 ? '<span class="prize-out">품절</span>' : '') +
           '</span>' +
           '<span class="prize-body">' +
@@ -4527,7 +4548,7 @@
     var isLast = grade === 'LAST';
     var t = isLast ? null : tierOf(board, grade);
     if (!isLast && !t) return;
-    var image = isLast ? board.lastOneImage : t.image;
+    var image = isLast ? board.lastOneImage : tierImageOf(t);
     var label = isLast ? (board.lastOneLabel || '라스트원상') : t.label;
     var desc = isLast ? board.lastOneDesc : t.desc;
     var badgeCls = isLast ? 'grade-last' : ('grade-' + String(grade).toLowerCase());
@@ -4543,8 +4564,8 @@
     openModal('' +
       '<div class="zoom-view' + (isP ? ' is-point' : '') + '">' +
         '<div class="zoom-media">' +
-          (image ? '<img src="' + h(image) + '" alt="' + h(label) + '">'
-                 : (isP ? '<img src="' + h(coverSrc(POINT_IMG)) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P">'
+          (image ? '<img src="' + h(!isLast && isDefaultPointImage(image) ? coverSrc(image) : image) + '" alt="' + h(label) + '">'
+                 : (isP ? '<img src="' + h(coverSrc(pointImageFor(t.points))) + '" alt="P상 굿즈 포인트 ' + fmt(t.points) + 'P">'
                         : '<div class="zoom-empty">이미지 준비 중</div>')) +
           (image ? '' : '<span class="rank-badge ' + badgeCls + ' lg">' + h(badgeTxt) + '</span>') +
         '</div>' +
