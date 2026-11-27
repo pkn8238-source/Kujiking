@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.3.8, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.3.9, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -124,7 +124,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.3.3';
+  var COVER_VER = '4.3.9';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -436,7 +436,7 @@
   function emptyState() {
     return {
       v: STATE_VERSION,
-      settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {} },
+      settings: { pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {}, boardEvents: {} },
       boards: [], users: [], coupons: [], draws: [], claims: [], deliveries: [], codes: [],
       goodsItems: [], goodsOrders: [],
       session: null,
@@ -1093,29 +1093,69 @@
     return null;
   }
 
-  /* ---------- P상 안내 문구 정리 (v4.2.6) ----------
-     포인트는 뽑기 결제가 아니라 굿즈 교환에 쓴다. DB에 예전 문구('한 판 무료')가
-     남아 있어도 화면에는 '굿즈샵에서 원하는 굿즈로 교환'으로만 보이게 바꿔 준다.
-     (서버 문구는 첨부 SQL 의 update 문이 같은 내용으로 고친다) */
+  /* ---------- P상(굿즈 포인트) = 그 판 1장 가격의 10% (v4.3.9) ----------
+     P상 포인트는 판마다 고정값이 아니라 그 판 구매가의 10% 다.
+       9,900원 → 990P · 15,500원 → 1,550P · 12,000원 → 1,200P
+     DB(tiers)에 예전 고정값 1,200 이 남아 있어도 화면·데모 뽑기는 이 규칙으로 맞춘다.
+     (서버가 실제로 지급하는 값은 Supabase SQL 이 tiers.points 를 같은 값으로 고친다) */
+  var POINT_RATE = 0.1;
   var POINT_DESC_TAIL = ' 바로 적립 · 굿즈샵에서 원하는 굿즈로 교환';
-  function pointDescFor(tier) {
-    var p = Number(tier && tier.points) || 1200;
+  function pointRewardOf(board) {
+    var price = Math.max(0, Number(board && board.price) || 0);
+    return Math.round(price * POINT_RATE);
+  }
+  function isPointTierRow(t) {
+    return !!t && (!!t.pointOnly || String(t.grade || '').toUpperCase() === 'P');
+  }
+  function pointLabelFor(reward) { return '굿즈 포인트 ' + fmt(reward) + 'P'; }
+  function pointDescFor(tier, board) {
+    var p = Number(tier && tier.points) || pointRewardOf(board);
     return '실물 대신 굿즈 포인트 ' + fmt(p) + 'P' + POINT_DESC_TAIL;
   }
+  function pointNoteFor(reward) {
+    return 'P상은 실물 대신 굿즈 포인트 ' + fmt(reward) + 'P가 즉시 적립됩니다. 모은 포인트는 굿즈샵에서 원하는 굿즈로 교환할 수 있어요.';
+  }
+  /* 판 한 개의 P상 표기(포인트·이름·설명)와 상품 설명서를 10% 규칙으로 맞춘다.
+     포인트는 뽑기 결제가 아니라 굿즈 교환에 쓰므로 문구는 '굿즈샵에서 교환'으로 통일한다. */
   function scrubPointCopy(board) {
     if (!board) return board;
+    var reward = pointRewardOf(board);
     (board.tiers || []).forEach(function (t) {
-      if (String(t && t.grade || '').toUpperCase() !== 'P') return;
-      if (/한\s*판\s*무료/.test(String(t.desc || ''))) t.desc = pointDescFor(t);
+      if (!isPointTierRow(t)) return;
+      t.points = reward;
+      t.label = pointLabelFor(reward);
+      t.desc = pointDescFor(t, board);
     });
     var m = board.manual;
     if (m && Array.isArray(m.notes)) {
       m.notes = m.notes.map(function (n) {
-        if (!/한\s*판\s*무료|한\s*판을\s*한\s*번\s*더\s*뽑을/.test(String(n))) return n;
-        return 'P상은 실물 대신 굿즈 포인트 1,200P가 즉시 적립됩니다. 모은 포인트는 굿즈샵에서 원하는 굿즈로 교환할 수 있어요.';
+        var line = String(n);
+        /* 예전 문구('한 판 무료'·'모으면 한 번 더')는 통째로 지금 안내로 바꿔 준다 */
+        if (/한\s*판\s*무료|한\s*판을\s*한\s*번\s*더\s*뽑을|P를\s*모으면/.test(line)) return pointNoteFor(reward);
+        /* 그 밖의 P상 안내는 포인트 숫자만 10% 값으로 맞춘다 */
+        return /P상/.test(line) ? line.replace(/[\d,]+\s*P/g, fmt(reward) + 'P') : line;
+      });
+    }
+    if (m && Array.isArray(m.specs)) {
+      m.specs = m.specs.map(function (s) {
+        if (!s || !/^(1장\s*가격|가격)$/.test(String(s.k || '').trim())) return s;
+        return { k: s.k, v: won(board.price) };
       });
     }
     return board;
+  }
+
+  /* ---------- 오픈 이벤트(특가) 표기 (v4.3.9) ----------
+     app_settings.board_events = {"<판 id>": {"label":"오픈 이벤트","origPrice":15500,"note":"…"}}
+     특가로 연 판은 홈 카드·판 상세에 배지를 달고, 정가는 취소선으로 함께 보여 준다. */
+  function boardEventOf(board) {
+    var map = (state && state.settings && state.settings.boardEvents) || {};
+    var raw = board && board.id ? map[board.id] : null;
+    if (!raw || typeof raw !== 'object') return null;
+    var price = Math.max(0, Number(board.price) || 0);
+    var orig = Math.max(0, Number(raw.origPrice) || 0);
+    var label = String(raw.label || '').trim() || '이벤트';
+    return { label: label, note: String(raw.note || ''), origPrice: orig > price ? orig : 0 };
   }
   /* ---------- 구매확인 문구 정리 (v4.3.1) ----------
      구매확인 요청 단계는 없어진다. DB에 남은 '구매확인 승인 · …' 같은 쿠폰 지급 메모는
@@ -1352,8 +1392,9 @@
   }
 
   function normalizeLocalState(s) {
-    s.settings = Object.assign({ pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {} }, s.settings || {});
+    s.settings = Object.assign({ pinHash: '', pinChanged: false, storeName: '쿠지킹', youtubeLiveUrl: '', youtubeLiveEnabled: true, kakaoOpenchatUrl: KAKAO_CHAT_URL, shippingFeeNotice: '', boardStoreUrls: {}, boardEvents: {} }, s.settings || {});
     if (!s.settings.boardStoreUrls || typeof s.settings.boardStoreUrls !== 'object') s.settings.boardStoreUrls = {};
+    if (!s.settings.boardEvents || typeof s.settings.boardEvents !== 'object') s.settings.boardEvents = {};
     if ('demoCode' in s.settings) delete s.settings.demoCode;
     s.users = s.users || [];
     s.coupons = s.coupons || [];
@@ -1626,7 +1667,7 @@
         state.goodsItems = (goodsRes.data || []).map(mapGoodsItem);
       }
 
-      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls']);
+      var setRes = await sb.from('app_settings').select('key,value').in('key', ['youtube_live_url', 'youtube_live_enabled', 'kakao_openchat_url', 'shipping_fee_notice', 'board_store_urls', 'board_events']);
       if (!setRes.error && setRes.data) {
         var settingsMap = {};
         setRes.data.forEach(function (row) { settingsMap[row.key] = row.value; });
@@ -1642,6 +1683,12 @@
             var storeMap = JSON.parse(settingsMap.board_store_urls);
             if (storeMap && typeof storeMap === 'object' && !Array.isArray(storeMap)) state.settings.boardStoreUrls = storeMap;
           } catch (e) { console.warn('[settings] board_store_urls 파싱 실패', e); }
+        }
+        if (typeof settingsMap.board_events === 'string' && settingsMap.board_events.trim()) {
+          try {
+            var eventMap = JSON.parse(settingsMap.board_events);
+            if (eventMap && typeof eventMap === 'object' && !Array.isArray(eventMap)) state.settings.boardEvents = eventMap;
+          } catch (e) { console.warn('[settings] board_events 파싱 실패', e); }
         }
       }
 
@@ -3561,6 +3608,7 @@
   function boardCardHTML(board) {
     var left = remaining(board);
     var lo = lastOneStatus(board);
+    var ev = boardEventOf(board);
     var soldout = left === 0;
     var closed = board.status !== 'open';
     var low = isLowStock(board);
@@ -3586,11 +3634,14 @@
         '<div class="board-card-body">' +
           (soldout ? '<span class="soldout-stamp">품절<span>SOLD OUT</span></span>' : '') +
           (!soldout && closed ? '<span class="soldout-stamp is-closed-stamp">판 종료<span>CLOSED</span></span>' : '') +
+          (ev ? '<span class="event-flag">🎉 ' + h(ev.label) + '</span>' : '') +
           (low ? '<span class="lowstock-flag">🔥 품절임박</span>' : '') +
           (lo && lo.won ? '<span class="last-won-flag">🏆 라스트원 획득: ' + h(lo.name) + '</span>' : '') +
           (lo && lo.soon ? '<span class="last-soon-flag">🔥 라스트원까지 ' + fmt(lo.left) + '장!</span>' : '') +
           '<h3><a href="#/board/' + h(board.id) + '">' + h(board.title) + '</a></h3>' +
-          '<p class="board-card-line"><b>1장 ' + won(board.price) + '</b><span>남은 <b>' + fmt(left) + '</b>장</span></p>' +
+          '<p class="board-card-line"><b>1장 ' + won(board.price) +
+            (ev && ev.origPrice ? ' <s class="price-was">' + won(ev.origPrice) + '</s>' : '') +
+            '</b><span>남은 <b>' + fmt(left) + '</b>장</span></p>' +
           '<div class="progress"><div class="progress-track"><div class="progress-fill" style="width:' + (board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0) + '%"></div></div></div>' +
           '<div class="board-card-foot">' +
             (soldout
@@ -3818,6 +3869,8 @@
     var pct = board.tickets ? Math.round(openedCount(board) / board.tickets * 100) : 0;
     var low = isLowStock(board);
     var lo = lastOneStatus(board);
+    var ev = boardEventOf(board);
+    var pointReward = pointRewardOf(board);
     el.classList.toggle('is-lowstock', low);
     el.innerHTML = '' +
       '<div class="board-cover ' + (board.cover ? 'has-image ' : '') + categoryClass(board.category) + '">' +
@@ -3830,6 +3883,7 @@
       '</div>' +
       '<div class="board-hero-body">' +
         '<span class="pill pill-cream">' + h(board.category) + ' · ' + priceBandLabel(board.price) + '</span>' +
+        (ev ? '<span class="pill pill-event">🎉 ' + h(ev.label) + '</span>' : '') +
         (low ? '<span class="pill pill-lowstock">🔥 품절임박! 라스트원 찬스</span>' : '') +
         (lo && lo.won ? '<span class="pill pill-lastwon">🏆 라스트원 획득: ' + h(lo.name) + '</span>' : '') +
         (lo && lo.soon ? '<span class="pill pill-lowstock">🔥 라스트원까지 ' + fmt(lo.left) + '장!</span>' : '') +
@@ -3838,6 +3892,7 @@
           '<span>1장 <b>' + won(board.price) + '</b></span>' +
           '<span>총 <b>' + fmt(board.tickets) + '</b>장</span>' +
           '<span>남은 번호 <b>' + fmt(left) + '</b>장</span>' +
+          '<span>P상 <b>' + fmt(pointReward) + 'P</b></span>' +
           '<span>라스트원상 포함</span>' +
         '</div>' +
         '<div class="progress">' +
@@ -3846,7 +3901,9 @@
         '</div>' +
       '</div>' +
       '<div class="board-hero-cta">' +
-        '<div class="price-tag"><strong>' + fmt(board.price) + '</strong><span>원 / 1장</span></div>' +
+        '<div class="price-tag">' +
+          (ev && ev.origPrice ? '<s class="price-was">' + won(ev.origPrice) + '</s>' : '') +
+          '<strong>' + fmt(board.price) + '</strong><span>원 / 1장</span></div>' +
         (left === 0
           ? '<span class="btn btn-outline" aria-disabled="true">전량 소진</span>'
           : '<button class="btn btn-primary" data-action="scroll-grid">번호 골라 뽑기</button>') +
@@ -8650,7 +8707,7 @@
     return '<div class="fallback-box" style="margin-top:12px">' +
       '<strong>P상(포인트 꽝) 업그레이드가 아직입니다</strong>' +
       '<p>지금 서버의 판은 실물 상품만으로 채워져 있어, 실물에 당첨되지 않은 번호는 아무것도 지급되지 않습니다. ' +
-      'SQL Editor 에 <code>supabase/upgrade_point_kkwang.sql</code> 전체를 붙여넣고 Run 하면 4개 판이 <b>실물 각 1개 + P상(굿즈 포인트 1,200P)</b> 구성으로 바뀝니다.</p>' +
+      'SQL Editor 에 <code>supabase/upgrade_point_kkwang.sql</code> 전체를 붙여넣고 Run 하면 4개 판이 <b>실물 각 1개 + P상(굿즈 포인트 · 1장 가격의 10%)</b> 구성으로 바뀝니다.</p>' +
       '<div class="btn-row tight">' +
         '<a class="btn btn-primary btn-sm" href="' + sqlUrl + '" target="_blank" rel="noopener">SQL Editor 열기</a>' +
         '<a class="btn btn-outline btn-sm" href="https://github.com/pkn8238-source/Kujiking/blob/main/supabase/upgrade_point_kkwang.sql" target="_blank" rel="noopener">upgrade_point_kkwang.sql 보기</a>' +
@@ -9197,6 +9254,7 @@
 
     var priceEl = form.querySelector('input[name="price"]');
     if (priceEl) priceEl.value = 12000;
+    var importPrice = Number(fieldValue(form, 'price') || 0);
 
     if (parsed.cover) {
       var coverEl = form.querySelector('input[name="cover"]');
@@ -9230,7 +9288,10 @@
       };
     });
     var pCount = total - real.length;
-    if (pCount > 0) tiers.push({ grade: 'P', label: '굿즈 포인트 1,200P', count: pCount, points: 1200, pointOnly: true });
+    if (pCount > 0) {
+      var importReward = pointRewardOf({ price: importPrice });
+      tiers.push({ grade: 'P', label: pointLabelFor(importReward), count: pCount, points: importReward, pointOnly: true });
+    }
 
     var ticketsEl = form.querySelector('input[name="tickets"]');
     if (ticketsEl) ticketsEl.value = total;
@@ -9302,7 +9363,7 @@
           }).join('') + '</select>' +
           '<input name="label" type="text" maxlength="40" value="' + h(t.label || '') + '" placeholder="상품명">' +
           '<input name="count" type="number" min="0" step="1" value="' + Number(t.count || 0) + '"' + (locked ? ' readonly' : '') + '>' +
-          '<input name="points" type="number" min="0" step="500" value="' + Number(t.points || 0) + '"' + (locked ? ' readonly' : '') + '>' +
+          '<input name="points" type="number" min="0" step="10" value="' + Number(t.points || 0) + '"' + (locked ? ' readonly' : '') + '>' +
           '<label class="tier-point-only" title="이 등급은 실물 대신 포인트로 지급"><input type="checkbox" name="pointOnly"' + (t.pointOnly ? ' checked' : '') + (locked ? ' disabled' : '') + '><span>P상</span></label>' +
           (locked ? '' : '<button type="button" class="tier-del" data-action="tier-remove" aria-label="등급 삭제">✕</button>') +
         '</div>' +
@@ -9353,13 +9414,15 @@
     var soldCount = editing ? openedCount(editing) : 0;
     var lockStructure = !!editing && soldCount > 0;
     ui.editingBoardId = editing ? editing.id : null;
+    var defaultPrice = 12000;
+    var defaultReward = pointRewardOf({ price: defaultPrice });
     var tiers = (board && board.tiers && board.tiers.length) ? board.tiers : [
       { grade: 'A', label: '', count: 1, points: 0 },
       { grade: 'B', label: '', count: 1, points: 0 },
       { grade: 'C', label: '', count: 1, points: 0 },
       { grade: 'D', label: '', count: 1, points: 0 },
       { grade: 'E', label: '', count: 1, points: 0 },
-      { grade: 'P', label: '굿즈 포인트 1,200P', count: 95, points: 1200, pointOnly: true }
+      { grade: 'P', label: pointLabelFor(defaultReward), count: 95, points: defaultReward, pointOnly: true }
     ];
     var m = board ? manualOf(board) : {};
     var html = '' +
@@ -9385,7 +9448,8 @@
           '<label class="field"><span>카테고리</span><select name="category">' +
             CATEGORIES.map(function (c) { return '<option' + ((board ? board.category : '원피스') === c ? ' selected' : '') + '>' + h(c) + '</option>'; }).join('') +
           '</select></label>' +
-          '<label class="field"><span>1장 가격 (원)</span><input name="price" type="number" min="100" step="100" value="' + Number(board ? board.price : 12000) + '"></label>' +
+          '<label class="field"><span>1장 가격 (원)</span><input name="price" type="number" min="100" step="100" value="' + Number(board ? board.price : defaultPrice) + '">' +
+            '<span class="field-hint">P상 포인트는 이 가격의 10% 로 자동 계산됩니다 (예: ' + won(defaultPrice) + ' → ' + fmt(defaultReward) + 'P).</span></label>' +
           '<label class="field"><span>전체 장수</span><input name="tickets" type="number" min="1" max="' + MAX_TICKETS + '" step="1" value="' + Number(board ? board.tickets : 100) + '"' + (lockStructure ? ' readonly' : '') + '>' +
             (lockStructure ? '<span class="field-hint">' + fmt(soldCount) + '장이 팔려 장수를 바꿀 수 없어요.</span>' : '') + '</label>' +
           '<label class="field"><span>판매 상태</span><select name="status">' +
@@ -10108,7 +10172,8 @@
           var sum = rows.reduce(function (s, r) { return s + (isNaN(r.count) ? 0 : r.count); }, 0);
           var totalT = Number(($('input[name="tickets"]') || {}).value || 0);
           var rest = Math.max(0, totalT - sum);
-          pBox.insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: '굿즈 포인트 1,200P', count: rest, points: 1200, pointOnly: true }]));
+          var addReward = pointRewardOf({ price: Number(($('form[data-form="board-form"] input[name="price"]') || {}).value || 0) });
+          pBox.insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: pointLabelFor(addReward), count: rest, points: addReward, pointOnly: true }]));
           updateTierSummary();
           break;
         }
@@ -10527,6 +10592,7 @@
       if (e.target.closest('form[data-form="save-youtube"]')) updateYoutubePreview();
       if (e.target.closest('form[data-form="save-cs"]')) updateCsPreview();
       if (e.target.closest('#tierRows') || (e.target.name === 'tickets' && e.target.closest('form[data-form="board-form"]'))) updateTierSummary();
+      if (e.target.name === 'price' && e.target.closest('form[data-form="board-form"]')) syncPointTierWithPrice();
       if (e.target.getAttribute('data-role') === 'tier-image') {
         var prev = e.target.closest('.tier-extra') && e.target.closest('.tier-extra').querySelector('[data-role="tier-thumb"]');
         if (prev) { var v = e.target.value.trim(); prev.innerHTML = v ? '<img src="' + escapeHtml(v) + '" alt="">' : ''; }
@@ -10700,10 +10766,12 @@
     );
   }
 
-  /* P상 수량 자동 계산 — 전체 장수 − 실물 등급 합계 (1,200P) */
+  /* P상 수량 자동 계산 — 전체 장수 − 실물 등급 합계 (포인트는 1장 가격의 10%) */
   function fillPointTier() {
     if (!$('#tierRows')) return;
+    var form = $('form[data-form="board-form"]');
     var total = Number(($('form[data-form="board-form"] input[name="tickets"]') || {}).value || 0);
+    var reward = pointRewardOf({ price: Number(($('form[data-form="board-form"] input[name="price"]') || {}).value || 0) });
     var rows = readTierRows();
     var realSum = rows.filter(function (r) { return String(r.grade).toUpperCase() !== 'P' && !r.pointOnly; })
       .reduce(function (s, r) { return s + (isNaN(r.count) ? 0 : r.count); }, 0);
@@ -10718,14 +10786,36 @@
       var cnt = pRow.querySelector('input[name="count"]');
       if (cnt) cnt.value = need;
       var pts = pRow.querySelector('input[name="points"]');
-      if (pts && !Number(pts.value)) pts.value = 1200;
+      if (pts) pts.value = reward;
+      var lb = pRow.querySelector('input[name="label"]');
+      if (lb && /^굿즈\s*포인트/.test(lb.value)) lb.value = pointLabelFor(reward);
       var chk = pRow.querySelector('input[name="pointOnly"]');
       if (chk) chk.checked = true;
     } else if (need > 0) {
-      $('#tierRows').insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: '굿즈 포인트 1,200P', count: need, points: 1200, pointOnly: true }]));
+      $('#tierRows').insertAdjacentHTML('beforeend', tierRowsHTML([{ grade: 'P', label: pointLabelFor(reward), count: need, points: reward, pointOnly: true }]));
     }
     updateTierSummary();
-    toast(need > 0 ? ('P상 ' + fmt(need) + '장(1,200P)으로 맞췄어요') : 'P상이 필요 없어요 (남는 장수 0장)', 'ok');
+    if (form) syncPointTierWithPrice();
+    toast(need > 0 ? ('P상 ' + fmt(need) + '장(' + fmt(reward) + 'P)으로 맞췄어요') : 'P상이 필요 없어요 (남는 장수 0장)', 'ok');
+  }
+
+  /* 1장 가격을 바꾸면 P상 포인트(가격의 10%)도 같이 맞춘다 (v4.3.9) */
+  function syncPointTierWithPrice() {
+    var form = $('form[data-form="board-form"]');
+    if (!form) return;
+    var price = Number(fieldValue(form, 'price') || 0);
+    if (!(price > 0)) return;
+    var reward = pointRewardOf({ price: price });
+    $$('#tierRows .tier-row').forEach(function (row) {
+      var sel = row.querySelector('select[name="grade"]');
+      var chk = row.querySelector('input[name="pointOnly"]');
+      var isP = (sel && String(sel.value).toUpperCase() === 'P') || !!(chk && chk.checked);
+      if (!isP) return;
+      var pts = row.querySelector('input[name="points"]');
+      if (pts) pts.value = reward;
+      var lb = row.querySelector('input[name="label"]');
+      if (lb && /^굿즈\s*포인트/.test(lb.value)) lb.value = pointLabelFor(reward);
+    });
   }
 
   /* 🗑️ 모든 판 전체 비우기 — 두 번 확인 후 실행 */
@@ -10928,7 +11018,7 @@
         '<h3>1. 등급별 확률</h3>' +
         '<p>모든 판은 등급별 수량과 전체 장수를 공개합니다. 각 등급의 확률은 <b>해당 등급 수량 ÷ 판 전체 장수</b>이며, 판 상세의 ‘등급별 수량 · 확률’ 표에서 바로 확인할 수 있습니다. 라스트원상은 확률 추첨이 아니라 마지막 1장을 뽑은 분께 추가로 지급됩니다.</p>' +
         '<h3>2. 판 구성</h3>' +
-        '<p>실물 등급은 등급마다 1개씩, 나머지 번호는 P상(굿즈 포인트 1,200P)으로 구성됩니다. P상은 실물 대신 포인트가 즉시 적립되며 꽝은 없습니다.</p>' +
+        '<p>실물 등급은 등급마다 1개씩, 나머지 번호는 P상(굿즈 포인트)으로 구성됩니다. P상 포인트는 <b>그 판 1장 가격의 10%</b>이고(예: 9,900원 판 → 990P), 실물 대신 포인트가 즉시 적립되며 꽝은 없습니다.</p>' +
         '<h3>3. 봉인과 검증</h3>' +
         '<p>판을 만들 때 무작위 시드를 생성하고 SHA-256 해시를 판매 전에 공개합니다. 번호별 결과는 SHA-256(시드:번호) 값을 정렬해 고정하며, 판이 끝나면 시드를 공개합니다. 누구나 <a href="#/fairness">공정성 검증</a> 페이지에서 해시와 번호별 결과를 다시 계산해 확인할 수 있습니다.</p>' +
         '<h3>4. 마지막 10장 순번제</h3>' +
