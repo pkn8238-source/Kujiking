@@ -22,7 +22,7 @@
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Do+Hyeon&display=swap">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css">
 <link rel="preconnect" href="https://t1.kakaocdn.net" crossorigin>
-<link rel="stylesheet" href="assets/styles.css?v=4.4.8">
+<link rel="stylesheet" href="assets/styles.css?v=4.4.9">
 <script type="application/ld+json">
 {"@context":"https://schema.org","@type":"WebSite","name":"쿠지킹","alternateName":"KUJIKING","url":"https://kujiking.co.kr/"}
 </script>
@@ -211,6 +211,24 @@
           <div class="board-merged" data-board-panel="main">
             <div class="card prizes-card" id="prizesPanel"></div>
             <div class="card manual-card manual-fold" id="boardManual"></div>
+            <!-- v4.4.9 — 구매 전 눈에 띄는 상품 상태 안내(법적 방어 문구) -->
+            <div class="card condition-card" id="boardCondition" aria-labelledby="condTitle">
+              <div class="condition-head">
+                <h3 id="condTitle"><span class="condition-emoji" aria-hidden="true">📦</span> 상품 상태 안내</h3>
+                <span class="condition-tag">구매 전 확인</span>
+              </div>
+              <ul class="condition-list">
+                <li>
+                  <p>본 상품은 <b>경품·리셀 매입 상품</b>으로, <b>본품은 미사용 상태</b>이나 겉 포장(비닐·박스·종이 택)은 <b>완전한 미개봉("칼박")이 아니거나 개봉·재포장 흔적</b>이 있을 수 있습니다.</p>
+                </li>
+                <li>
+                  <p>비닐 구김·박스 눌림·스크래치·공정상 개체 차이 등 <b>포장 및 미세 상태에 민감하신 분은 구매를 신중히 결정해 주세요.</b> <em class="condition-warn">(해당 사유로 교환·환불 불가)</em></p>
+                </li>
+                <li>
+                  <p>상품 이미지는 <b>참고 이미지</b>이며, <b>출고 전 실물 사진 확인을 원하시면</b> <button type="button" class="condition-kakao" data-action="open-kakao">카톡 채널</button>로 <b>미리 요청</b>하실 수 있습니다.</p>
+                </li>
+              </ul>
+            </div>
             <div class="board-toolbar card">
               <div class="toolbar-info">
                 <span class="step-no">2</span>
@@ -879,7 +897,7 @@
       <button type="button" data-action="open-policy" data-policy="probability">확률 공시</button>
     </nav>
     <p class="footer-note">본 상품은 무작위 추첨 상품입니다. 교환 코드 사용(개봉) 후에는 청약철회가 제한됩니다. <b>만 19세 이상 성인 전용 서비스</b>로, 미성년자는 이용할 수 없습니다.</p>
-    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.4.8</span></p>
+    <p class="footer-copy">© 2026 쿠지킹. All rights reserved. · <span class="proto-tag" id="protoTag">v4.4.9</span></p>
   </div>
 </footer>
 
@@ -922,6 +940,6 @@
 </div>
 
 <script src="assets/config.js?v=3.0.2"></script>
-<script src="assets/app.js?v=4.4.8" defer></script>
+<script src="assets/app.js?v=4.4.9" defer></script>
 </body>
 </html>

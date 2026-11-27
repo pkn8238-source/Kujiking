@@ -2209,6 +2209,47 @@ body.is-live .demo-only{display:none !important}
 .manual-details[open] .manual-summary-bar{grid-template-columns:auto minmax(0,1fr) auto}
 
 /* =========================================================
+   v4.4.9 — 판 상세 '📦 상품 상태 안내' 카드
+   (크림 바탕 · 2px 진한 테두리 · 노란 불릿, 기존 카드 톤 유지)
+   ========================================================= */
+.condition-card{
+  position:relative;
+  padding:17px 20px 18px;
+  background:linear-gradient(178deg,#fffdf4 0%,#fff6da 100%);
+  border:2px solid var(--ink);
+  border-radius:18px;
+  box-shadow:0 4px 0 rgba(23,18,14,.10);
+}
+.condition-head{display:flex;align-items:center;gap:8px}
+.condition-head h3{display:flex;align-items:center;gap:7px;font-size:16px;font-weight:900;letter-spacing:-.03em}
+.condition-emoji{font-size:17px;line-height:1;filter:drop-shadow(0 1px 0 rgba(23,18,14,.14))}
+.condition-tag{
+  margin-left:auto;flex:none;padding:3px 10px;
+  border:2px solid var(--ink);border-radius:999px;
+  background:var(--yellow);color:var(--ink);
+  font-size:10.5px;font-weight:900;letter-spacing:-.02em;white-space:nowrap;
+}
+.condition-list{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.condition-list li{position:relative;padding-left:13px;font-size:12.8px;line-height:1.62;color:var(--ink-soft)}
+.condition-list li::before{content:"";position:absolute;left:0;top:.68em;width:5px;height:5px;border-radius:50%;background:var(--yellow-deep)}
+.condition-list b{color:var(--ink);font-weight:800}
+.condition-warn{font-style:normal;font-weight:800;color:var(--red-deep);white-space:nowrap}
+.condition-kakao{
+  display:inline;padding:0;border:0;background:none;
+  font:inherit;font-weight:900;color:var(--red-deep);
+  text-decoration:underline;text-underline-offset:3px;text-decoration-thickness:1.5px;
+}
+.condition-kakao:hover{color:var(--ink)}
+@media (max-width:760px){
+  .condition-card{padding:14px 15px 15px;border-radius:16px}
+  .condition-head h3{font-size:14.5px}
+  .condition-emoji{font-size:16px}
+  .condition-tag{font-size:10px;padding:2px 8px;border-width:2px}
+  .condition-list{margin-top:8px;gap:6px}
+  .condition-list li{font-size:12px;line-height:1.58}
+}
+
+/* =========================================================
    당첨 연출 — 등급별 강도 (D~L 깔끔 < C 블루 < B 골드 < A·라스트원 플래티넘)
    ========================================================= */
 .result-wrap.is-epic.lv1{background:radial-gradient(130% 72% at 50% 0%,#302a72 0%,#161230 42%,#06050c 100%)}
