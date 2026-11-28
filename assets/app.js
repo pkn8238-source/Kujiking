@@ -9901,6 +9901,8 @@
     if (!p) return;
     var prev = $('#pointsPreview');
     if (prev) prev.innerHTML = pointsPreviewHTML(p);
+    var errBox = $('[data-role="points-error"]');
+    if (errBox) errBox.textContent = '';   /* 금액·지급/차감을 바꾸면 이전 안내는 지운다 */
     $$('.points-mode').forEach(function (b) {
       var on = b.getAttribute('data-mode') === p.mode;
       b.classList.toggle('is-on', on);
