@@ -1427,39 +1427,39 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .winners-showcase{margin-top:20px}
 .ws-head{display:flex;align-items:flex-end;justify-content:space-between;gap:10px 14px;flex-wrap:wrap;margin:0 0 12px}
 .ws-head-copy{display:flex;flex-direction:column;gap:3px;min-width:0}
-.ws-eyebrow{font-size:9.5px;font-weight:800;letter-spacing:.22em;color:#b08a3e;text-transform:uppercase}
-.ws-title{font-size:17px;font-weight:900;letter-spacing:-.035em;line-height:1.25;color:var(--ink)}
-.ws-sub{align-self:center;font-size:10.5px;font-weight:700;color:#7d6a4c;background:linear-gradient(180deg,#fffdf7,#fbf3e2);border:1px solid #efe0c2;border-radius:999px;padding:3px 11px;white-space:nowrap;box-shadow:0 1px 2px rgba(23,18,14,.04)}
+.ws-eyebrow{font-size:10px;font-weight:800;letter-spacing:.22em;color:#b08a3e;text-transform:uppercase}
+.ws-title{font-size:19px;font-weight:900;letter-spacing:-.035em;line-height:1.25;color:var(--ink)}
+.ws-sub{align-self:center;font-size:11px;font-weight:700;color:#7d6a4c;background:linear-gradient(180deg,#fffdf7,#fbf3e2);border:1px solid #efe0c2;border-radius:999px;padding:3px 11px;white-space:nowrap;box-shadow:0 1px 2px rgba(23,18,14,.04)}
 .ws-track{display:flex;gap:12px;overflow-x:auto;padding:3px 3px 12px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
 .ws-track::-webkit-scrollbar{display:none}
 .winner-card{
-  position:relative;flex:0 0 auto;display:flex;align-items:center;gap:13px;width:326px;max-width:86vw;
-  padding:14px 16px 14px 14px;border-radius:18px;background:#fff;border:1px solid rgba(23,18,14,.08);
+  position:relative;flex:0 0 auto;display:flex;align-items:center;gap:15px;width:400px;max-width:88vw;
+  padding:18px 20px 18px 16px;border-radius:20px;background:#fff;border:1px solid rgba(23,18,14,.08);
   box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 10px 26px -12px rgba(23,18,14,.18),0 2px 6px rgba(23,18,14,.04);
   scroll-snap-align:start;transition:transform .18s ease,box-shadow .18s ease;overflow:hidden
 }
 .winner-card::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;background:linear-gradient(90deg,#f5b800,#ffd51e 38%,#b9a4ff 100%);opacity:.9}
 .winner-card:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 16px 34px -14px rgba(23,18,14,.22),0 3px 8px rgba(23,18,14,.05)}
 .winner-thumb{
-  flex:0 0 auto;width:74px;height:74px;border-radius:14px;background:#fff;border:1px solid #f0e8d8;
+  flex:0 0 auto;width:88px;height:88px;border-radius:16px;background:#fff;border:1px solid #f0e8d8;
   box-shadow:inset 0 0 0 4px #fffdf8,0 1px 3px rgba(23,18,14,.05);display:grid;place-items:center;overflow:hidden
 }
-.winner-thumb img{width:100%;height:100%;object-fit:contain;padding:7px}
+.winner-thumb img{width:100%;height:100%;object-fit:contain;padding:8px}
 .winner-noimg{font-size:26px;line-height:1;opacity:.75}
 .winner-body{display:flex;flex-direction:column;gap:1px;min-width:0;flex:1}
 .winner-top{display:flex;align-items:center;gap:8px;margin-bottom:4px;min-width:0}
 .winner-badge{
-  flex:0 0 auto;display:inline-flex;align-items:center;height:20px;padding:0 8px;border-radius:7px;
-  font-size:10px;font-weight:900;letter-spacing:-.01em;color:#fff;box-shadow:0 1px 2px rgba(23,18,14,.12)
+  flex:0 0 auto;display:inline-flex;align-items:center;height:22px;padding:0 9px;border-radius:8px;
+  font-size:10.5px;font-weight:900;letter-spacing:-.01em;color:#fff;box-shadow:0 1px 2px rgba(23,18,14,.12)
 }
 .winner-badge.grade-a{background:linear-gradient(135deg,#ff7a66,#d92a1c)}
 .winner-badge.grade-b{background:linear-gradient(135deg,#ffb45c,#f06a12)}
 .winner-badge.grade-c{background:linear-gradient(135deg,#ffe07a,#e9a600);color:#3d2a00}
 .winner-badge.grade-last{background:linear-gradient(135deg,#2a2119,#4a3400);color:#ffe9a8;box-shadow:inset 0 0 0 1px rgba(255,214,120,.45)}
-.winner-time{margin-left:auto;flex:0 0 auto;font-size:10px;font-weight:600;color:#a2968a;white-space:nowrap;letter-spacing:.01em}
-.winner-prize{font-size:14px;font-weight:900;letter-spacing:-.03em;line-height:1.3;color:var(--ink);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.winner-board{font-size:11px;font-weight:600;color:#8b8177;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.winner-name{margin-top:6px;font-size:11px;font-weight:600;color:#5f564d;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-time{margin-left:auto;flex:0 0 auto;font-size:11px;font-weight:600;color:#a2968a;white-space:nowrap;letter-spacing:.01em}
+.winner-prize{font-size:15.5px;font-weight:900;letter-spacing:-.03em;line-height:1.3;color:var(--ink);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-board{font-size:11.5px;font-weight:600;color:#8b8177;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-name{margin-top:8px;font-size:11.5px;font-weight:600;color:#5f564d;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .winner-name b{color:var(--ink);font-weight:800}
 .winner-card.is-lastone{background:linear-gradient(160deg,#1d1712,#2b2118 55%,#3a2a12);border-color:#3a2f22;box-shadow:inset 0 1px 0 rgba(255,255,255,.06),0 12px 30px -14px rgba(23,18,14,.5)}
 .winner-card.is-lastone::before{background:linear-gradient(90deg,#ffe680,#ffc83d 40%,#8f6bff)}
@@ -3553,15 +3553,16 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
   .home-top-btns .btn{min-height:38px;padding:8px 13px;font-size:12.5px}
   .home-top ~ .live-ticker{margin-top:12px}
   .winners-showcase{margin-top:14px}
-  .ws-head{margin-bottom:9px;gap:8px;align-items:center}
+  .ws-head{margin-bottom:10px;gap:8px;align-items:center}
   .ws-eyebrow{font-size:9px;letter-spacing:.18em}
-  .ws-title{font-size:15px}
+  .ws-title{font-size:16px}
   .ws-sub{font-size:10px;padding:2px 9px}
   .ws-track{gap:9px;padding-bottom:10px}
-  .winner-card{width:296px;max-width:88vw;gap:11px;padding:12px 13px 12px 12px;border-radius:16px}
-  .winner-thumb{width:64px;height:64px;border-radius:12px}
-  .winner-thumb img{padding:6px}
-  .winner-prize{font-size:13px}
+  .winner-card{width:306px;max-width:88vw;gap:12px;padding:14px 15px 14px 13px;border-radius:18px}
+  .winner-thumb{width:72px;height:72px;border-radius:13px}
+  .winner-thumb img{padding:7px}
+  .winner-prize{font-size:14px}
+  .winner-name{margin-top:6px}
   .home-boards{padding-top:18px}
   .home-guide-grid{grid-template-columns:1fr}
   .guide-steps{grid-template-columns:1fr}
