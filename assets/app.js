@@ -128,7 +128,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.4.28';
+  var COVER_VER = '4.4.29';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -448,6 +448,8 @@
       adminMembers: [], adminClaims: [], adminDeliveries: [], adminGoodsOrders: [],
       /* v4.4.22 — 관리자 배송·출고: 합배송(batch_draw_ids)에 묶인 상품 id → draw 정보 */
       adminBatchDraws: {},
+      /* v4.4.29 — 관리자 배송·출고: 포인트 전환(인형 미출고) 내역 */
+      adminPointConverts: [],
       adminLoaded: false, adminError: null, loadError: '',
       updatedAt: nowISO()
     };
@@ -1830,6 +1832,34 @@
         row.phone = d.profiles ? d.profiles.phone : '';
         return row;
       });
+      /* v4.4.29 — 💎 포인트 전환(인형 미출고) 내역
+         실물 상품에 당첨됐지만 회원이 '포인트 전환'을 누른 건은 인형이 출고되지 않는다.
+         draws RLS 는 관리자에게 전체 조회를 허용하므로(draws_select · draws_admin),
+         item_status = '포인트전환' 만 최근 300건까지 읽어 회원 정보와 함께 담아 둔다.
+         조회가 실패해도 배송·출고 화면 전체가 멈추지 않게 이 자리만 빈 목록으로 둔다. */
+      try {
+        var pcRes = await sb.from('draws')
+          .select('id,user_id,board_id,n,grade,tier_label,points,item_status,created_at,profiles:user_id(nickname,phone)')
+          .eq('item_status', '포인트전환')
+          .order('created_at', { ascending: false }).limit(300);
+        if (pcRes.error) {
+          console.warn('[admin] 포인트 전환 내역을 불러오지 못했습니다', pcRes.error);
+          state.adminPointConverts = [];
+        } else {
+          state.adminPointConverts = (pcRes.data || []).map(function (r) {
+            return {
+              id: r.id, userId: r.user_id, boardId: r.board_id, n: r.n,
+              grade: r.grade, tierLabel: r.tier_label || '', points: Number(r.points) || 0,
+              at: r.created_at,
+              nickname: r.profiles ? (r.profiles.nickname || '') : '',
+              phone: r.profiles ? (r.profiles.phone || '') : ''
+            };
+          });
+        }
+      } catch (ePointConvert) {
+        console.warn('[admin] 포인트 전환 내역 조회 실패', ePointConvert);
+        state.adminPointConverts = [];
+      }
       /* v4.4.22 — 합배송 한 건에 묶인 상품을 모두 보여 주려면 draws 가 더 필요하다 */
       await this.loadAdminBatchDraws();
       var goRes = await sb.from('goods_orders')
@@ -2935,6 +2965,20 @@
         .map(function (d) {
           var u = userById(d.userId);
           return Object.assign({}, d, { nickname: u ? u.nickname : '', phone: u ? u.phone : '' });
+        });
+      /* v4.4.29 — 데모(local) 모드도 포인트 전환(인형 미출고) 내역을 같은 모양으로 채운다 */
+      state.adminPointConverts = state.draws
+        .filter(function (d) { return d.itemStatus === '포인트전환'; })
+        .slice()
+        .sort(function (a, b) { return new Date(b.at) - new Date(a.at); })
+        .slice(0, 300)
+        .map(function (d) {
+          var u = userById(d.userId);
+          return {
+            id: d.id, userId: d.userId, boardId: d.boardId, n: d.n, grade: d.grade,
+            tierLabel: d.tierLabel || '', points: Number(d.points) || 0, at: d.at,
+            nickname: u ? (u.nickname || '') : '', phone: u ? (u.phone || '') : ''
+          };
         });
       /* v4.4.22 — 데모(local) 모드도 합배송 상품 목록을 같은 모양으로 보여 준다 */
       state.adminBatchDraws = {};
@@ -9820,6 +9864,7 @@
     var el = $('#deliveryList');
     if (!el) return;
     renderGoodsOrders();
+    renderPointConverts();
     var rows = (state.adminDeliveries || []).slice().sort(function (a, b) {
       if (a.status === b.status) return new Date(b.requestedAt) - new Date(a.requestedAt);
       return a.status === '출고완료' ? 1 : -1;
@@ -9864,6 +9909,54 @@
               '<input name="tracking" class="input input-sm" type="text" placeholder="운송장 번호" required>' +
               '<button class="btn btn-primary btn-sm" type="submit">출고 완료</button>' +
             '</form>') +
+      '</article>';
+    }).join('');
+  }
+
+  /* ---------- 관리자: 배송·출고 > 💎 포인트 전환 내역 (인형 미출고, v4.4.29) ----------
+     실물 상품에 당첨된 회원이 보관함에서 '포인트 전환'을 누른 건이다.
+     인형은 출고(분출)되지 않으므로, 어느 판·상품·번호가 빠졌는지 한눈에 보이게 모아 둔다. */
+  function renderPointConverts() {
+    var el = $('#pointConvertList');
+    if (!el) return;
+    var rows = (state.adminPointConverts || []).slice();
+    var total = rows.reduce(function (s, r) { return s + (Number(r.points) || 0); }, 0);
+    var countEl = $('#pointConvertCount');
+    var sumEl = $('#pointConvertSum');
+    if (countEl) countEl.textContent = fmt(rows.length) + '건';
+    if (sumEl) sumEl.textContent = fmt(total) + 'P';
+    var notLoaded = Backend.mode === 'supabase' && !state.adminLoaded;
+    if (notLoaded) {
+      el.innerHTML = '<div class="empty"><p>포인트 전환 내역을 불러오는 중이에요…</p></div>';
+      return;
+    }
+    if (!rows.length) {
+      el.innerHTML = '<div class="empty"><p>아직 포인트로 전환된 내역이 없어요.<br>' +
+        '<span class="muted small">실물 상품에 당첨된 회원이 보관함에서 포인트 전환을 누르면 이곳에 표시됩니다.</span></p></div>';
+      return;
+    }
+    el.innerHTML = rows.map(function (r) {
+      var board = getBoard(r.boardId);
+      var isLast = String(r.grade || '').toUpperCase() === 'LAST';
+      var no = isLast ? '라스트원' : (r.n == null || r.n === '' ? '' : fmt(r.n) + '번');
+      return '<article class="delivery-card pc-card">' +
+        '<div class="delivery-head">' +
+          deliveryThumbHTML(board, r.grade, 'lg') +
+          '<div class="delivery-head-main">' +
+            '<div class="delivery-head-line">' +
+              '<span class="status-pill st-point">인형 미출고 · 포인트 전환</span>' +
+              (board ? boardChipHTML(board, r.boardId) : '<span class="dv-board-chip">' + icon('alert') + '삭제된 판</span>') +
+              (r.grade ? '<span class="grade-badge sm' + (isLast ? ' grade-last' : '') + '" style="background:' + gradeColor(r.grade) + '">' + h(isLast ? 'LAST' : gradeLetter(r.grade)) + '</span>' : '') +
+              (no ? '<span class="pc-no">' + h(no) + '</span>' : '') +
+            '</div>' +
+            '<b class="delivery-title">' + h(r.tierLabel || '당첨 상품') + '</b>' +
+            '<span class="pc-who">' + icon('ticket') + h(r.nickname || '회원') + (r.phone ? ' · ' + h(r.phone) : '') + '</span>' +
+          '</div>' +
+          '<div class="pc-side">' +
+            '<strong class="pc-points">+' + fmt(Number(r.points) || 0) + 'P</strong>' +
+            '<span class="muted small">' + formatDateTime(r.at) + ' 당첨</span>' +
+          '</div>' +
+        '</div>' +
       '</article>';
     }).join('');
   }
@@ -11746,6 +11839,26 @@
         case 'download-gen':
           if (ui.lastGen) download('kujiking-codes-' + Date.now() + '.csv', '\ufeffcode,qty\r\n' + ui.lastGen.codes.map(function (c) { return c + ',' + (Number(ui.lastGen.qty) || 1); }).join('\r\n'), 'text/csv;charset=utf-8');
           break;
+        case 'download-point-converts': {
+          /* v4.4.29 — 포인트 전환(인형 미출고) 내역을 시트에서 바로 보도록 CSV 로 내려준다 */
+          var pcCell = function (v) {
+            var s = String(v == null ? '' : v);
+            return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          };
+          var pcLines = ['판,등급,상품명,번호,회원,연락처,전환포인트,당첨시각'];
+          (state.adminPointConverts || []).forEach(function (r) {
+            var pcb = getBoard(r.boardId);
+            var pcNo = String(r.grade || '').toUpperCase() === 'LAST' ? '라스트원' : (r.n == null ? '' : r.n);
+            pcLines.push([
+              pcCell(pcb ? pcb.title : '삭제된 판'),
+              pcCell(String(r.grade || '').toUpperCase() === 'LAST' ? 'LAST' : gradeLetter(r.grade)),
+              pcCell(r.tierLabel || ''), pcCell(pcNo), pcCell(r.nickname || ''), pcCell(r.phone || ''),
+              Number(r.points) || 0, pcCell(r.at || '')
+            ].join(','));
+          });
+          download('kujiking-point-converts-' + Date.now() + '.csv', '\ufeff' + pcLines.join('\r\n'), 'text/csv;charset=utf-8');
+          break;
+        }
         case 'download-codes': {
           var rows = ['code,board,qty,status,created_at,used_at,ticket'];
           state.codes.forEach(function (c) {

@@ -1805,6 +1805,23 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .dv-thumb.lg{width:56px;height:56px;border-radius:14px}
 .dv-thumb.sm{width:44px;height:44px;border-radius:10px}
 .dv-tags{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
+/* v4.4.29 — 💎 포인트 전환 내역(인형 미출고): 판·상품·번호·회원·포인트를 한 줄로 */
+.pc-sum-badge{background:#f0e9ff;border-color:#c9b6f5}
+.pc-tools{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:-2px 0 12px}
+.pc-card{background:#fbf8ff;border-color:#ddd0f7}
+.pc-no{
+  display:inline-flex;align-items:center;padding:2px 8px;border-radius:999px;
+  background:var(--bg);border:1.5px solid var(--line-strong);
+  font-size:11px;font-weight:900;color:var(--ink-soft);white-space:nowrap;
+}
+.pc-who{display:inline-flex;align-items:center;gap:4px;font-size:12.5px;font-weight:800;color:var(--ink-soft);word-break:break-all}
+.pc-who .ico{width:13px;height:13px;flex:none;color:var(--muted)}
+.pc-side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;margin-left:auto;text-align:right}
+.pc-points{font-size:16px;font-weight:900;color:#6b3fd4;letter-spacing:-.02em;white-space:nowrap}
+@media (max-width:560px){
+  .pc-side{width:100%;flex-direction:row;align-items:center;justify-content:space-between;gap:8px;margin-left:0}
+  .pc-points{font-size:15px}
+}
 @media (max-width:560px){
   .delivery-batch{padding:9px 10px}
   .delivery-batch-name{font-size:12.5px}
