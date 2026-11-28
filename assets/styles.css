@@ -2690,7 +2690,8 @@ img.rv-figure{height:auto;max-width:86%;max-height:min(272px,64vw)}
 .ship-fee-row.is-short b{color:#c62828}
 .ship-fee-note{font-size:12px;font-weight:700;line-height:1.5;color:var(--muted);margin-top:2px}
 .ship-fee-warn{font-size:12px;font-weight:900;line-height:1.5;color:#c62828;margin-top:2px}
-.ship-fee-bar{margin:10px 0 0;grid-template-columns:1fr 1fr;gap:4px 18px}
+.ship-fee-bar{margin:10px 0 0;grid-template-columns:1fr 1fr;gap:6px 20px}
+.ship-fee-bar .ship-fee-row{justify-content:flex-start;gap:8px}
 .ship-fee-bar.is-short .ship-fee-row b{color:#c62828}
 @media (max-width:560px){.ship-fee-bar{grid-template-columns:1fr}}
 @media (max-width:560px){
