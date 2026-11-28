@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.16, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.17, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -4521,6 +4521,7 @@
         '<span class="ws-sub">주요 경품 당첨 축하</span>' +
       '</div>' +
       '<div class="ws-track">' + rows.map(winnerCardHTML).join('') + '</div>' +
+      '<p class="ws-note">상위상 당첨 소식은 판매 즉시 자동으로 공개됩니다</p>' +
     '</div>';
   }
 

@@ -1426,9 +1426,9 @@ html.is-page-hidden *{animation-play-state:paused !important}
 /* ---------- v4.4.13 상위상(A·B·C·라스트원) 당첨 축하 ---------- */
 .winners-showcase{margin-top:20px}
 .ws-panel{
-  position:relative;overflow:hidden;padding:18px 20px 10px;border-radius:24px;
+  position:relative;overflow:hidden;padding:18px 20px 14px;border-radius:24px;
   background:linear-gradient(180deg,#fffefa 0%,#fff9ec 100%);
-  border:1px solid #f2e6cd;box-shadow:0 1px 0 #fff inset,0 14px 34px -26px rgba(90,62,10,.45)
+  border:1px solid #eee0c4;box-shadow:0 1px 0 #fff inset,0 14px 34px -26px rgba(90,62,10,.45)
 }
 .ws-panel::after{
   content:"";position:absolute;right:-60px;top:-90px;width:320px;height:240px;pointer-events:none;
@@ -1451,7 +1451,7 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .winner-card:hover{transform:translateY(-3px);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 18px 36px -18px rgba(60,40,10,.45),0 3px 8px rgba(23,18,14,.05)}
 .winner-thumb{
   position:relative;flex:0 0 auto;width:88px;height:88px;border-radius:16px;background:#fff;
-  border:1px solid #f0e8d8;box-shadow:inset 0 0 0 4px #fffdf8,0 1px 3px rgba(23,18,14,.05);overflow:hidden
+  border:1px solid #ecdfc6;box-shadow:inset 0 0 0 4px #fff,0 2px 6px rgba(60,40,10,.06);overflow:hidden
 }
 /* 등급 이미지에 박혀 있는 좌상단 등급 스탬프는 잘라내고 피규어만 크게 보여 준다 */
 .winner-thumb img{position:absolute;right:0;top:50%;transform:translateY(-50%);width:128%;height:128%;max-width:none;object-fit:cover;object-position:50% 50%}
@@ -1479,6 +1479,7 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .winner-card.is-lastone .winner-name b{color:#ffe680}
 .winner-card.is-lastone .winner-time{color:rgba(255,248,230,.5)}
 .winner-card.is-lastone .winner-thumb{border-color:rgba(255,214,120,.45);background:#fffdf6;box-shadow:inset 0 0 0 4px #fffdf6}
+.ws-note{position:relative;margin:-2px 2px 0;text-align:right;font-size:10px;font-weight:600;color:#a89b8d;letter-spacing:.01em}
 
 /* ---------- filters ---------- */
 .filter-bar{padding:16px 18px;display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
@@ -3569,6 +3570,7 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
   .ws-title{font-size:16px}
   .ws-sub{font-size:10px;padding:2px 9px}
   .ws-track{gap:9px;padding-bottom:8px}
+  .ws-note{display:none}
   .winner-card{width:302px;max-width:100%;gap:12px;padding:14px 15px 14px 13px;border-radius:18px}
   .winner-thumb{width:72px;height:72px;border-radius:13px}
   .winner-prize{font-size:14px}
