@@ -1423,6 +1423,49 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .ticker-time{color:var(--muted);font-size:10.5px}
 .ticker-empty{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);font-weight:600}
 
+/* ---------- v4.4.13 상위상(A·B·C·라스트원) 당첨 축하 ---------- */
+.winners-showcase{margin-top:18px}
+.ws-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 0 9px}
+.ws-title{font-size:14.5px;font-weight:900;letter-spacing:-.03em}
+.ws-sub{font-size:10.5px;font-weight:800;color:#8a5b00;background:var(--cream-deep);border:1.5px solid #f0d489;border-radius:999px;padding:1px 9px;white-space:nowrap}
+.ws-track{display:flex;gap:10px;overflow-x:auto;padding:2px 2px 9px;scroll-snap-type:x proximity;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+.ws-track::-webkit-scrollbar{display:none}
+.winner-card{
+  flex:0 0 auto;display:flex;align-items:center;gap:11px;width:312px;max-width:84vw;
+  padding:10px 13px 10px 10px;border:2px solid var(--ink);border-radius:16px;
+  background:linear-gradient(120deg,#fffdf6,#fff7de 62%,#fffdf6);box-shadow:0 3px 0 var(--ink);
+  scroll-snap-align:start;transition:transform .12s ease
+}
+.winner-card:hover{transform:translateY(-2px)}
+.winner-card.is-lastone{background:linear-gradient(120deg,#1a1208,#3a2600 58%,#6b4900);border-color:var(--ink);box-shadow:0 3px 0 #0d0906}
+.winner-thumb{
+  flex:0 0 auto;width:64px;height:64px;border-radius:12px;border:1.5px solid var(--line-strong);
+  background:#fff;overflow:hidden;display:grid;place-items:center
+}
+.winner-thumb img{width:100%;height:100%;object-fit:contain;padding:4px}
+.winner-noimg{font-size:24px;line-height:1}
+.winner-body{display:flex;flex-direction:column;gap:2px;min-width:0;flex:1}
+.winner-top{display:flex;align-items:center;gap:6px;min-width:0}
+.winner-badge{
+  flex:0 0 auto;display:inline-flex;align-items:center;border-radius:8px;border:2px solid var(--ink);
+  padding:0 6px;font-size:10px;font-weight:900;line-height:16px;color:#fff;letter-spacing:-.01em
+}
+.winner-badge.grade-a{background:var(--grade-a)}
+.winner-badge.grade-b{background:var(--grade-b)}
+.winner-badge.grade-c{background:var(--grade-c);color:#1a1208}
+.winner-badge.grade-last{background:linear-gradient(100deg,#ffe680,#ffc83d);color:#3a2600;border-color:#ffe680}
+.winner-time{margin-left:auto;flex:0 0 auto;font-size:10px;color:var(--muted);font-weight:700;white-space:nowrap}
+.winner-prize{font-size:13px;font-weight:900;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-board{font-size:10.5px;color:var(--muted);font-weight:700;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-name{font-size:11px;color:var(--ink-soft);font-weight:700;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-name b{color:var(--red-deep);font-weight:900}
+.winner-card.is-lastone .winner-prize{color:#fff8e1}
+.winner-card.is-lastone .winner-board{color:rgba(255,248,225,.62)}
+.winner-card.is-lastone .winner-name{color:rgba(255,248,225,.86)}
+.winner-card.is-lastone .winner-name b{color:#ffe680}
+.winner-card.is-lastone .winner-time{color:rgba(255,248,225,.55)}
+.winner-card.is-lastone .winner-thumb{border-color:#ffe680;background:#fffdf2}
+
 /* ---------- filters ---------- */
 .filter-bar{padding:16px 18px;display:flex;flex-direction:column;gap:12px;margin-bottom:22px}
 .filter-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -3437,6 +3480,8 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
 .home-top-btns{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}
 .home-store-link{font-size:11.5px;font-weight:800;color:var(--muted);text-decoration:underline;text-underline-offset:3px}
 .home-top ~ .live-ticker{margin-top:16px}
+.home-top ~ .winners-showcase{margin-top:16px}
+.winners-showcase ~ .live-ticker{margin-top:10px}
 .home-boards{padding-top:24px}
 .home-boards .section-head{margin-bottom:14px}
 .home-boards .section-head h2{font-size:clamp(21px,2.6vw,27px)}
@@ -3503,6 +3548,14 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
   .home-top-btns{gap:6px}
   .home-top-btns .btn{min-height:38px;padding:8px 13px;font-size:12.5px}
   .home-top ~ .live-ticker{margin-top:12px}
+  .winners-showcase{margin-top:13px}
+  .ws-head{margin-bottom:7px;gap:6px}
+  .ws-title{font-size:13px}
+  .ws-sub{font-size:10px;padding:1px 8px}
+  .ws-track{gap:8px;padding-bottom:8px}
+  .winner-card{width:272px;max-width:86vw;gap:9px;padding:9px 11px 9px 9px;border-radius:14px}
+  .winner-thumb{width:56px;height:56px;border-radius:10px}
+  .winner-prize{font-size:12.5px}
   .home-boards{padding-top:18px}
   .home-guide-grid{grid-template-columns:1fr}
   .guide-steps{grid-template-columns:1fr}

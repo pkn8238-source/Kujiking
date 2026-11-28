@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.12, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.13, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -3343,6 +3343,7 @@
         liveSetText(card, 'fill', pct);
       }
       renderLiveTicker();
+      renderWinnersShowcase();
     }
   }
 
@@ -4315,6 +4316,7 @@
 
     renderFilters();
     renderLiveTicker();
+    renderWinnersShowcase();
     var filterBar = $('#filterBar');
     /* v4.0.9 — 판이 하나뿐이면 필터·정렬 줄도 감춰서 판 카드를 위로 올린다 */
     if (filterBar) filterBar.hidden = !openBoards.length || openBoards.length <= 1;
@@ -4436,7 +4438,7 @@
       box.innerHTML = '<div class="ticker-empty"><span class="live-dot"></span>첫 판매를 기다리고 있어요. 첫 번째 주인공이 되어보세요!</div>';
       return;
     }
-    box.innerHTML = '<div class="ticker-head"><span class="live-dot"></span><b>실시간 판매</b><span class="muted">방금 팔린 번호</span></div>' +
+    box.innerHTML = '<div class="ticker-head"><span class="live-dot"></span><b>실시간 뽑기 현황</b><span class="muted">방금 팔린 번호</span></div>' +
       '<div class="ticker-track">' + rows.map(function (r) {
         return '<a class="ticker-item' + (r.open.last ? ' is-lastone' : '') + '" href="#/board/' + h(r.board.id) + '">' +
           '<span class="ticker-cat">' + h(r.board.category) + '</span>' +
@@ -4446,6 +4448,75 @@
           '<span class="ticker-time">' + timeAgo(r.open.at) + '</span>' +
         '</a>';
       }).join('') + '</div>';
+  }
+
+  /* =========================================================
+     v4.4.13 — A·B·C상(및 라스트원) 당첨 축하 노출
+     -----------------------------------------
+     타사(kujihako) 홈처럼 상위상 당첨자를 자랑스럽게 보여 준다.
+     · state.boards 의 모든 opens 중 grade A/B/C/LAST 또는 last=true 만
+     · 최신순(at 내림차순) 최대 12건, 한 건도 없으면 영역을 숨긴다
+     · 위너 카드는 판 상세(#/board/...)로 이동
+     ========================================================= */
+  var WINNER_GRADES = { A: 1, B: 1, C: 1, LAST: 1 };
+  function isWinnerOpen(o) {
+    if (!o) return false;
+    var g = String(o.grade || '').toUpperCase();
+    return !!(o.last || g === 'LAST' || WINNER_GRADES[g]);
+  }
+  function winnerCardHTML(row) {
+    var board = row.board, o = row.open;
+    var isLast = !!(o.last || String(o.grade || '').toUpperCase() === 'LAST');
+    var tier = (isLast || !board || !board.tiers) ? null : tierOf(board, o.grade);
+    var img = isLast
+      ? (board.lastOneImage || board.cover)
+      : ((tier && tier.image) || board.cover);
+    var label = isLast
+      ? (board.lastOneLabel || '라스트원상')
+      : ((tier && tier.label) || (String(o.grade || '').toUpperCase() + '상'));
+    var badge = isLast ? '🏆 라스트원' : (String(o.grade || '').toUpperCase() + '상');
+    var badgeCls = isLast ? 'last' : String(o.grade || '').toLowerCase();
+    var raw = String(o.name || '').trim() || '익명';
+    var shown = raw.indexOf('*') >= 0 ? raw : maskName(raw);
+    return '<a class="winner-card' + (isLast ? ' is-lastone' : '') + '" href="#/board/' + h(board.id) + '">' +
+        '<span class="winner-thumb">' +
+          (img
+            ? '<img src="' + h(coverSrc(img)) + '" alt="' + h(label) + '" loading="lazy" decoding="async">'
+            : '<span class="winner-noimg" aria-hidden="true">🎁</span>') +
+        '</span>' +
+        '<span class="winner-body">' +
+          '<span class="winner-top">' +
+            '<span class="winner-badge grade-' + h(badgeCls) + '">' + h(badge) + '</span>' +
+            '<span class="winner-time">' + h(timeAgo(o.at)) + '</span>' +
+          '</span>' +
+          '<b class="winner-prize">' + h(label) + '</b>' +
+          '<span class="winner-board">' + h(board.title) + '</span>' +
+          '<span class="winner-name">당첨자: <b>' + h(shown) + '</b> · 축하합니다!</span>' +
+        '</span>' +
+      '</a>';
+  }
+  function renderWinnersShowcase() {
+    var box = $('#winnersShowcase');
+    if (!box) return;
+    var rows = [];
+    (state.boards || []).forEach(function (b) {
+      (b.opens || []).forEach(function (o) {
+        if (isWinnerOpen(o)) rows.push({ board: b, open: o });
+      });
+    });
+    rows.sort(function (a, b) { return new Date(b.open.at) - new Date(a.open.at); });
+    rows = rows.slice(0, 12);
+    if (!rows.length) {
+      box.hidden = true;
+      box.innerHTML = '';
+      return;
+    }
+    box.hidden = false;
+    box.innerHTML = '<div class="ws-head">' +
+        '<b class="ws-title">🎉 A·B·C상 당첨을 축하합니다!</b>' +
+        '<span class="ws-sub">주요 경품 당첨 축하</span>' +
+      '</div>' +
+      '<div class="ws-track">' + rows.map(winnerCardHTML).join('') + '</div>';
   }
 
   /* =========================================================

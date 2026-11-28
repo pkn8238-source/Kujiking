@@ -10,6 +10,21 @@
 
 ---
 
+## v4.4.13 — 메인 A·B·C상(라스트원) 당첨 축하 노출 · 실시간 티커 문구 변경
+
+- **요청**: 기남 님 — "Abc상 당첨자는 축하한다고 메인페이지에 노출안되나 타사이트처럼 우리꺼지금꺼는 실시간뽑기현황으로 하고 그위에다 https://kujihako.com/" (11-28). 타사(kujihako) 홈의 '실시간 당첨 현황'처럼 상위상 당첨자를 메인 상단에 노출한다.
+- **레이아웃**(`index.html`): `.home-top` 아래·기존 `#liveTicker` 바로 위에 `<section class="winners-showcase container" id="winnersShowcase" hidden></section>` 추가. 당첨 기록이 없으면 `hidden`.
+- **화면**(`assets/app.js`):
+  - `renderWinnersShowcase()` / `winnerCardHTML()` 추가. `state.boards`의 모든 `opens` 중 `grade`가 A·B·C·LAST이거나 `last === true`인 건만 모아 `at` 내림차순 최대 12건을 가로 스크롤 카드로 보여 준다.
+  - 카드: 흰 배경 정사각 썸네일(`object-fit: contain` — 라스트원은 `lastOneImage`, 상위상은 `tierOf(board, grade).image`, 없으면 `board.cover`) + 등급 배지(`A상`·`B상`·`C상`·`🏆 라스트원`) + 상품명(`tier.label` / `lastOneLabel`) + 판 제목 + `당첨자: 이름 · 축하합니다!`(이름에 `*`가 없을 때만 `maskName()`) + `timeAgo()`.
+  - 카드 클릭 시 해당 판 상세(`#/board/:id`)로 이동. `renderHome()`과 실시간 동기화(`renderLiveTicker()` 옆) 양쪽에서 다시 그린다.
+  - 기존 티커 제목 `<b>실시간 판매</b>` → `<b>실시간 뽑기 현황</b>`.
+- **스타일**(`assets/styles.css`): `.winners-showcase`·`.winner-card`·배지/썸네일/본문 규칙 추가. 밝은 크림 그라데이션 카드 + 검정 스티커 테두리, 라스트원 카드는 다크·골드. 모바일(≤760px)에서 카드 폭 272px·가로 스와이프.
+- **버전**: `index.html` 자산 쿼리(`styles.css`·`app.js`) 4.4.13, `protoTag` v4.4.13, `assets/app.js` 헤더 4.4.13.
+- **검증**: esprima `app.js` 파싱 OK, CSS 중괄호 2717:2717, HTML div 207:207·section 10:10, 라이브 `https://kujiking.co.kr/` PC·모바일(390px)에서 갸루 치이카와 B상(`딘*`) 카드와 `실시간 뽑기 현황` 확인.
+
+---
+
 ## v4.4.12 — 보관함 배송 신청 1건당 4,000P 차감
 
 - **요청**: 기남 님 카드 선택 `4,000P 차감 (택배비와 동일)` (11-28). 실물 경품을 보관함에서 배송 신청하면 1건당 4,000P를 굿즈 포인트에서 차감한다.
