@@ -4110,9 +4110,10 @@
     if (!u) return '';
     var bal = Number(u.points || 0);
     var short = bal < DELIVERY_FEE_POINTS;
+    /* 라벨과 값을 붙여 읽히게 — 스타일시트가 캐시에 남아 있어도 같은 모양이 나오게 인라인으로 둔다 */
     return '<div class="ship-fee ship-fee-bar' + (short ? ' is-short' : '') + '">' +
-      '<span class="ship-fee-row"><em>보유 굿즈 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
-      '<span class="ship-fee-row"><em>배송 신청 1건</em><b>' + fmt(DELIVERY_FEE_POINTS) + 'P 차감</b></span>' +
+      '<span class="ship-fee-row" style="justify-content:flex-start;gap:8px"><em>보유 굿즈 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
+      '<span class="ship-fee-row" style="justify-content:flex-start;gap:8px"><em>배송 신청 1건</em><b>' + fmt(DELIVERY_FEE_POINTS) + 'P 차감</b></span>' +
       '</div>';
   }
 
