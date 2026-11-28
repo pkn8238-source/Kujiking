@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.17, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.18, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -4479,22 +4479,168 @@
     var raw = String(o.name || '').trim() || '익명';
     var shown = raw.indexOf('*') >= 0 ? raw : maskName(raw);
     return '<a class="winner-card' + (isLast ? ' is-lastone' : '') + '" href="#/board/' + h(board.id) + '">' +
-        '<span class="winner-thumb">' +
-          (img
-            ? '<img src="' + h(coverSrc(img)) + '" alt="' + h(label) + '" loading="lazy" decoding="async">'
-            : '<span class="winner-noimg" aria-hidden="true">🎁</span>') +
+        '<span class="winner-stage">' +
+          '<span class="winner-thumb">' +
+            (img
+              ? '<img src="' + h(coverSrc(img)) + '" alt="' + h(label) + '" loading="lazy" decoding="async">'
+              : '<span class="winner-noimg" aria-hidden="true">🎁</span>') +
+          '</span>' +
         '</span>' +
-        '<span class="winner-body">' +
-          '<span class="winner-top">' +
+        '<span class="winner-main">' +
+          '<span class="winner-kicker">' +
             '<span class="winner-badge grade-' + h(badgeCls) + '">' + h(badge) + '</span>' +
-            '<span class="winner-time">' + h(timeAgo(o.at)) + '</span>' +
+            '<span class="winner-board">' + h(board.title) + '</span>' +
           '</span>' +
           '<b class="winner-prize">' + h(label) + '</b>' +
-          '<span class="winner-board">' + h(board.title) + '</span>' +
-          '<span class="winner-name">당첨자: <b>' + h(shown) + '</b> · 축하합니다!</span>' +
+          '<span class="winner-name">🎉 <b>' + h(shown) + '</b> 님 당첨을 축하합니다!</span>' +
+        '</span>' +
+        '<span class="winner-side">' +
+          '<span class="winner-time">' + h(timeAgo(o.at)) + '</span>' +
+          '<span class="winner-cta">보러가기 <i aria-hidden="true">→</i></span>' +
         '</span>' +
       '</a>';
   }
+
+  /* v4.4.18 — 풀와이드 배너 자동 슬라이드(3.5초)
+     · 배너 1장이면 자동 전환·점·화살표 없이 단독 배너로 꽉 채워 보여 준다
+     · 2장 이상이면 3.5초마다 다음 배너로 부드럽게 넘어가고 끝에서 처음으로 순환
+     · 마우스 호버·터치 스크롤·점/화살표 조작 중에는 잠시 멈췄다가 다시 이어감
+     · 재렌더링 시 clearInterval 로 기존 타이머를 반드시 정리 */
+  var WINNERS_AUTO_MS = 3500;
+  var winnersTimer = null;
+  var winnersHold = false;
+  var winnersPauseUntil = 0;
+  var WS_ARROW_L = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>';
+  var WS_ARROW_R = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 5l7 7-7 7"/></svg>';
+
+  function winnersBoxEl() { return $('#winnersShowcase'); }
+  function winnersTrackEl() {
+    var box = winnersBoxEl();
+    if (!box || box.hidden) return null;
+    return box.querySelector('.ws-track');
+  }
+  function winnersSlides(track) {
+    return Array.prototype.slice.call(track.querySelectorAll('.winner-card'));
+  }
+  /* 각 배너가 멈춰 설 스크롤 위치 — 마지막 배너는 최대 스크롤에서 겹치므로 중복을 걷어낸다 */
+  function winnersTargets(track, slides) {
+    var max = Math.max(0, track.scrollWidth - track.clientWidth);
+    var base = slides.length ? slides[0].offsetLeft : 0;
+    var out = [0];
+    slides.forEach(function (c) {
+      var p = Math.min(Math.max(0, c.offsetLeft - base), max);
+      if (p > out[out.length - 1] + 2) out.push(p);
+    });
+    return out;
+  }
+  function winnersNearest(targets, left) {
+    var best = 0, bd = Infinity;
+    for (var i = 0; i < targets.length; i++) {
+      var d = Math.abs(targets[i] - left);
+      if (d < bd) { bd = d; best = i; }
+    }
+    return best;
+  }
+  function winnersGo(track, left) {
+    if (typeof track.scrollTo === 'function') {
+      try { track.scrollTo({ left: left, behavior: 'smooth' }); return; } catch (e) { /* 예전 브라우저 */ }
+    }
+    track.scrollLeft = left;
+  }
+  function winnersStopAuto() {
+    if (winnersTimer) { clearInterval(winnersTimer); winnersTimer = null; }
+  }
+  function winnersStartAuto() {
+    winnersStopAuto();
+    var track = winnersTrackEl();
+    if (!track) return;
+    if (winnersTargets(track, winnersSlides(track)).length < 2) return;
+    winnersTimer = setInterval(winnersTick, WINNERS_AUTO_MS);
+  }
+  function winnersTick() {
+    if (document.hidden || winnersHold || Date.now() < winnersPauseUntil) return;
+    var track = winnersTrackEl();
+    if (!track) { winnersStopAuto(); return; }
+    var targets = winnersTargets(track, winnersSlides(track));
+    if (targets.length < 2) return;
+    var i = winnersNearest(targets, track.scrollLeft);
+    winnersGo(track, targets[(i + 1) % targets.length]);
+  }
+  function winnersSyncDots() {
+    var box = winnersBoxEl();
+    var track = winnersTrackEl();
+    if (!box || !track) return;
+    var i = winnersNearest(winnersTargets(track, winnersSlides(track)), track.scrollLeft);
+    $$('.ws-dot', box).forEach(function (d, k) { d.classList.toggle('is-active', k === i); });
+  }
+  /* 점·좌우 화살표는 배너가 2장 이상(실제로 넘길 폭이 있을 때)만 노출 */
+  function winnersBuildNav() {
+    var box = winnersBoxEl();
+    var track = winnersTrackEl();
+    if (!box || !track) return;
+    var n = winnersTargets(track, winnersSlides(track)).length;
+    var multi = n > 1;
+    var nav = box.querySelector('.ws-nav');
+    var dots = box.querySelector('.ws-dots');
+    if (nav) nav.hidden = !multi;
+    if (dots) {
+      var html = '';
+      if (multi) {
+        for (var k = 0; k < n; k++) {
+          html += '<button type="button" class="ws-dot" data-ws-dot="' + k + '" aria-label="당첨 소식 ' + (k + 1) + '번째 보기"></button>';
+        }
+      }
+      dots.hidden = !multi;
+      if (dots.innerHTML !== html) dots.innerHTML = html;
+    }
+    winnersSyncDots();
+  }
+  function winnersBind(box) {
+    if (box._kjWsBound) return;
+    box._kjWsBound = true;
+    function hold() { winnersHold = true; }
+    function pauseFor(ms) { winnersPauseUntil = Math.max(winnersPauseUntil, Date.now() + ms); }
+    function release(ms) { winnersHold = false; pauseFor(ms || 4000); }
+    box.addEventListener('pointerenter', function (e) { if (!e.pointerType || e.pointerType === 'mouse') hold(); });
+    box.addEventListener('pointerleave', function (e) { if (!e.pointerType || e.pointerType === 'mouse') release(4000); });
+    box.addEventListener('touchstart', hold, { passive: true });
+    box.addEventListener('touchend', function () { release(5000); }, { passive: true });
+    box.addEventListener('touchcancel', function () { release(5000); }, { passive: true });
+    box.addEventListener('focusin', hold);
+    box.addEventListener('focusout', function () { release(4000); });
+    box.addEventListener('wheel', function () { pauseFor(3500); }, { passive: true });
+    /* 스크롤은 버블링하지 않으므로 캡처로 받아 점 표시를 맞춘다 */
+    box.addEventListener('scroll', function () { winnersSyncDots(); }, true);
+    box.addEventListener('click', function (e) {
+      var t = e.target;
+      var dot = t && t.closest ? t.closest('[data-ws-dot]') : null;
+      var arrow = t && t.closest ? t.closest('[data-ws-nav]') : null;
+      if (!dot && !arrow) return;
+      e.preventDefault();
+      var track = winnersTrackEl();
+      if (!track) return;
+      var targets = winnersTargets(track, winnersSlides(track));
+      if (targets.length < 2) return;
+      if (dot) {
+        var k = Number(dot.getAttribute('data-ws-dot'));
+        if (targets[k] != null) winnersGo(track, targets[k]);
+      } else {
+        var dir = Number(arrow.getAttribute('data-ws-nav')) >= 0 ? 1 : -1;
+        var i = winnersNearest(targets, track.scrollLeft);
+        winnersGo(track, targets[(i + dir + targets.length) % targets.length]);
+      }
+      pauseFor(7000);
+    });
+    window.addEventListener('resize', function () {
+      clearTimeout(box._kjWsResizeT);
+      box._kjWsResizeT = setTimeout(function () {
+        if (!winnersTrackEl()) { winnersStopAuto(); return; }
+        winnersBuildNav();
+        winnersStartAuto();
+      }, 220);
+    });
+  }
+
   function renderWinnersShowcase() {
     var box = $('#winnersShowcase');
     if (!box) return;
@@ -4509,20 +4655,36 @@
     if (!rows.length) {
       box.hidden = true;
       box.innerHTML = '';
+      box._kjWsSig = '';
+      winnersStopAuto();
       return;
     }
+    /* 같은 당첨 목록이면 다시 그리지 않는다 — 실시간 판매 1건마다 재렌더되며
+       배너가 첫 장으로 튀거나 사진이 깜빡이던 문제 방지(v4.4.18) */
+    var sig = rows.map(function (r) {
+      return [r.board.id, r.open.n, r.open.at, r.open.name, r.open.grade, r.open.last ? 1 : 0].join(':');
+    }).join('|');
+    if (box._kjWsSig === sig && !box.hidden) {
+      winnersBuildNav();
+      if (!winnersTimer) winnersStartAuto();
+      return;
+    }
+    box._kjWsSig = sig;
     box.hidden = false;
     box.innerHTML = '<div class="ws-panel">' +
       '<div class="ws-head">' +
-        '<span class="ws-head-copy">' +
-          '<span class="ws-eyebrow">Congratulations</span>' +
-          '<b class="ws-title">🎉 A·B·C상 당첨을 축하합니다!</b>' +
-        '</span>' +
-        '<span class="ws-sub">주요 경품 당첨 축하</span>' +
+        '<b class="ws-title">🏆 상위상 당첨을 축하합니다!</b>' +
+        '<div class="ws-nav" hidden>' +
+          '<button type="button" class="ws-arrow" data-ws-nav="-1" aria-label="이전 당첨 소식">' + WS_ARROW_L + '</button>' +
+          '<button type="button" class="ws-arrow" data-ws-nav="1" aria-label="다음 당첨 소식">' + WS_ARROW_R + '</button>' +
+        '</div>' +
       '</div>' +
       '<div class="ws-track">' + rows.map(winnerCardHTML).join('') + '</div>' +
-      '<p class="ws-note">상위상 당첨 소식은 판매 즉시 자동으로 공개됩니다</p>' +
+      '<div class="ws-dots" hidden></div>' +
     '</div>';
+    winnersBind(box);
+    winnersBuildNav();
+    winnersStartAuto();
   }
 
   /* =========================================================
