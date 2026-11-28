@@ -1,6 +1,6 @@
 -- =========================================================
 -- 쿠지킹 KUJIKING — 보관함 배송 신청 4,000P 차감 + 합배송(일괄 배송)
--- v4.4.21 · 2026-11-28
+-- v4.4.22 · 2026-11-28
 -- ---------------------------------------------------------
 -- 실행 방법
 --   1) https://supabase.com/dashboard → 쿠지킹 프로젝트(ptqonefsjhusyuofgius) → SQL Editor
@@ -63,7 +63,7 @@ begin
   -- 1) 보관함 상품 잠금 (같은 상품을 두 번 신청하지 못하게)
   select * into v_draw from public.draws where id = p_draw_id and user_id = v_uid for update;
   if not found then raise exception '보관함에서 상품을 찾을 수 없습니다.'; end if;
-  if v_draw.item_status <> '보관중' then raise exception '이미 배송 신청했거나 전환된 상품입니다.'; end if;
+  if v_draw.item_status is distinct from '보관중' then raise exception '이미 배송 신청했거나 전환된 상품입니다.'; end if;
 
   -- 2) 포인트 잠금 + 잔액 검증 (4,000P 미만이면 신청 불가)
   select * into v_profile from public.profiles where id = v_uid for update;
@@ -137,7 +137,7 @@ begin
    for update;
 
   select count(*) into v_mine from public.draws where id = any(v_ids) and user_id = v_uid;
-  if v_mine <> v_n then raise exception '보관함에서 상품을 찾을 수 없습니다.'; end if;
+  if v_mine is distinct from v_n then raise exception '보관함에서 상품을 찾을 수 없습니다.'; end if;
 
   select count(*) into v_bad
     from public.draws

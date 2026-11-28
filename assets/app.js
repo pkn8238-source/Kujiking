@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.21, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.22, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -446,6 +446,8 @@
       session: null,
       me: null, myCoupons: [], myDraws: [], myClaims: [], myDeliveries: [], myGoodsOrders: [],
       adminMembers: [], adminClaims: [], adminDeliveries: [], adminGoodsOrders: [],
+      /* v4.4.22 — 관리자 배송·출고: 합배송(batch_draw_ids)에 묶인 상품 id → draw 정보 */
+      adminBatchDraws: {},
       adminLoaded: false, adminError: null, loadError: '',
       updatedAt: nowISO()
     };
@@ -1828,6 +1830,8 @@
         row.phone = d.profiles ? d.profiles.phone : '';
         return row;
       });
+      /* v4.4.22 — 합배송 한 건에 묶인 상품을 모두 보여 주려면 draws 가 더 필요하다 */
+      await this.loadAdminBatchDraws();
       var goRes = await sb.from('goods_orders')
         .select('*, profiles:user_id(nickname,phone)')
         .order('created_at', { ascending: false }).limit(300);
@@ -1843,6 +1847,35 @@
         });
       }
       state.adminLoaded = true;
+    },
+
+    /* v4.4.22 — 관리자 '배송 · 출고' 합배송 표시용 상품 정보
+       배송 기록에는 대표 1건 + item_label('[합배송 N건] ○○ 외 N-1건')만 남는다.
+       관리자 refreshData 는 본인 draws 만 읽으므로(다른 회원 상품은 없음),
+       배송 기록의 batch_draw_ids 를 모아 draws 테이블에서 한 번에 읽어 온다.
+       읽기 전용 · 실패해도 배송 화면은 그대로 뜨고, 그 자리만 안내 문구로 바뀐다. */
+    async loadAdminBatchDraws() {
+      state.adminBatchDraws = {};
+      var ids = [];
+      (state.adminDeliveries || []).forEach(function (d) {
+        if (!d.batchDrawIds || d.batchDrawIds.length < 2) return;
+        d.batchDrawIds.forEach(function (id) {
+          id = String(id == null ? '' : id);
+          if (id && ids.indexOf(id) === -1) ids.push(id);
+        });
+      });
+      if (!ids.length) return;
+      var map = {};
+      var sb = this.sb;
+      var res = await sb.from('draws').select('id,board_id,n,grade,tier_label').in('id', ids);
+      if (res.error) {
+        console.warn('[admin] 합배송 상품 목록을 불러오지 못했습니다', res.error);
+      } else {
+        (res.data || []).forEach(function (r) {
+          map[r.id] = { id: r.id, boardId: r.board_id, n: r.n, grade: r.grade, tierLabel: r.tier_label };
+        });
+      }
+      state.adminBatchDraws = map;
     },
 
     /* admin_members RPC 없이 회원 목록을 직접 만든다 (관리자 RLS 로 전체 조회). */
@@ -2863,6 +2896,15 @@
           var u = userById(d.userId);
           return Object.assign({}, d, { nickname: u ? u.nickname : '', phone: u ? u.phone : '' });
         });
+      /* v4.4.22 — 데모(local) 모드도 합배송 상품 목록을 같은 모양으로 보여 준다 */
+      state.adminBatchDraws = {};
+      (state.adminDeliveries || []).forEach(function (d) {
+        if (!d.batchDrawIds || d.batchDrawIds.length < 2) return;
+        d.batchDrawIds.forEach(function (id) {
+          var dr = state.draws.filter(function (x) { return x.id === id; })[0];
+          if (dr) state.adminBatchDraws[id] = dr;
+        });
+      });
       state.adminGoodsOrders = state.goodsOrders.slice().sort(function (a, b) { return new Date(b.createdAt) - new Date(a.createdAt); })
         .map(function (o) {
           var u = userById(o.userId);
@@ -9653,6 +9695,53 @@
     }).join('');
   }
 
+  /* v4.4.22 — 관리자 '배송 · 출고': 합배송 한 건에 묶인 상품을 전부 카드 안에 보여 준다.
+     item_label 은 '[합배송 N건] 대표상품 외 N-1건' 이라 나머지 상품을 알 수 없으므로,
+     batchDrawIds → state.adminBatchDraws(draws) 로 등급·상품명·판/번호를 채운다. */
+  function deliveryBatchItems(d) {
+    var ids = (d && d.batchDrawIds) || [];
+    if (ids.length < 2) return [];
+    var map = state.adminBatchDraws || {};
+    var out = ids.map(function (id) {
+      id = String(id == null ? '' : id);
+      var r = map[id];
+      return r ? { id: id, boardId: r.boardId, n: r.n, grade: r.grade, tierLabel: r.tierLabel || r.tier_label } : { id: id, missing: true };
+    });
+    /* 보기 좋게: 등급 순(A→…→T), 라스트원은 맨 뒤, 같은 등급은 번호 순 */
+    out.sort(function (a, b) {
+      if (a.missing !== b.missing) return a.missing ? 1 : -1;
+      if (a.missing) return 0;
+      var ga = String(a.grade || '').toUpperCase(), gb = String(b.grade || '').toUpperCase();
+      if (ga === 'LAST' || gb === 'LAST') return ga === gb ? 0 : (ga === 'LAST' ? 1 : -1);
+      if (ga !== gb) return ga < gb ? -1 : 1;
+      return (Number(a.n) || 0) - (Number(b.n) || 0);
+    });
+    return out;
+  }
+
+  function deliveryBatchHTML(d) {
+    var items = deliveryBatchItems(d);
+    if (items.length < 2) return '';
+    return '<div class="delivery-batch">' +
+      '<p class="delivery-batch-head">' + icon('box') + ' 한 상자에 묶인 상품 <b>' + fmt(items.length) + '건</b></p>' +
+      '<ul class="delivery-batch-list">' + items.map(function (it) {
+        if (it.missing) {
+          return '<li class="is-missing"><span class="delivery-batch-name"><b>상품 정보를 불러오지 못했어요</b><em>' + h(it.id.slice(0, 8)) + '…</em></span></li>';
+        }
+        var board = getBoard(it.boardId);
+        var isLast = String(it.grade || '').toUpperCase() === 'LAST';
+        var where = board ? board.category : '';
+        var no = isLast ? '라스트원' : (it.n == null || it.n === '' ? '' : fmt(it.n) + '번');
+        var tail = [where, no].filter(Boolean).join(' ');
+        return '<li>' +
+          '<span class="grade-badge sm' + (isLast ? ' grade-last' : '') + '" style="background:' + gradeColor(it.grade) + '" title="' + h(isLast ? '라스트원' : gradeLetter(it.grade) + '상') + '">' + h(isLast ? 'LAST' : gradeLetter(it.grade)) + '</span>' +
+          '<span class="delivery-batch-name"><b>' + h(it.tierLabel || '당첨 상품') + '</b>' +
+            (tail ? '<em>(' + h(tail) + ')</em>' : '') + '</span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+    '</div>';
+  }
+
   function renderShippingTab() {
     var el = $('#deliveryList');
     if (!el) return;
@@ -9676,6 +9765,7 @@
           (d.grade ? '<span class="grade-badge sm' + (String(d.grade).toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(String(d.grade).toUpperCase() === 'LAST' ? 'LAST' : d.grade) + '</span>' : '') +
           '<span class="muted small">' + h(board ? board.category : '') + ' · ' + formatDateTime(d.requestedAt) + '</span>' +
         '</div>' +
+        deliveryBatchHTML(d) +
         '<div class="delivery-body">' +
           '<div><span class="muted small">받는 사람</span><p><b>' + h(d.recipient) + '</b> · ' + h(d.phone) + '</p></div>' +
           '<div><span class="muted small">주소</span><p>' + (d.postcode ? '(' + h(d.postcode) + ') ' : '') + h(d.address) + '</p></div>' +
