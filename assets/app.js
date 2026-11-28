@@ -1867,13 +1867,18 @@
       if (!ids.length) return;
       var map = {};
       var sb = this.sb;
-      var res = await sb.from('draws').select('id,board_id,n,grade,tier_label').in('id', ids);
-      if (res.error) {
-        console.warn('[admin] 합배송 상품 목록을 불러오지 못했습니다', res.error);
-      } else {
-        (res.data || []).forEach(function (r) {
-          map[r.id] = { id: r.id, boardId: r.board_id, n: r.n, grade: r.grade, tierLabel: r.tier_label };
-        });
+      try {
+        var res = await sb.from('draws').select('id,board_id,n,grade,tier_label').in('id', ids);
+        if (res.error) {
+          console.warn('[admin] 합배송 상품 목록을 불러오지 못했습니다', res.error);
+        } else {
+          (res.data || []).forEach(function (r) {
+            map[r.id] = { id: r.id, boardId: r.board_id, n: r.n, grade: r.grade, tierLabel: r.tier_label };
+          });
+        }
+      } catch (e) {
+        /* 조회가 통째로 실패해도 관리자 화면 전체가 멈추지 않게 (목록 자리만 안내로 바뀜) */
+        console.warn('[admin] 합배송 상품 조회 실패', e);
       }
       state.adminBatchDraws = map;
     },
