@@ -3912,6 +3912,20 @@ body.has-store-bar .site-footer{padding-bottom:calc(96px + env(safe-area-inset-b
 .gadmin-stock button{width:26px;height:26px;border-radius:50%;border:1px solid var(--line-strong);background:#fff;font-weight:900;line-height:1;font-size:15px;display:inline-flex;align-items:center;justify-content:center}
 .gadmin-stock button:active{background:var(--cream)}
 .gadmin-stock b{min-width:22px;text-align:center;font-size:12.5px}
+/* v4.4.28 — 굿즈 진열 순서 변경 (↑/↓) + 순번 표시 */
+.gadmin-pos{
+  flex:0 0 22px;width:22px;height:22px;border-radius:50%;
+  display:inline-flex;align-items:center;justify-content:center;
+  background:var(--ink);color:#fff;font-size:11px;font-weight:900;font-variant-numeric:tabular-nums;
+}
+.gadmin-move{display:inline-flex;align-items:center;gap:4px}
+.gadmin-move button{
+  width:30px;height:30px;border-radius:10px;border:1.5px solid var(--line-strong);background:#fff;
+  font-weight:900;font-size:14px;line-height:1;color:var(--ink);
+  display:inline-flex;align-items:center;justify-content:center;cursor:pointer;
+}
+.gadmin-move button:active{background:var(--cream)}
+.gadmin-move button:disabled{opacity:.32;cursor:default;background:var(--bg)}
 .goods-order .delivery-head .badge{font-size:11px}
 
 @media (max-width:900px){

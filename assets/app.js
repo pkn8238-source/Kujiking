@@ -1688,7 +1688,7 @@
         /* 굿즈샵 — 굿즈 목록은 공개 읽기(활성·품절 포함) */
         var goodsRes = await sb.from('goods_items')
           .select('id,name,points,stock,image_url,description,active,sort,created_at,updated_at')
-          .order('sort', { ascending: true }).order('created_at', { ascending: false });
+          .order('sort', { ascending: true }).order('created_at', { ascending: true });
         if (goodsRes.error) {
           /* 굿즈 SQL을 아직 실행하지 않은 DB여도 사이트는 그대로 뜨게 한다 */
           if (!/PGRST205|Could not find the table|does not exist|schema cache/i.test(String(goodsRes.error.code || '') + ' ' + String(goodsRes.error.message || ''))) {
@@ -2226,7 +2226,7 @@
           buildLocalViews();
           return it;
         }
-        var made = Object.assign({ id: uid('gi'), sort: 0, createdAt: nowISO(), updatedAt: nowISO() }, local);
+        var made = Object.assign({ id: uid('gi'), sort: goodsNextSort(), createdAt: nowISO(), updatedAt: nowISO() }, local);
         state.goodsItems.unshift(made);
         persist();
         buildLocalViews();
@@ -2239,10 +2239,32 @@
         await this.refreshData();
         return up.data ? mapGoodsItem(up.data) : null;
       }
-      var ins = await this.sb.from('goods_items').insert(row).select('*').single();
+      var ins = await this.sb.from('goods_items').insert(Object.assign({ sort: goodsNextSort() }, row)).select('*').single();
       if (ins.error) throw ins.error;
       await this.refreshData();
       return ins.data ? mapGoodsItem(ins.data) : null;
+    },
+
+    /* 관리자: 굿즈 진열 순서 저장 — 넘긴 id 순서대로 sort 0,1,2… 재부여 */
+    async saveGoodsOrder(ids) {
+      var order = (ids || []).map(String);
+      if (!order.length) return;
+      if (this.mode === 'local') {
+        order.forEach(function (id, i) {
+          var it = getGoodsItem(id);
+          if (it) { it.sort = i; it.updatedAt = nowISO(); }
+        });
+        persist();
+        buildLocalViews();
+        return;
+      }
+      var sb = this.sb;
+      var res = await Promise.all(order.map(function (id, i) {
+        return sb.from('goods_items').update({ sort: i }).eq('id', id);
+      }));
+      var bad = res.filter(function (r) { return r && r.error; })[0];
+      if (bad) throw bad.error;
+      await this.refreshData();
     },
 
     /* 관리자: 재고만 빠르게 조정 (+1 / -1) */
@@ -2834,13 +2856,26 @@
       nickname: (o.profiles && o.profiles.nickname) || ''
     };
   }
-  /* 교환 가능한 굿즈만 (관리자 화면에서는 숨김 포함 전체) */
+  /* 교환 가능한 굿즈만 (관리자 화면에서는 숨김 포함 전체) — 화면 순서는 sort 오름차순 */
+  function sortedGoodsItems() {
+    return (state.goodsItems || []).slice().sort(function (a, b) {
+      var sa = Number(a.sort) || 0, sb = Number(b.sort) || 0;
+      if (sa !== sb) return sa - sb;
+      return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+    });
+  }
   function goodsItemsForShop() {
-    return (state.goodsItems || []).filter(function (g) { return g.active !== false; });
+    return sortedGoodsItems().filter(function (g) { return g.active !== false; });
   }
   function getGoodsItem(id) {
     for (var i = 0; i < (state.goodsItems || []).length; i++) if (state.goodsItems[i].id === id) return state.goodsItems[i];
     return null;
+  }
+  /* 새 굿즈는 진열 맨 뒤로 — 기존 순서를 흐트러뜨리지 않는다 */
+  function goodsNextSort() {
+    var max = -1;
+    (state.goodsItems || []).forEach(function (g) { max = Math.max(max, Number(g.sort) || 0); });
+    return max + 1;
   }
   function goodsOrderStatusLabel(s) {
     return { '요청': '교환 완료 · 배송 준비', '출고완료': '출고 완료', '취소': '취소' }[s] || s || '-';
@@ -9877,15 +9912,17 @@
   function renderGoodsAdminList() {
     var el = $('#goodsAdminList');
     if (!el) return;
-    var items = state.goodsItems || [];
+    var items = sortedGoodsItems();
     var countEl = $('#goodsAdminCount');
     if (countEl) countEl.textContent = fmt(items.length) + '개';
     if (!items.length) {
       el.innerHTML = '<div class="empty"><p>등록된 굿즈가 없어요. 위에서 사진·상품명·포인트·재고만 넣으면 바로 올라갑니다.</p></div>';
       return;
     }
-    el.innerHTML = items.map(function (g) {
+    el.innerHTML = items.map(function (g, idx) {
+      var first = idx === 0, last = idx === items.length - 1;
       return '<article class="gadmin-row' + (String(ui.goodsEditingId) === String(g.id) ? ' is-editing' : '') + '">' +
+        '<span class="gadmin-pos" aria-hidden="true">' + fmt(idx + 1) + '</span>' +
         '<span class="gadmin-thumb">' + (g.image ? '<img src="' + h(coverSrc(g.image)) + '" alt="" loading="lazy">' : '<b aria-hidden="true">🎁</b>') + '</span>' +
         '<div class="gadmin-body">' +
           '<b>' + h(g.name) + '</b>' +
@@ -9893,6 +9930,12 @@
           (g.description ? '<em>' + h(g.description) + '</em>' : '') +
         '</div>' +
         '<div class="gadmin-acts">' +
+          '<div class="gadmin-move" role="group" aria-label="진열 순서 변경">' +
+            '<button type="button" data-action="goods-move" data-id="' + h(g.id) + '" data-dir="-1"' +
+              ' aria-label="' + h(g.name) + ' 위로 이동" title="위로"' + (first ? ' disabled aria-disabled="true"' : '') + '>↑</button>' +
+            '<button type="button" data-action="goods-move" data-id="' + h(g.id) + '" data-dir="1"' +
+              ' aria-label="' + h(g.name) + ' 아래로 이동" title="아래로"' + (last ? ' disabled aria-disabled="true"' : '') + '>↓</button>' +
+          '</div>' +
           '<div class="gadmin-stock">' +
             '<button type="button" data-action="goods-stock" data-id="' + h(g.id) + '" data-delta="-1" aria-label="재고 1개 줄이기">−</button>' +
             '<b>' + fmt(g.stock) + '</b>' +
@@ -11581,6 +11624,26 @@
               if (ui.view === 'goods') renderGoods();
               toast('굿즈를 삭제했어요', 'ok');
             }).catch(function (e) { toast(errMsg(e), 'err'); });
+          });
+          break;
+        }
+        case 'goods-move': {
+          var gmv = getGoodsItem(id);
+          if (!gmv) break;
+          var dir = Number(el.getAttribute('data-dir')) || 0;
+          var order = sortedGoodsItems().map(function (g) { return String(g.id); });
+          var at = order.indexOf(String(id));
+          var to = at + dir;
+          if (at < 0 || to < 0 || to >= order.length) break;
+          order.splice(to, 0, order.splice(at, 1)[0]);
+          el.setAttribute('disabled', 'disabled');
+          Backend.saveGoodsOrder(order).then(function () {
+            renderGoodsTab();
+            if (ui.view === 'goods') renderGoods();
+            toast('순서를 변경했어요', 'ok');
+          }).catch(function (e) {
+            el.removeAttribute('disabled');
+            toast(errMsg(e), 'err');
           });
           break;
         }
