@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.11, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.12, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -2000,10 +2000,15 @@
 
     /* ---------- 배송 / 전환 ---------- */
     async requestDelivery(drawId, info) {
+      var fee = DELIVERY_FEE_POINTS;
       if (this.mode === 'local') {
         var d = state.draws.filter(function (x) { return x.id === drawId; })[0];
         if (!d) throw new Error('보관함에서 상품을 찾을 수 없습니다.');
         if (d.itemStatus !== '보관중') throw new Error('이미 배송 신청했거나 전환된 상품입니다.');
+        var u = userById(d.userId);
+        var bal = u ? Number(u.points) || 0 : 0;
+        if (bal < fee) throw new Error('보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(bal) + 'P)');
+        if (u) u.points = bal - fee;
         var delivery = {
           id: uid('dl'), userId: d.userId, drawId: d.id, boardId: d.boardId,
           itemLabel: d.tierLabel, grade: d.grade,
@@ -2022,8 +2027,14 @@
         p_draw_id: drawId, p_recipient: info.recipient, p_phone: info.phone,
         p_postcode: info.postcode || '', p_address: info.address, p_memo: info.memo || null
       });
-      if (res.error) throw res.error;
+      if (res.error) {
+        var dmsg = String(res.error.message || '');
+        /* v4.4.12 — 서버가 포인트 부족으로 막으면 그 문구를 그대로 보여 준다 */
+        if (/포인트가 부족/.test(dmsg)) throw new Error(dmsg);
+        throw res.error;
+      }
       await this.refreshData();
+      return res.data || {};
     },
 
     async convertPoints(drawId) {
@@ -3857,7 +3868,11 @@
   }
 
   /* ---------- 고객센터 · 배송비 ---------- */
-  var SHIP_NOTICE_DEFAULT = '기본 배송비 4,000원 · 보관함에서 3건 이상 묶음(합배송) 신청 시 무료배송 (제주·도서산간 +3,000원)';
+  /* v4.4.12 — 보관함 배송 신청은 1건당 4,000P(택배비 4,000원 상당)를 굿즈 포인트에서 차감한다.
+     서버(public.request_delivery)도 같은 금액을 검증·차감하므로 두 곳의 숫자를 함께 바꾼다.
+     supabase/kujiking_delivery_4000p.sql */
+  var DELIVERY_FEE_POINTS = 4000;
+  var SHIP_NOTICE_DEFAULT = '보관함 배송 신청 1건당 4,000P가 차감됩니다 (택배비 4,000원 상당) · 포인트가 부족하면 신청할 수 없어요';
   var KAKAO_SOON = '현재 1:1 카카오톡 상담을 연결 중입니다! 잠시만 기다려 주세요.';
 
   function shippingNotice() {
@@ -4082,11 +4097,23 @@
     return '<div class="ship-note' + (cls ? ' ' + cls : '') + '">' +
       '<span class="ship-note-icon" aria-hidden="true">' + icon('truck') + '</span>' +
       '<div class="ship-note-body">' +
-        '<b>배송비 · 합배송 안내</b>' +
+        '<b>배송비 · 포인트 안내</b>' +
         '<p data-ship-notice>' + h(shippingNotice()) + '</p>' +
       '</div>' +
       kakaoPillHTML('kakao-pill-sm') +
     '</div>';
+  }
+
+  /* v4.4.12 — 내 보관함 위에 지금 보유 포인트와 배송 신청 1건 차감액을 나란히 보여 준다. */
+  function deliveryPointsBarHTML() {
+    var u = me();
+    if (!u) return '';
+    var bal = Number(u.points || 0);
+    var short = bal < DELIVERY_FEE_POINTS;
+    return '<div class="ship-fee ship-fee-bar' + (short ? ' is-short' : '') + '">' +
+      '<span class="ship-fee-row"><em>보유 굿즈 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
+      '<span class="ship-fee-row"><em>배송 신청 1건</em><b>' + fmt(DELIVERY_FEE_POINTS) + 'P 차감</b></span>' +
+      '</div>';
   }
 
   function csSettingsSql(kakao, notice) {
@@ -5183,7 +5210,7 @@
       '<li>상품 라인업과 확률·유의사항은 위 <b>상품 설명서</b>에서 확인해 주세요.</li>' +
       '</ul>' +
       '<div class="ship-line">' +
-        '<div class="ship-line-copy"><b>배송비 · 합배송</b><span data-ship-notice>' + h(shippingNotice()) + '</span></div>' +
+        '<div class="ship-line-copy"><b>배송비 · 포인트</b><span data-ship-notice>' + h(shippingNotice()) + '</span></div>' +
         kakaoPillHTML('kakao-pill-sm') +
       '</div>' +
       '<p class="fine">봉인 해시(SHA-256): <code>' + h(String(board.seedHash || '').slice(0, 40)) + '…</code><br>' +
@@ -8690,7 +8717,7 @@
   function renderMyInventory() {
     var el = $('#myInventory');
     if (!el) return;
-    var head = shipNoticeBoxHTML('ship-note-panel');
+    var head = shipNoticeBoxHTML('ship-note-panel') + deliveryPointsBarHTML();
     var items = (state.myDraws || []).filter(function (d) { return d.itemStatus !== '포인트지급'; });
     if (!items.length) {
       el.innerHTML = head + '<div class="card empty"><span class="empty-icon">' + icon('box') + '</span>' +
@@ -8720,7 +8747,7 @@
           (dl ? '<p class="inv-meta">' + icon('truck') + ' ' + h(dl.recipient) + ' · ' + h(dl.address) + '</p>' : '') +
           (dl && dl.tracking ? '<p class="inv-track">' + h(dl.carrier || '택배') + ' <b>' + h(dl.tracking) + '</b></p>' : '') +
           '<div class="inv-actions">' +
-            (canAct ? '<button class="btn btn-primary btn-sm" data-action="open-delivery" data-id="' + h(d.id) + '">배송 신청</button>' : '') +
+            (canAct ? '<button class="btn btn-primary btn-sm" data-action="open-delivery" data-id="' + h(d.id) + '">배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P</button>' : '') +
             (canAct && points > 0 ? '<button class="btn btn-outline btn-sm" data-action="convert-points" data-id="' + h(d.id) + '">포인트 전환 +' + fmt(points) + 'P</button>' : '') +
             (d.itemStatus === '배송신청' ? '<span class="muted small">출고 준비 중이에요</span>' : '') +
             (d.itemStatus === '출고완료' ? '<span class="muted small">배송이 시작되었어요</span>' : '') +
@@ -8825,6 +8852,7 @@
     if (notice) {
       notice.innerHTML = '<h3>당첨 상품 수령 안내</h3><ul>' +
         '<li>당첨 상품은 <b>내 보관함</b>에 보관됩니다. 배송 신청 시 입력한 주소로 발송됩니다.</li>' +
+        '<li>배송 신청 1건당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감됩니다. 포인트가 부족하면 신청할 수 없어요.</li>' +
         '<li>배송 신청 후에는 포인트 전환으로 바꿀 수 없어요.</li>' +
         '<li>굿즈 포인트는 하위 등급 당첨 시 자동 지급되며, 상품을 포인트로 전환해 받을 수도 있습니다.</li>' +
         '<li>결과에 문제가 있다고 느껴지면 공정성 검증 페이지에서 봉인 해시를 확인해 주세요.</li>' +
@@ -8849,9 +8877,10 @@
       '<p>남은 티켓이 <b>10장 이하</b>가 되면 여러 장을 한꺼번에 뽑는 <b>연뽑(5·10·15·20장)은 자동으로 잠깁니다.</b> 이때는 <b>줄서기(대기 순번)</b>에 참여한 뒤 <b>본인 차례에 60초 안에 1장씩</b> 뽑을 수 있으며, 60초 안에 뽑지 않거나 1장을 뽑고 나면 차례는 다음 대기자에게 넘어갑니다. 판의 <b>마지막 1장</b>을 뽑은 회원에게는 <b>라스트원 상품</b>이 지급됩니다.</p>' +
       '<h3>6. 상품 수령</h3>' +
       '<p>당첨 상품은 내 보관함에서 배송 신청한 주소로 발송됩니다. 주소 오류로 인한 반송은 재발송 비용이 발생할 수 있습니다.</p>' +
-      '<h3>7. 배송비 · 합배송</h3>' +
+      '<h3>7. 배송비 · 포인트</h3>' +
       '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
-      '<p class="fair-hint">배송비·합배송·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
+      '<p>배송 신청 1건당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감되며, 포인트가 4,000P 미만이면 신청할 수 없습니다. 차감된 포인트는 돌려받을 수 없습니다.</p>' +
+      '<p class="fair-hint">배송비·포인트·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
       kakaoPillHTML('kakao-pill-sm') +
       '<h3>8. 성인 전용 서비스 · 미성년자 결제 제한</h3>' +
       '<p>쿠지킹은 <b>만 19세 이상 성인 전용</b> 서비스입니다. 가입 시 만 19세 이상 성인임을 확인하며, 미성년자는 가입·결제·이용을 할 수 없습니다. 미성년자가 법정대리인의 동의 없이 결제하거나 성인인 것처럼 속여 결제한 경우 회사는 거래를 취소하거나 이용을 제한할 수 있으며, 이미 교환 코드를 사용해 랜덤 뽑기를 개봉(사용)한 경우에는 전자상거래법 제17조 제2항 제2호에 따라 청약철회·환불이 제한됩니다.</p>' +
@@ -9680,8 +9709,20 @@
     var d = (state.myDraws || []).filter(function (x) { return x.id === drawId; })[0];
     if (!d) return;
     var user = me();
+    var fee = DELIVERY_FEE_POINTS;
+    var bal = Number(user && user.points || 0);
+    var short = bal < fee;
+    var after = bal - fee;
     openModal('<h2 class="modal-title" id="modalTitle">배송 신청</h2>' +
       '<p class="modal-sub">' + (String(d.grade || '').toUpperCase() === 'LAST' ? '🏆 ' : '') + h(d.tierLabel || '당첨 상품') + ' · ' + drawNoLabel(d) + '</p>' +
+      '<div class="ship-fee">' +
+        '<span class="ship-fee-row"><em>배송 신청 포인트</em><b>' + fmt(fee) + 'P 차감</b></span>' +
+        '<span class="ship-fee-row"><em>보유 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
+        '<span class="ship-fee-row is-after' + (short ? ' is-short' : '') + '"><em>' + (short ? '부족한 포인트' : '신청 후 잔액') + '</em><b>' + (short ? fmt(-after) + 'P' : fmt(after) + 'P') + '</b></span>' +
+        (short
+          ? '<span class="ship-fee-warn">보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(bal) + 'P)</span>'
+          : '<span class="ship-fee-note">배송 신청하면 ' + fmt(fee) + 'P가 바로 차감되고, 신청 후에는 되돌릴 수 없어요.</span>') +
+      '</div>' +
       '<form data-form="delivery" novalidate data-id="' + h(d.id) + '">' +
         '<label class="field"><span>받는 사람</span><input name="recipient" type="text" maxlength="20" required value="' + h(user ? user.nickname : '') + '"></label>' +
         '<label class="field"><span>연락처</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required value="' + h(user ? user.phone : '') + '" placeholder="010-0000-0000"></label>' +
@@ -9698,7 +9739,7 @@
         '<p class="form-error" data-role="delivery-error" role="alert"></p>' +
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
-          '<button type="submit" class="btn btn-primary">배송 신청</button>' +
+          '<button type="submit" class="btn btn-primary"' + (short ? ' disabled aria-disabled="true"' : '') + '>' + (short ? '포인트 부족' : '배송 신청 · ' + fmt(fee) + 'P') + '</button>' +
         '</div>' +
       '</form>');
   }
@@ -11209,6 +11250,13 @@
 
       if (type === 'delivery') {
         var derr = form.querySelector('[data-role="delivery-error"]');
+        if (derr) derr.textContent = '';
+        var uDel = me();
+        var balDel = Number(uDel && uDel.points || 0);
+        if (balDel < DELIVERY_FEE_POINTS) {
+          if (derr) derr.textContent = '보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(balDel) + 'P)';
+          return;
+        }
         var info = {
           recipient: fieldValue(form, 'recipient').trim(),
           phone: fieldValue(form, 'phone').trim(),
@@ -11222,11 +11270,17 @@
         }
         var btnD = form.querySelector('button[type="submit"]');
         if (btnD) { btnD.setAttribute('aria-disabled', 'true'); btnD.textContent = '신청 중…'; }
-        Backend.requestDelivery(form.getAttribute('data-id'), info).then(function () {
+        Backend.requestDelivery(form.getAttribute('data-id'), info).then(function (done) {
           closeModal();
           ui.myTab = 'inventory';
           renderAll();
-          toast('배송 신청을 접수했어요. 출고되면 운송장이 표시됩니다.', 'ok');
+          /* v4.4.12 — 서버 SQL(request_delivery)이 아직 차감 전 함수면 points_used 가 비어 온다. */
+          var legacy = Backend.mode !== 'local' && done && done.id && done.points_used == null;
+          if (legacy) {
+            toast('배송 신청은 접수됐어요. 다만 포인트 차감 설정(DB SQL)이 아직 적용되지 않아 차감되지 않았습니다.', 'err');
+          } else {
+            toast('배송 신청을 접수했어요. ' + fmt(DELIVERY_FEE_POINTS) + 'P가 차감됐어요. 출고되면 운송장이 표시됩니다.', 'ok');
+          }
         }).catch(function (e3) {
           if (derr) derr.textContent = errMsg(e3);
           if (btnD) { btnD.removeAttribute('aria-disabled'); btnD.textContent = '배송 신청'; }
@@ -11798,7 +11852,7 @@
         '<h3>3. 교환·환불되는 경우</h3>' +
         '<p>상품의 하자, 오배송, 공개한 등급·상품과 다른 상품이 지급된 경우에는 개봉 여부와 관계없이 교환 또는 환불해 드립니다. 수령 후 7일 이내에 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 알려 주세요.</p>' +
         '<h3>4. 배송비</h3>' +
-        '<p>기본 배송비 4,000원이며, 보관함에서 3건 이상 묶음(합배송) 신청 시 무료입니다. 제주·도서산간은 3,000원이 추가됩니다. 단순 변심에 의한 반품은 왕복 배송비를 부담합니다.</p>' +
+        '<p>보관함 배송 신청 1건당 4,000P(택배비 4,000원 상당)가 보유 굿즈 포인트에서 차감됩니다. 포인트가 4,000P 미만이면 배송 신청을 할 수 없으며, 차감된 포인트는 환급되지 않습니다. 제주·도서산간 추가 배송비는 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 안내해 드립니다. 단순 변심에 의한 반품은 왕복 배송비를 부담합니다.</p>' +
         '<h3>5. 처리 기간</h3>' +
         '<p>접수 후 3영업일 이내에 회신하고, 환불이 확정되면 7일 이내에 결제 수단으로 환급합니다.</p>' +
         '<h3>6. 굿즈 포인트</h3>' +

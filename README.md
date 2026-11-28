@@ -10,6 +10,22 @@
 
 ---
 
+## v4.4.12 — 보관함 배송 신청 1건당 4,000P 차감
+
+- **요청**: 기남 님 카드 선택 `4,000P 차감 (택배비와 동일)` (11-28). 실물 경품을 보관함에서 배송 신청하면 1건당 4,000P를 굿즈 포인트에서 차감한다.
+- **화면**(`assets/app.js`):
+  - `DELIVERY_FEE_POINTS = 4000` 상수를 두고 화면 문구·검증·토스트가 모두 이 값을 쓴다.
+  - 내 보관함 상단에 `보유 굿즈 포인트 / 배송 신청 1건 4,000P 차감` 줄(`deliveryPointsBarHTML`), 카드 버튼은 `배송 신청 · 4,000P`.
+  - 배송 신청 창에 `배송 신청 포인트 4,000P 차감 · 보유 포인트 · 신청 후 잔액` 표를 넣고, 4,000P 미만이면 `보유 포인트가 부족합니다 (4,000P 필요, 현재 OOO P)`를 띄우고 신청 버튼을 `포인트 부족`(비활성)으로 잠근다. 제출 직전에 한 번 더 잔액을 검사한다.
+  - 성공 토스트에 차감 P를 표시하고, `requestDelivery()`가 `refreshData()` 뒤 `points_used`를 돌려줘 내 보관함·내 정보 잔액이 바로 줄어든다. 서버 SQL이 아직 차감 전 함수면 `points_used`가 없으므로 `DB SQL 미적용` 안내를 띄운다(요청 자체는 접수).
+  - 로컬(데모) 모드도 같은 규칙으로 차감한다.
+- **문구**: `SHIP_NOTICE_DEFAULT`·`index.html` `data-ship-notice` 2곳·관리자 설정 placeholder·이용 안내 7항·청약철회/환불 `4. 배송비`·당첨 상품 수령 안내를 `보관함 배송 신청 1건당 4,000P 차감 (택배비 4,000원 상당)` 기준으로 맞췄다. 기존 `3건 이상 합배송 무료배송 · 제주·도서산간 +3,000원` 문구는 4,000P 기준과 어긋나 삭제하고, 제주·도서산간 추가 배송비는 카카오톡 채널 문의로 안내한다. 박스 제목 `배송비 · 합배송`도 `배송비 · 포인트`로 교체.
+- **DB**: `supabase/kujiking_delivery_4000p.sql` — `public.request_delivery(...)` 를 `CREATE OR REPLACE`. 인자 6개·`security definer`·`search_path`·`for update`·`deliveries`/`draws` 기록은 그대로이고, `profiles` 행을 잠그고 4,000P 미만이면 `보유 포인트가 부족합니다 (4,000P 필요, 현재 OOO P)`로 막은 뒤 `points = points - 4000`을 같은 트랜잭션에서 빼고 `points_used`·`points_balance`를 돌려준다. **사용자가 Supabase SQL Editor에서 실행해야 실제 차감이 켜진다.**
+- **버전**: `index.html` 자산 쿼리(`styles.css`·`app.js`) 4.4.12, `protoTag` v4.4.12, `assets/app.js` 헤더 4.4.12, `styles.css` 주석 4.4.12.
+- **검증**: libpg_query(plpgsql) 파싱 통과(`errors: 없음`), esprima `app.js` 파싱 OK, CSS 중괄호 2676:2676·HTML div 207:207, 라이브 `https://kujiking.co.kr/` 응답 SHA-256 == 로컬 파일 SHA-256.
+
+---
+
 ## v4.4.11 — '📦 상품 상태 안내' 1번째 항목 문구 수정
 
 - **요청**: 기남 님 1번째 항목의 `경품·리셀 매입 상품으로`를 `경품 · 정품 굿즈 유통 특성상,`으로 수정, v4.4.11 배포(11-28).
