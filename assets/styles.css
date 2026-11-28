@@ -1423,12 +1423,12 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .ticker-time{color:var(--muted);font-size:10.5px}
 .ticker-empty{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--muted);font-weight:600}
 
-/* ---------- v4.4.18 상위상(A·B·C·라스트원) 당첨 축하 — 풀와이드 자동 슬라이드 배너 ----------
-   1건이어도 패널 폭을 꽉 채우는 가로 배너 한 장으로 보여 준다(오른쪽이 비어 보이지 않게).
+/* ---------- v4.4.20 상위상(A·B·C·라스트원) 당첨 축하 — 슬림 가로 스트립 배너 ----------
+   1건이어도 패널 폭을 꽉 채우는 얇은 가로 배너 한 장(높이 150px 남짓).
    2건 이상이면 3.5초마다 다음 배너로 자동 전환(app.js 뷰너 캐러셀). */
 .winners-showcase{margin-top:20px}
 .ws-panel{
-  position:relative;overflow:hidden;padding:20px 22px 18px;border-radius:24px;
+  position:relative;overflow:hidden;padding:12px 16px;border-radius:20px;
   background:linear-gradient(180deg,#fffefa 0%,#fff9ec 100%);
   border:1px solid #eee0c4;box-shadow:0 1px 0 #fff inset,0 14px 34px -26px rgba(90,62,10,.45)
 }
@@ -1436,66 +1436,66 @@ html.is-page-hidden *{animation-play-state:paused !important}
   content:"";position:absolute;right:-60px;top:-90px;width:320px;height:240px;pointer-events:none;
   background:radial-gradient(circle at 100% 0,rgba(255,213,30,.20),rgba(255,213,30,0) 62%)
 }
-.ws-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:0 0 14px}
-.ws-title{font-size:19px;font-weight:900;letter-spacing:-.035em;line-height:1.25;color:var(--ink);min-width:0}
+.ws-head{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;margin:0 0 8px}
+.ws-title{font-size:15px;font-weight:900;letter-spacing:-.035em;line-height:1.25;color:var(--ink);min-width:0}
 .ws-nav{display:flex;gap:6px;flex:0 0 auto}
 .ws-arrow{
-  display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;padding:0;
+  display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;padding:0;
   border-radius:50%;background:rgba(255,255,255,.92);border:1px solid #ecdfc6;color:#7d6a4c;
   box-shadow:0 1px 2px rgba(23,18,14,.05);cursor:pointer;font-family:inherit;
   transition:background .16s ease,color .16s ease,transform .16s ease
 }
 .ws-arrow:hover{background:#fff;color:#3d2f18;transform:translateY(-1px)}
-.ws-arrow svg{width:15px;height:15px}
+.ws-arrow svg{width:13px;height:13px}
 .ws-track{
-  position:relative;display:flex;gap:14px;overflow-x:auto;padding:2px;border-radius:20px;
+  position:relative;display:flex;gap:12px;overflow-x:auto;padding:1px;border-radius:16px;
   scroll-snap-type:x mandatory;scrollbar-width:none;-webkit-overflow-scrolling:touch
 }
 .ws-track::-webkit-scrollbar{display:none}
 .winner-card{
   position:relative;flex:0 0 100%;display:flex;align-items:stretch;gap:0;width:100%;min-width:0;padding:0;
-  border-radius:20px;background:#fff;border:1px solid rgba(23,18,14,.07);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 12px 28px -18px rgba(60,40,10,.35),0 2px 6px rgba(23,18,14,.04);
+  border-radius:16px;background:#fff;border:1px solid rgba(23,18,14,.07);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 10px 24px -18px rgba(60,40,10,.35),0 2px 6px rgba(23,18,14,.04);
   scroll-snap-align:start;transition:transform .18s ease,box-shadow .18s ease;overflow:hidden
 }
-.winner-card:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 18px 36px -18px rgba(60,40,10,.45),0 3px 8px rgba(23,18,14,.05)}
-/* 왼쪽: 넓은 순백 스튜디오 자리 — 이미지가 배너 왼쪽을 꽉 채원 휑하지 않게 */
+.winner-card:hover{transform:translateY(-2px);box-shadow:inset 0 1px 0 rgba(255,255,255,.9),0 16px 32px -18px rgba(60,40,10,.45),0 3px 8px rgba(23,18,14,.05)}
+/* 왼쪽: 82px 상품 타일 — 얇은 배너 높이를 이 타일이 정한다 */
 .winner-stage{
-  flex:0 0 352px;align-self:stretch;display:flex;align-items:center;justify-content:center;padding:20px;
+  flex:0 0 108px;align-self:stretch;display:flex;align-items:center;justify-content:center;padding:10px;
   background:radial-gradient(circle at 32% 16%,#fffefb 0%,#fdf6e6 58%,#fbeed6 100%);
   border-right:1px solid #f2e7d3
 }
 .winner-thumb{
-  position:relative;flex:0 0 auto;width:258px;height:258px;border-radius:20px;background:#fff;
-  border:1px solid #ecdfc6;box-shadow:inset 0 0 0 7px #fff,0 8px 22px rgba(60,40,10,.12);overflow:hidden
+  position:relative;flex:0 0 auto;width:82px;height:82px;border-radius:13px;background:#fff;
+  border:1px solid #ecdfc6;box-shadow:0 6px 16px rgba(60,40,10,.12);overflow:hidden
 }
-.winner-main{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;gap:0;min-width:0;padding:20px 24px 20px 26px}
-/* 오른쪽: 시간·보러가기를 담는 크림색 CTA 칸 — 배너 오른쪽이 비어 보이지 않게 */
+.winner-main{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;gap:0;min-width:0;padding:12px 18px}
+/* 오른쪽: 시간·보러가기를 담는 크림색 CTA 칸 — 얇은 한 줄로 유지 */
 .winner-side{
-  flex:0 0 240px;align-self:stretch;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:11px;
-  padding:18px 18px;background:linear-gradient(180deg,#fffbf2 0%,#fdf3df 100%);border-left:1px solid #f2e7d3
+  flex:0 0 auto;align-self:stretch;display:flex;flex-direction:row;align-items:center;justify-content:center;gap:12px;
+  padding:12px 18px;background:linear-gradient(180deg,#fffbf2 0%,#fdf3df 100%);border-left:1px solid #f2e7d3
 }
-/* 등급 이미지에 박혀 있는 좌상단 등급 스탬프는 잘라내고 피규어만 크게 보여 준다 */
-.winner-thumb img{position:absolute;right:0;top:50%;transform:translateY(-50%);width:130%;height:130%;max-width:none;object-fit:cover;object-position:50% 50%}
-.winner-noimg{position:absolute;inset:0;display:grid;place-items:center;font-size:38px;opacity:.75}
-.winner-kicker{display:flex;align-items:center;gap:10px;min-width:0;margin-bottom:7px}
+/* 썸네일은 원본 등급 카드(900×900)를 자르지 않고 통째로 — 캐릭터가 정확히 정중앙에 온다 */
+.winner-thumb img{position:static;display:block;width:100%;height:100%;max-width:none;object-fit:contain;object-position:50% 50%}
+.winner-noimg{position:absolute;inset:0;display:grid;place-items:center;font-size:28px;opacity:.75}
+.winner-kicker{display:flex;align-items:center;gap:8px;min-width:0;margin-bottom:5px}
 .winner-badge{
-  flex:0 0 auto;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:8px;
-  font-size:11px;font-weight:900;letter-spacing:-.01em;color:#fff;box-shadow:0 1px 2px rgba(23,18,14,.12)
+  flex:0 0 auto;display:inline-flex;align-items:center;height:21px;padding:0 9px;border-radius:7px;
+  font-size:10.5px;font-weight:900;letter-spacing:-.01em;color:#fff;box-shadow:0 1px 2px rgba(23,18,14,.12)
 }
 .winner-badge.grade-a{background:linear-gradient(135deg,#ff7a66,#d92a1c)}
 .winner-badge.grade-b{background:linear-gradient(135deg,#ffb45c,#f06a12)}
 .winner-badge.grade-c{background:linear-gradient(135deg,#ffe07a,#e9a600);color:#3d2a00}
 .winner-badge.grade-last{background:linear-gradient(135deg,#2a2119,#4a3400);color:#ffe9a8;box-shadow:inset 0 0 0 1px rgba(255,214,120,.45)}
-.winner-board{font-size:13.5px;font-weight:700;color:#8b8177;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.winner-prize{font-size:36px;font-weight:900;letter-spacing:-.045em;line-height:1.18;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.winner-name{margin-top:0;font-size:16px;font-weight:700;color:#5f564d;line-height:1.4;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-board{font-size:12px;font-weight:700;color:#8b8177;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-prize{font-size:20px;font-weight:900;letter-spacing:-.045em;line-height:1.2;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.winner-name{margin-top:0;font-size:13.5px;font-weight:700;color:#5f564d;line-height:1.35;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .winner-name b{color:var(--ink);font-weight:900}
-.winner-time{flex:0 0 auto;font-size:12px;font-weight:700;color:#a89b8d;white-space:nowrap;letter-spacing:.01em}
+.winner-time{flex:0 0 auto;font-size:11.5px;font-weight:700;color:#a89b8d;white-space:nowrap;letter-spacing:.01em}
 .winner-cta{
-  flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 18px;border-radius:999px;
+  flex:0 0 auto;display:inline-flex;align-items:center;gap:5px;height:32px;padding:0 15px;border-radius:999px;
   background:linear-gradient(135deg,#2a2119,#4a3400);color:#ffe9a8;
-  font-size:13px;font-weight:900;letter-spacing:-.01em;white-space:nowrap;
+  font-size:12.5px;font-weight:900;letter-spacing:-.01em;white-space:nowrap;
   box-shadow:0 8px 18px -12px rgba(60,40,10,.75);transition:transform .16s ease
 }
 .winner-cta i{font-style:normal;font-weight:900}
@@ -1508,10 +1508,10 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .winner-card.is-lastone .winner-name{color:rgba(255,248,230,.82)}
 .winner-card.is-lastone .winner-name b{color:#ffe680}
 .winner-card.is-lastone .winner-time{color:rgba(255,248,230,.62)}
-.winner-card.is-lastone .winner-thumb{border-color:rgba(255,214,120,.45);background:#fffdf6;box-shadow:inset 0 0 0 7px #fffdf6,0 8px 22px rgba(0,0,0,.4)}
+.winner-card.is-lastone .winner-thumb{border-color:rgba(255,214,120,.45);background:#fffdf6;box-shadow:0 6px 16px rgba(0,0,0,.4)}
 .winner-card.is-lastone .winner-cta{background:linear-gradient(135deg,#ffe680,#ffc83d);color:#2a2119;box-shadow:0 8px 18px -12px rgba(255,200,60,.6)}
 .winner-card.is-lastone .winner-cta{background:linear-gradient(135deg,#ffe680,#ffc83d);color:#2a2119;box-shadow:0 8px 18px -12px rgba(255,200,60,.6)}
-.ws-dots{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:12px}
+.ws-dots{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:9px}
 .ws-dot{
   width:7px;height:7px;padding:0;border:0;border-radius:999px;background:#e4d5b6;cursor:pointer;
   transition:width .22s ease,background .22s ease
@@ -3601,22 +3601,27 @@ button.lastone-card.is-won{border-color:#c98a00;box-shadow:0 0 0 3px rgba(255,21
   .home-top-btns .btn{min-height:38px;padding:8px 13px;font-size:12.5px}
   .home-top ~ .live-ticker{margin-top:12px}
   .winners-showcase{margin-top:14px}
-  .ws-panel{padding:15px 13px 13px;border-radius:18px}
-  .ws-head{margin-bottom:11px;gap:8px}
-  .ws-title{font-size:16px;letter-spacing:-.04em}
-  .ws-arrow{width:28px;height:28px}
-  .ws-track{gap:10px;padding:1px;border-radius:16px}
-  .winner-card{flex-wrap:wrap;align-items:flex-start;gap:0;padding:0;border-radius:16px}
-  .winner-stage{flex:0 0 112px;align-self:stretch;padding:10px;border-right:1px solid #f2e7d3;border-bottom:0;border-radius:16px 0 0 16px}
-  .winner-thumb{width:92px;height:92px;border-radius:14px}
-  .winner-main{flex:1 1 0;flex-wrap:wrap;gap:0;padding:12px 13px;min-width:0}
-  .winner-badge{height:21px;padding:0 8px;font-size:10.5px}
-  .winner-board{font-size:11px}
-  .winner-prize{font-size:18px;line-height:1.25}
-  .winner-name{margin-top:6px;font-size:12px;white-space:normal}
-  .winner-side{flex:1 0 100%;flex-direction:row;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;background:#fffaf0;border-left:0;border-top:1px solid #f2e7d3}
-  .winner-cta{height:30px;padding:0 13px;font-size:11.5px;margin-left:auto}
-  .ws-dots{margin-top:10px}
+  .ws-panel{padding:10px 12px;border-radius:16px}
+  .ws-head{margin-bottom:7px;gap:8px}
+  .ws-title{font-size:14px;letter-spacing:-.04em}
+  .ws-arrow{width:24px;height:24px}
+  .ws-arrow svg{width:12px;height:12px}
+  .ws-track{gap:10px;padding:1px;border-radius:14px}
+  .winner-card{flex-wrap:nowrap;align-items:stretch;gap:0;padding:0;border-radius:14px}
+  .winner-stage{flex:0 0 78px;align-self:stretch;padding:7px;border-right:1px solid #f2e7d3;border-bottom:0;border-radius:14px 0 0 14px}
+  .winner-thumb{width:64px;height:64px;border-radius:11px;box-shadow:0 4px 10px rgba(60,40,10,.1)}
+  .winner-main{flex:1 1 0;flex-wrap:nowrap;gap:0;padding:8px 8px 8px 10px;min-width:0;justify-content:center}
+  .winner-kicker{gap:6px;margin-bottom:4px}
+  .winner-badge{height:19px;padding:0 7px;border-radius:6px;font-size:9.5px}
+  .winner-board{font-size:10.5px}
+  .winner-prize{font-size:15px;line-height:1.2;letter-spacing:-.04em}
+  .winner-name{margin-top:3px;font-size:11.5px;line-height:1.3;white-space:nowrap}
+  .winner-side{flex:0 0 auto;flex-direction:column;align-items:flex-end;justify-content:center;gap:5px;padding:8px 10px 8px 4px;background:transparent;border-left:0}
+  .winner-card.is-lastone .winner-side{background:transparent;border-left:0}
+  .winner-card.is-lastone .winner-thumb{box-shadow:0 4px 10px rgba(0,0,0,.35)}
+  .winner-time{font-size:10px}
+  .winner-cta{height:26px;padding:0 10px;font-size:11px;margin-left:0;gap:3px}
+  .ws-dots{margin-top:8px}
   .home-boards{padding-top:18px}
   .home-guide-grid{grid-template-columns:1fr}
   .guide-steps{grid-template-columns:1fr}
