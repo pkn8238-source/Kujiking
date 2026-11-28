@@ -128,7 +128,7 @@
   }
   var h = escapeHtml;
   /* 실물 커버 등 상품 이미지 캐시 갱신용 버전 (커버 교체 시 올린다) */
-  var COVER_VER = '4.4.27';
+  var COVER_VER = '4.4.28';
   /* 판마다 지정한 스토어 링크가 없을 때 쓰는 기본 스마트스토어 상품 주소 */
   var DEFAULT_STORE_URL = STORE_PRODUCT_URL;
   /* P상(굿즈 포인트) 카드 기본 이미지 — 판에 P상 이미지가 없으면 이 이미지를 쓴다 */
@@ -9724,6 +9724,40 @@
     return out;
   }
 
+  /* v4.4.28 — 배송·출고에서 '어느 판 상품인지' + '상품 이미지'를 바로 보이게.
+     판은 카테고리가 둘 다 '치이카와'라 구분이 안 됐으므로 board.title 을 쓴다.
+     (뽑기판 전환 칩의 boardShortName 과는 별개 — 여기서는 '쿠지'까지 남겨 더 분명하게) */
+  function deliveryBoardName(board) {
+    var t = String((board && board.title) || '').replace(/^\s*\[[^\]]*\]\s*/, '').trim();
+    return t || String((board && board.category) || '판');
+  }
+  function boardChipHTML(board, boardId) {
+    if (!board && !boardId) return '';
+    var name = board ? deliveryBoardName(board) : '';
+    if (!name) return '';
+    return '<span class="dv-board-chip" title="' + h((board && board.title) || name) + '">' +
+      icon('box') + h(name) + '</span>';
+  }
+  /* 등급 → 상품 이미지 (라스트원은 board.lastOneImage 우선) */
+  function deliveryImageOf(board, grade) {
+    if (!board) return '';
+    var isLast = String(grade || '').toUpperCase() === 'LAST';
+    if (isLast) return board.lastOneImage || board.cover || '';
+    var t = tierOf(board, grade);
+    return (t && (tierImageOf(t) || t.image)) || board.cover || '';
+  }
+  function deliveryThumbHTML(board, grade, size) {
+    var img = deliveryImageOf(board, grade);
+    var isLast = String(grade || '').toUpperCase() === 'LAST';
+    var mark = isLast ? 'LAST' : gradeLetter(grade);
+    var cls = 'dv-thumb' + (size ? ' ' + size : '');
+    return '<span class="' + cls + '" style="--gc:' + gradeColor(grade) + '">' +
+      (img
+        ? '<img src="' + h(coverSrc(img)) + '" alt="' + h(mark) + '상 상품 이미지" loading="lazy" decoding="async">'
+        : '<b aria-hidden="true">' + h(mark) + '</b>') +
+      '</span>';
+  }
+
   function deliveryBatchHTML(d) {
     var items = deliveryBatchItems(d);
     if (items.length < 2) return '';
@@ -9735,13 +9769,13 @@
         }
         var board = getBoard(it.boardId);
         var isLast = String(it.grade || '').toUpperCase() === 'LAST';
-        var where = board ? board.category : '';
         var no = isLast ? '라스트원' : (it.n == null || it.n === '' ? '' : fmt(it.n) + '번');
-        var tail = [where, no].filter(Boolean).join(' ');
         return '<li>' +
+          deliveryThumbHTML(board, it.grade, 'sm') +
           '<span class="grade-badge sm' + (isLast ? ' grade-last' : '') + '" style="background:' + gradeColor(it.grade) + '" title="' + h(isLast ? '라스트원' : gradeLetter(it.grade) + '상') + '">' + h(isLast ? 'LAST' : gradeLetter(it.grade)) + '</span>' +
           '<span class="delivery-batch-name"><b>' + h(it.tierLabel || '당첨 상품') + '</b>' +
-            (tail ? '<em>(' + h(tail) + ')</em>' : '') + '</span>' +
+            '<span class="dv-tags">' + boardChipHTML(board, it.boardId) +
+            (no ? '<em>' + h(no) + '</em>' : '') + '</span></span>' +
         '</li>';
       }).join('') + '</ul>' +
     '</div>';
@@ -9762,13 +9796,20 @@
     el.innerHTML = rows.map(function (d) {
       var board = getBoard(d.boardId);
       var done = d.status === '출고완료';
+      var isBatch = !!(d.batchDrawIds && d.batchDrawIds.length > 1);
       return '<article class="delivery-card' + (done ? ' is-done' : '') + '">' +
         '<div class="delivery-head">' +
-          '<span class="status-pill ' + statusClass(done ? '출고완료' : '배송신청') + '">' + (done ? '출고 완료' : '출고 대기') + '</span>' +
-          '<b>' + h(d.itemLabel || '당첨 상품') + '</b>' +
-          (d.batchDrawIds && d.batchDrawIds.length > 1 ? '<span class="badge batch-badge">' + icon('box') + ' 합배송 ' + fmt(d.batchDrawIds.length) + '건</span>' : '') +
-          (d.grade ? '<span class="grade-badge sm' + (String(d.grade).toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(String(d.grade).toUpperCase() === 'LAST' ? 'LAST' : d.grade) + '</span>' : '') +
-          '<span class="muted small">' + h(board ? board.category : '') + ' · ' + formatDateTime(d.requestedAt) + '</span>' +
+          deliveryThumbHTML(board, d.grade, 'lg') +
+          '<div class="delivery-head-main">' +
+            '<div class="delivery-head-line">' +
+              '<span class="status-pill ' + statusClass(done ? '출고완료' : '배송신청') + '">' + (done ? '출고 완료' : '출고 대기') + '</span>' +
+              boardChipHTML(board, d.boardId) +
+              (isBatch ? '<span class="badge batch-badge">' + icon('box') + ' 합배송 ' + fmt(d.batchDrawIds.length) + '건</span>' : '') +
+              (d.grade ? '<span class="grade-badge sm' + (String(d.grade).toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(String(d.grade).toUpperCase() === 'LAST' ? 'LAST' : d.grade) + '</span>' : '') +
+            '</div>' +
+            '<b class="delivery-title">' + h(d.itemLabel || '당첨 상품') + '</b>' +
+            '<span class="muted small">' + formatDateTime(d.requestedAt) + '</span>' +
+          '</div>' +
         '</div>' +
         deliveryBatchHTML(d) +
         '<div class="delivery-body">' +

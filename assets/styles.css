@@ -1782,10 +1782,37 @@ html.is-page-hidden *{animation-play-state:paused !important}
 .delivery-batch-name b{font-weight:900;word-break:keep-all}
 .delivery-batch-name em{font-style:normal;font-size:11.5px;font-weight:700;color:var(--muted)}
 .delivery-batch-list li.is-missing .delivery-batch-name b{color:var(--muted);font-weight:700}
+/* v4.4.28 — 배송·출고: 어느 판 상품인지(판 배지) + 상품 썸네일 */
+.delivery-head{align-items:flex-start}
+.delivery-head-main{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1 1 220px}
+.delivery-head-line{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.delivery-head .delivery-title{font-size:15px;font-weight:900;line-height:1.35;word-break:keep-all}
+.dv-board-chip{
+  display:inline-flex;align-items:center;gap:4px;max-width:100%;
+  padding:3px 8px 3px 6px;border-radius:999px;
+  background:#fff3d6;border:1.5px solid var(--ink);
+  font-size:11px;font-weight:900;letter-spacing:-.2px;color:var(--ink);white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis;
+}
+.dv-board-chip .ico{width:11px;height:11px;flex:none}
+.dv-thumb{
+  flex:none;display:grid;place-items:center;overflow:hidden;
+  background:#fff;border:1.5px solid var(--line-strong);border-radius:12px;
+  box-shadow:0 2px 0 rgba(23,18,14,.06);
+}
+.dv-thumb img{width:100%;height:100%;object-fit:contain;display:block}
+.dv-thumb b{font-size:11px;font-weight:900;color:var(--gc,#8b7a66)}
+.dv-thumb.lg{width:56px;height:56px;border-radius:14px}
+.dv-thumb.sm{width:44px;height:44px;border-radius:10px}
+.dv-tags{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;min-width:0}
 @media (max-width:560px){
   .delivery-batch{padding:9px 10px}
   .delivery-batch-name{font-size:12.5px}
   .delivery-batch-name em{font-size:11px}
+  .dv-thumb.lg{width:48px;height:48px;border-radius:12px}
+  .dv-thumb.sm{width:40px;height:40px;border-radius:9px}
+  .dv-board-chip{font-size:10.5px}
+  .delivery-head-main{flex-basis:100%}
 }
 
 .setup-steps{margin:12px 0 10px;padding-left:0;display:flex;flex-direction:column;gap:7px;list-style:none;counter-reset:setup}
