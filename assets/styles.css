@@ -4431,3 +4431,43 @@ body.hide-coupon-fab .coupon-fab{display:none}
 @media (max-width:420px){
   .points-mode{font-size:13.5px;padding:10px 8px}
 }
+
+/* =========================================================
+   v4.4.21 — 내 보관함 일괄(합배송) 신청
+   · 보관중 상품마다 체크박스 + '보관중 전체 선택' 바
+   · 여러 개를 골라도 신청 1건으로 묶여 4,000P 한 번만 차감
+   ========================================================= */
+.pick-box{width:20px;height:20px;flex:none;accent-color:var(--ink);cursor:pointer}
+.batch-bar{
+  margin:12px 0 0;padding:14px 15px;display:flex;flex-direction:column;gap:10px;
+  background:#fffdf5;border:2px solid var(--ink);border-radius:var(--radius);
+  box-shadow:0 4px 0 rgba(23,18,14,.14);
+}
+.batch-bar-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.batch-all{display:inline-flex;align-items:center;gap:9px;font-size:13.5px;font-weight:900;cursor:pointer;line-height:1.2}
+.batch-count{font-style:normal;font-size:12px;font-weight:800;color:var(--muted)}
+.batch-btn{width:100%;justify-content:center;font-size:14.5px;letter-spacing:-.01em}
+.batch-btn[disabled]{opacity:.45;box-shadow:none;cursor:default}
+.batch-hint{margin:0;font-size:11.5px;line-height:1.55;font-weight:700;color:var(--muted);word-break:keep-all}
+.batch-hint b{color:var(--ink)}
+.inv-card.is-selectable{grid-template-columns:22px 72px minmax(0,1fr);gap:12px}
+.inv-pick{align-self:flex-start;margin-top:26px;display:grid;place-items:center;cursor:pointer;line-height:0}
+.inv-card.is-picked{border-color:var(--ink);box-shadow:0 0 0 3px rgba(255,213,30,.6),var(--shadow-soft)}
+.batch-badge{
+  display:inline-flex;align-items:center;gap:4px;background:var(--yellow);
+  border:1.5px solid var(--ink);font-size:10.5px;font-weight:900;
+}
+.batch-badge .ico{width:12px;height:12px}
+.batch-list{list-style:none;margin:0 0 12px;padding:0;display:flex;flex-direction:column;gap:8px;max-height:192px;overflow:auto}
+.batch-list li{display:flex;align-items:center;gap:10px;padding:9px 11px;border-radius:12px;background:var(--bg);border:1px solid var(--line)}
+.batch-item{display:flex;flex-direction:column;gap:1px;min-width:0}
+.batch-item b{font-size:13px;font-weight:900;line-height:1.35}
+.batch-item em{font-style:normal;font-size:11px;font-weight:700;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (max-width:560px){
+  .inv-card.is-selectable{grid-template-columns:20px 56px minmax(0,1fr);gap:10px}
+  .inv-pick{margin-top:18px}
+  .batch-bar{padding:12px 13px;gap:9px}
+  .batch-all{font-size:13px}
+  .batch-btn{font-size:13.5px}
+  .batch-hint{font-size:11px}
+}

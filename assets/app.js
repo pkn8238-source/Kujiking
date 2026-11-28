@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.20, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.21, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -81,6 +81,7 @@
     boardId: null,
     boardTab: 'main',
     myTab: 'coupons',
+    selDraws: [],            /* v4.4.21 — 내 보관함 합배송 선택 (보관중 draw id 목록) */
     adminTab: 'members',
     adminUnlocked: false,
     filters: { category: '전체', price: 'all', sort: 'recommend' },
@@ -2038,6 +2039,71 @@
       return res.data || {};
     },
 
+    /* v4.4.21 — 합배송(일괄 배송) 신청
+       보관중 상품 여러 개를 한 번에 신청한다. 서버 함수(request_batch_delivery)가
+       모두 본인 소유·보관중인지 확인한 뒤 4,000P를 '한 번만' 차감하고,
+       대표 1건의 배송 기록(deliveries)에 묶인 draw id 목록(batch_draw_ids)을 남긴다.
+       SQL 이 아직 서버에 없으면 포인트를 건드리지 않고 안내만 한다. */
+    async requestBatchDelivery(drawIds, info) {
+      var fee = DELIVERY_FEE_POINTS;
+      var ids = [];
+      (drawIds || []).forEach(function (x) {
+        var v = String(x == null ? '' : x).trim();
+        if (v && ids.indexOf(v) === -1) ids.push(v);
+      });
+      if (!ids.length) throw new Error('합배송으로 보낼 상품을 선택해 주세요.');
+      if (ids.length > DELIVERY_BATCH_MAX) throw new Error('한 번에 최대 ' + DELIVERY_BATCH_MAX + '건까지 합배송 신청할 수 있어요.');
+
+      if (this.mode === 'local') {
+        var myId = state.me ? state.me.id : null;
+        if (!myId) throw new Error('로그인이 필요합니다.');
+        var picks = [];
+        for (var i = 0; i < ids.length; i++) {
+          var d = state.draws.filter(function (x) { return x.id === ids[i]; })[0];
+          if (!d || d.userId !== myId) throw new Error('보관함에서 상품을 찾을 수 없습니다.');
+          if (d.itemStatus !== '보관중') throw new Error('이미 배송 신청했거나 전환된 상품이 있어요 (' + (d.tierLabel || '상품') + ').');
+          picks.push(d);
+        }
+        var u = userById(myId);
+        var bal = u ? Number(u.points) || 0 : 0;
+        if (bal < fee) throw new Error('보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(bal) + 'P)');
+        if (u) u.points = bal - fee;
+        var head = picks[0] || {};
+        var label = picks.length > 1
+          ? '[합배송 ' + picks.length + '건] ' + (head.tierLabel || '당첨 상품') + ' 외 ' + (picks.length - 1) + '건'
+          : (head.tierLabel || '당첨 상품');
+        var delivery = {
+          id: uid('dl'), userId: myId, drawId: head.id, boardId: head.boardId,
+          itemLabel: label, grade: head.grade,
+          batchDrawIds: picks.map(function (p) { return p.id; }),
+          recipient: info.recipient, phone: info.phone, postcode: info.postcode || '',
+          address: info.address, memo: info.memo || '', carrier: null, tracking: null,
+          status: '요청', requestedAt: nowISO(), shippedAt: null
+        };
+        state.deliveries.unshift(delivery);
+        picks.forEach(function (p) { p.itemStatus = '배송신청'; p.deliveryId = delivery.id; });
+        persist();
+        buildLocalViews();
+        return { id: delivery.id, status: '요청', points_used: fee, points_balance: bal - fee, count: picks.length, item_label: label };
+      }
+
+      var res = await this.sb.rpc('request_batch_delivery', {
+        p_draw_ids: ids, p_recipient: info.recipient, p_phone: info.phone,
+        p_postcode: info.postcode || '', p_address: info.address, p_memo: info.memo || null
+      });
+      if (res.error) {
+        var bmsg = String(res.error.message || '');
+        /* 서버 SQL(request_batch_delivery)이 아직 없을 때 — 포인트는 그대로 두고 안내만 */
+        if (isMissingRpc(res.error)) {
+          throw new Error('합배송 신청 기능이 서버에 아직 등록되지 않았어요. 관리자 SQL(supabase/kujiking_delivery_4000p.sql)을 실행한 뒤 다시 시도해 주세요.');
+        }
+        if (/포인트가 부족|이미 배송 신청|찾을 수 없습니다|선택해 주세요/.test(bmsg)) throw new Error(bmsg);
+        throw res.error;
+      }
+      await this.refreshData();
+      return res.data || {};
+    },
+
     async convertPoints(drawId) {
       if (this.mode === 'local') {
         var d = state.draws.filter(function (x) { return x.id === drawId; })[0];
@@ -2322,6 +2388,12 @@
         dl.shippedAt = nowISO();
         var d = state.draws.filter(function (x) { return x.id === dl.drawId; })[0];
         if (d) d.itemStatus = '출고완료';
+        /* v4.4.21 — 합배송은 대표 1건 기록에 묶인 형제 상품까지 출고완료로 (서버 함수와 같은 동작) */
+        if (dl.batchDrawIds && dl.batchDrawIds.length > 1) {
+          state.draws.forEach(function (x) {
+            if (dl.batchDrawIds.indexOf(x.id) !== -1) x.itemStatus = '출고완료';
+          });
+        }
         persist();
         buildLocalViews();
         return;
@@ -2697,6 +2769,9 @@
       id: d.id, userId: d.user_id, drawId: d.draw_id, boardId: d.board_id,
       itemLabel: d.item_label, grade: d.grade, recipient: d.recipient, phone: d.phone,
       postcode: d.postcode, address: d.address, memo: d.memo, carrier: d.carrier,
+      /* v4.4.21 — 합배송 묶음(대표 1건 기록 + 묶인 draw id 목록).
+         DB 컬럼(batch_draw_ids)이 아직 없으면 undefined → null 로 안전하게 둡니다. */
+      batchDrawIds: Array.isArray(d.batch_draw_ids) ? d.batch_draw_ids : null,
       tracking: d.tracking, status: d.status, requestedAt: d.requested_at, shippedAt: d.shipped_at
     };
   }
@@ -3902,11 +3977,15 @@
   }
 
   /* ---------- 고객센터 · 배송비 ---------- */
-  /* v4.4.12 — 보관함 배송 신청은 1건당 4,000P(택배비 4,000원 상당)를 굿즈 포인트에서 차감한다.
+  /* v4.4.12 — 보관함 배송 신청은 1회당 4,000P(택배비 4,000원 상당)를 굿즈 포인트에서 차감한다.
+     v4.4.21 — 합배송도 같은 4,000P를 한 번만 차감한다(건수와 무관).
      서버(public.request_delivery)도 같은 금액을 검증·차감하므로 두 곳의 숫자를 함께 바꾼다.
      supabase/kujiking_delivery_4000p.sql */
   var DELIVERY_FEE_POINTS = 4000;
-  var SHIP_NOTICE_DEFAULT = '보관함 배송 신청 1건당 4,000P가 차감됩니다 (택배비 4,000원 상당) · 포인트가 부족하면 신청할 수 없어요';
+  /* v4.4.21 — 합배송: 여러 개를 골라도 신청 1회로 묶여 같은 4,000P가 한 번만 차감된다.
+     서버(public.request_batch_delivery)도 4,000P를 한 번만 차감한다. */
+  var DELIVERY_BATCH_MAX = 30;
+  var SHIP_NOTICE_DEFAULT = '보관함 배송 신청 1회당 4,000P가 차감됩니다 (개별·합배송 모두 1회, 택배비 4,000원 상당) · 포인트가 부족하면 신청할 수 없어요';
   var KAKAO_SOON = '현재 1:1 카카오톡 상담을 연결 중입니다! 잠시만 기다려 주세요.';
 
   function shippingNotice() {
@@ -4138,7 +4217,7 @@
     '</div>';
   }
 
-  /* v4.4.12 — 내 보관함 위에 지금 보유 포인트와 배송 신청 1건 차감액을 나란히 보여 준다. */
+  /* v4.4.12 — 내 보관함 위에 지금 보유 포인트와 배송 신청 1회 차감액을 나란히 보여 준다. */
   function deliveryPointsBarHTML() {
     var u = me();
     if (!u) return '';
@@ -4147,7 +4226,7 @@
     /* 라벨과 값을 붙여 읽히게 — 스타일시트가 캐시에 남아 있어도 같은 모양이 나오게 인라인으로 둔다 */
     return '<div class="ship-fee ship-fee-bar' + (short ? ' is-short' : '') + '">' +
       '<span class="ship-fee-row" style="justify-content:flex-start;gap:8px"><em>보유 굿즈 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
-      '<span class="ship-fee-row" style="justify-content:flex-start;gap:8px"><em>배송 신청 1건</em><b>' + fmt(DELIVERY_FEE_POINTS) + 'P 차감</b></span>' +
+      '<span class="ship-fee-row" style="justify-content:flex-start;gap:8px"><em>배송 신청 1회</em><b>' + fmt(DELIVERY_FEE_POINTS) + 'P 차감 (합배송 포함 1회)</b></span>' +
       '</div>';
   }
 
@@ -8987,26 +9066,106 @@
     return { '보관중': 'st-hold', '배송신청': 'st-request', '출고완료': 'st-shipped', '포인트지급': 'st-point', '포인트전환': 'st-point' }[s] || '';
   }
 
+  /* v4.4.21 — 합배송 선택 상태에서 지금 보관중이 아닌 상품 id 는 조용히 버린다
+     (다른 탭에서 배송 신청·포인트 전환한 상품이 선택에 남지 않게) */
+  function pruneBatchSelection() {
+    var ok = {};
+    (state.myDraws || []).forEach(function (d) { if (d.itemStatus === '보관중') ok[d.id] = 1; });
+    ui.selDraws = (ui.selDraws || []).filter(function (id) { return !!ok[id]; });
+  }
+
+  function holdItems() {
+    return (state.myDraws || []).filter(function (d) { return d.itemStatus === '보관중'; });
+  }
+
+  /* 선택 수·전체 선택 체크·버튼 문구를 한 번에 맞춘다 (목록을 다시 그리지 않는다) */
+  function syncBatchSelectionUI() {
+    var ids = ui.selDraws || [];
+    var holds = holdItems();
+    var n = ids.length;
+    $$('#myInventory [data-pick]').forEach(function (cb) {
+      var on = ids.indexOf(cb.getAttribute('data-pick')) !== -1;
+      if (cb.checked !== on) cb.checked = on;
+      var card = cb.closest ? cb.closest('.inv-card') : null;
+      if (card) card.classList.toggle('is-picked', on);
+    });
+    var all = $('#batchAll');
+    if (all) {
+      all.checked = holds.length > 0 && n >= holds.length;
+      all.indeterminate = n > 0 && n < holds.length;
+      all.disabled = holds.length === 0;
+    }
+    var cnt = $('#batchCount');
+    if (cnt) {
+      cnt.textContent = n > 0
+        ? ('선택 ' + fmt(n) + '개 · 전체 ' + fmt(holds.length) + '개')
+        : (fmt(holds.length) + '개 보관중');
+    }
+    var btn = $('#batchBtn');
+    if (btn) {
+      btn.textContent = n > 0
+        ? ('선택 ' + fmt(n) + '개 합배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P')
+        : ('합배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P');
+      btn.disabled = n === 0;
+      btn.setAttribute('aria-disabled', n === 0 ? 'true' : 'false');
+    }
+  }
+
+  /* 보관중 상품 위에 붙는 합배송 선택 바 — 보관중이 없으면 아예 그리지 않는다 */
+  function batchBarHTML() {
+    var holds = holdItems();
+    if (!holds.length) return '';
+    var n = (ui.selDraws || []).length;
+    return '<div class="batch-bar" id="batchBar">' +
+      '<div class="batch-bar-head">' +
+        '<label class="batch-all" for="batchAll">' +
+          '<input type="checkbox" id="batchAll" class="pick-box"' + (n > 0 && n >= holds.length ? ' checked' : '') + (n > 0 && n < holds.length ? ' data-indeterminate="1"' : '') + '>' +
+          '<span>보관중 전체 선택</span>' +
+        '</label>' +
+        '<em class="batch-count" id="batchCount">' + (n > 0 ? '선택 ' + fmt(n) + '개 · 전체 ' + fmt(holds.length) + '개' : fmt(holds.length) + '개 보관중') + '</em>' +
+      '</div>' +
+      '<button type="button" class="btn btn-primary batch-btn" id="batchBtn" data-action="open-batch-delivery"' + (n === 0 ? ' disabled aria-disabled="true"' : ' aria-disabled="false"') + '>' +
+        (n > 0 ? '선택 ' + fmt(n) + '개 합배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P' : '합배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P') +
+      '</button>' +
+      '<p class="batch-hint">여러 개를 골라도 <b>신청 1건</b>으로 묶여 <b>' + fmt(DELIVERY_FEE_POINTS) + 'P가 한 번만</b> 차감돼요. 받는 분·주소도 한 번만 입력하면 됩니다.</p>' +
+    '</div>';
+  }
+
   function renderMyInventory() {
     var el = $('#myInventory');
     if (!el) return;
+    pruneBatchSelection();
     var head = shipNoticeBoxHTML('ship-note-panel') + deliveryPointsBarHTML();
     var items = (state.myDraws || []).filter(function (d) { return d.itemStatus !== '포인트지급'; });
+    if (items.length) head += batchBarHTML();
     if (!items.length) {
       el.innerHTML = head + '<div class="card empty"><span class="empty-icon">' + icon('box') + '</span>' +
         '<p>보관 중인 상품이 없어요.<br>뽑기판에서 당첨되면 이곳에 담깁니다.</p>' +
         '<a class="btn btn-primary" href="#/board">뽑기판 열기</a></div>';
       return;
     }
+    var picked = {};
+    (ui.selDraws || []).forEach(function (id) { picked[id] = 1; });
     el.innerHTML = head + items.map(function (d) {
       var board = getBoard(d.boardId);
       var tier = board ? tierOf(board, d.grade) : null;
-      var dl = (state.myDeliveries || []).filter(function (x) { return x.drawId === d.id; })[0];
+      /* v4.4.21 — 합배송은 대표 1건 기록 + batchDrawIds 에 묶인 상품 id 목록.
+         묶인 상품도 같은 배송 기록(수령인·주소·운송장)을 보여 준다. */
+      var dl = (state.myDeliveries || []).filter(function (x) {
+        if (x.drawId === d.id) return true;
+        return !!(x.batchDrawIds && x.batchDrawIds.indexOf(d.id) !== -1);
+      })[0];
       var canAct = d.itemStatus === '보관중';
       var isLastOne = String(d.grade || '').toUpperCase() === 'LAST' || !!d.lastOne;
       var points = tier ? Number(tier.points || 0) : 0;
       var boardLastImg = (isLastOne && board && board.lastOneImage) ? board.lastOneImage : '';
-      return '<article class="inv-card card' + (isLastOne ? ' is-lastone' : '') + '">' +
+      var isPicked = !!picked[d.id];
+      var batchN = (dl && dl.batchDrawIds && dl.batchDrawIds.length > 1) ? dl.batchDrawIds.length : 0;
+      return '<article class="inv-card card' + (isLastOne ? ' is-lastone' : '') + (canAct ? ' is-selectable' : '') + (isPicked ? ' is-picked' : '') + '">' +
+        (canAct
+          ? '<label class="inv-pick" title="합배송에 담기"><input type="checkbox" class="pick-box" data-pick="' + h(d.id) + '"' +
+              (isPicked ? ' checked' : '') + ' aria-label="' + h((d.tierLabel || '당첨 상품') + ' 합배송 선택') + '"></label>'
+          : '') +
         (isLastOne
           ? '<div class="inv-thumb is-last">' + (boardLastImg
               ? '<img src="' + h(coverSrc(boardLastImg)) + '" alt="' + h(d.tierLabel || '라스트원상') + '" loading="lazy">'
@@ -9014,6 +9173,7 @@
           : '<div class="inv-thumb" style="background:' + gradeColor(d.grade) + '">' + h(d.grade) + '</div>') +
         '<div class="inv-body">' +
           '<div class="inv-top"><span class="inv-board">' + h(board ? board.category : '') + ' · ' + h(board ? board.title : '삭제된 판') + '</span>' +
+            (batchN ? '<span class="badge batch-badge">' + icon('box') + ' 합배송 ' + fmt(batchN) + '건</span>' : '') +
             '<span class="status-pill ' + statusClass(d.itemStatus) + '">' + statusLabel(d.itemStatus) + '</span></div>' +
           '<h3>' + (isLastOne ? '<span class="lw-tag">🏆 라스트원</span> ' : '') + h(d.tierLabel || (tier ? tier.label : '') || '당첨 상품') + '</h3>' +
           '<p class="inv-meta">' + drawNoLabel(d) + ' · ' + formatDateTime(d.at) + (isLastOne ? '' : (d.last ? ' · 마지막 1장' : '')) + '</p>' +
@@ -9029,7 +9189,9 @@
         '</div>' +
       '</article>';
     }).join('');
+    syncBatchSelectionUI();
   }
+
 
   function renderMyHistory() {
     var tbody = $('#myHistoryTable tbody');
@@ -9125,7 +9287,7 @@
     if (notice) {
       notice.innerHTML = '<h3>당첨 상품 수령 안내</h3><ul>' +
         '<li>당첨 상품은 <b>내 보관함</b>에 보관됩니다. 배송 신청 시 입력한 주소로 발송됩니다.</li>' +
-        '<li>배송 신청 1건당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감됩니다. 포인트가 부족하면 신청할 수 없어요.</li>' +
+        '<li>배송 신청 1회(개별 또는 합배송)당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감됩니다. 여러 개를 합배송하면 한 번만 차감돼요. 포인트가 부족하면 신청할 수 없어요.</li>' +
         '<li>배송 신청 후에는 포인트 전환으로 바꿀 수 없어요.</li>' +
         '<li>굿즈 포인트는 하위 등급 당첨 시 자동 지급되며, 상품을 포인트로 전환해 받을 수도 있습니다.</li>' +
         '<li>결과에 문제가 있다고 느껴지면 공정성 검증 페이지에서 봉인 해시를 확인해 주세요.</li>' +
@@ -9152,7 +9314,7 @@
       '<p>당첨 상품은 내 보관함에서 배송 신청한 주소로 발송됩니다. 주소 오류로 인한 반송은 재발송 비용이 발생할 수 있습니다.</p>' +
       '<h3>7. 배송비 · 포인트</h3>' +
       '<p><span data-ship-notice>' + h(shippingNotice()) + '</span></p>' +
-      '<p>배송 신청 1건당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감되며, 포인트가 4,000P 미만이면 신청할 수 없습니다. 차감된 포인트는 돌려받을 수 없습니다.</p>' +
+      '<p>배송 신청 1회(개별 또는 여러 상품을 묶은 합배송)당 <b>4,000P</b>가 보유 굿즈 포인트에서 차감되며, 포인트가 4,000P 미만이면 신청할 수 없습니다. 합배송은 몇 건을 묶어도 4,000P가 한 번만 차감됩니다. 차감된 포인트는 돌려받을 수 없습니다.</p>' +
       '<p class="fair-hint">배송비·포인트·교환 코드 문의는 카카오톡 채널 1:1 상담으로 받고 있습니다.</p>' +
       kakaoPillHTML('kakao-pill-sm') +
       '<h3>8. 성인 전용 서비스 · 미성년자 결제 제한</h3>' +
@@ -9510,6 +9672,7 @@
         '<div class="delivery-head">' +
           '<span class="status-pill ' + statusClass(done ? '출고완료' : '배송신청') + '">' + (done ? '출고 완료' : '출고 대기') + '</span>' +
           '<b>' + h(d.itemLabel || '당첨 상품') + '</b>' +
+          (d.batchDrawIds && d.batchDrawIds.length > 1 ? '<span class="badge batch-badge">' + icon('box') + ' 합배송 ' + fmt(d.batchDrawIds.length) + '건</span>' : '') +
           (d.grade ? '<span class="grade-badge sm' + (String(d.grade).toUpperCase() === 'LAST' ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(String(d.grade).toUpperCase() === 'LAST' ? 'LAST' : d.grade) + '</span>' : '') +
           '<span class="muted small">' + h(board ? board.category : '') + ' · ' + formatDateTime(d.requestedAt) + '</span>' +
         '</div>' +
@@ -10101,6 +10264,70 @@
         '<div class="modal-actions">' +
           '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
           '<button type="submit" class="btn btn-primary"' + (short ? ' disabled aria-disabled="true"' : '') + '>' + (short ? '포인트 부족' : '배송 신청 · ' + fmt(fee) + 'P') + '</button>' +
+        '</div>' +
+      '</form>');
+  }
+
+  /* v4.4.21 — 합배송 신청 모달
+     ① 고른 상품 목록과 건수 ② 차감 포인트는 건수와 상관없이 4,000P 1회
+     ③ 받는 사람·연락처·주소는 한 번만 입력해 제출한다. */
+  function openBatchDeliveryModal(ids) {
+    var mine = {};
+    (state.myDraws || []).forEach(function (d) { mine[d.id] = d; });
+    var picks = (ids || []).map(function (id) { return mine[id]; }).filter(function (d) {
+      return d && d.itemStatus === '보관중';
+    });
+    if (!picks.length) { toast('합배송으로 보낼 상품을 먼저 선택해 주세요.', 'err'); return; }
+    if (picks.length > DELIVERY_BATCH_MAX) picks = picks.slice(0, DELIVERY_BATCH_MAX);
+
+    var user = me();
+    var fee = DELIVERY_FEE_POINTS;
+    var bal = Number(user && user.points || 0);
+    var short = bal < fee;
+    var after = bal - fee;
+    var pickIds = picks.map(function (d) { return d.id; });
+    var firstLabel = picks[0].tierLabel || '당첨 상품';
+    var sub = picks.length > 1
+      ? fmt(picks.length) + '건 · ' + h(firstLabel) + ' 외 ' + fmt(picks.length - 1) + '건'
+      : '1건 · ' + h(firstLabel);
+
+    openModal('<h2 class="modal-title" id="modalTitle">합배송 신청</h2>' +
+      '<p class="modal-sub">' + sub + '</p>' +
+      '<ul class="batch-list">' + picks.map(function (d) {
+        var board = getBoard(d.boardId);
+        var isLastOne = String(d.grade || '').toUpperCase() === 'LAST' || !!d.lastOne;
+        return '<li>' +
+          '<span class="grade-badge sm' + (isLastOne ? ' grade-last' : '') + '" style="background:' + gradeColor(d.grade) + '">' + h(isLastOne ? 'LAST' : gradeLetter(d.grade)) + '</span>' +
+          '<span class="batch-item"><b>' + h(d.tierLabel || '당첨 상품') + '</b>' +
+            '<em>' + h(board ? board.category + ' · ' + board.title : '삭제된 판') + '</em></span>' +
+        '</li>';
+      }).join('') + '</ul>' +
+      '<div class="ship-fee">' +
+        '<span class="ship-fee-row"><em>배송 신청 포인트</em><b>' + fmt(fee) + 'P 차감</b></span>' +
+        '<span class="ship-fee-row"><em>합배송 건수</em><b>' + fmt(picks.length) + '건 → ' + fmt(fee) + 'P 1회</b></span>' +
+        '<span class="ship-fee-row"><em>보유 포인트</em><b>' + fmt(bal) + 'P</b></span>' +
+        '<span class="ship-fee-row is-after' + (short ? ' is-short' : '') + '"><em>' + (short ? '부족한 포인트' : '신청 후 잔액') + '</em><b>' + (short ? fmt(-after) + 'P' : fmt(after) + 'P') + '</b></span>' +
+        (short
+          ? '<span class="ship-fee-warn">보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(bal) + 'P)</span>'
+          : '<span class="ship-fee-note">상품을 한 상자로 묶어 보내며, 신청 후에는 되돌릴 수 없어요.</span>') +
+      '</div>' +
+      '<form data-form="batch-delivery" novalidate data-ids="' + h(pickIds.join(',')) + '">' +
+        '<label class="field"><span>받는 사람</span><input name="recipient" type="text" maxlength="20" required value="' + h(user ? user.nickname : '') + '"></label>' +
+        '<label class="field"><span>연락처</span><input name="phone" type="tel" inputmode="numeric" maxlength="20" required value="' + h(user ? user.phone : '') + '" placeholder="010-0000-0000"></label>' +
+        '<div class="field field-postcode"><span>우편번호 (선택)</span>' +
+          '<div class="postcode-row">' +
+            '<input name="postcode" type="text" inputmode="numeric" maxlength="6" placeholder="예: 05510" autocomplete="postal-code">' +
+            '<button type="button" class="btn btn-outline btn-sm postcode-btn" data-action="open-postcode">🔍 주소 검색</button>' +
+          '</div>' +
+        '</div>' +
+        '<label class="field"><span>주소</span><input name="address" type="text" maxlength="120" required placeholder="🔍 주소 검색을 누르거나 직접 입력" autocomplete="street-address"></label>' +
+        '<label class="field"><span>상세 주소 (선택)</span><input name="detail" type="text" maxlength="60" placeholder="예: 101동 1004호" autocomplete="address-line2"></label>' +
+        '<label class="field"><span>배송 요청사항 (선택)</span><input name="memo" type="text" maxlength="80" placeholder="예: 문 앞에 놓아주세요"></label>' +
+        shipNoticeBoxHTML('ship-note-modal') +
+        '<p class="form-error" data-role="delivery-error" role="alert"></p>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
+          '<button type="submit" class="btn btn-primary"' + (short ? ' disabled aria-disabled="true"' : '') + '>' + (short ? '포인트 부족' : '합배송 신청 · ' + fmt(fee) + 'P') + '</button>' +
         '</div>' +
       '</form>');
   }
@@ -11173,7 +11400,8 @@
         case 'reset-filter': ui.filters = { category: '전체', price: 'all', sort: 'recommend' }; renderHome(); break;
 
         case 'open-delivery': openDeliveryModal(id); break;
-        case 'open-postcode': openPostcodeLayer(document.querySelector('form[data-form="delivery"], form[data-form="goods-redeem"]')); break;
+        case 'open-batch-delivery': openBatchDeliveryModal((ui.selDraws || []).slice()); break;
+        case 'open-postcode': openPostcodeLayer(document.querySelector('form[data-form="delivery"], form[data-form="batch-delivery"], form[data-form="goods-redeem"]')); break;
         case 'close-postcode': closePostcodeLayer(); break;
         case 'convert-points': convertPointsFlow(id); break;
 
@@ -11663,6 +11891,52 @@
         return;
       }
 
+      if (type === 'batch-delivery') {
+        var berr = form.querySelector('[data-role="delivery-error"]');
+        if (berr) berr.textContent = '';
+        var uBatch = me();
+        var balBatch = Number(uBatch && uBatch.points || 0);
+        if (balBatch < DELIVERY_FEE_POINTS) {
+          if (berr) berr.textContent = '보유 포인트가 부족합니다 (4,000P 필요, 현재 ' + fmt(balBatch) + 'P)';
+          return;
+        }
+        var batchIds = String(form.getAttribute('data-ids') || '').split(',').filter(Boolean);
+        if (!batchIds.length) {
+          if (berr) berr.textContent = '합배송으로 보낼 상품을 다시 선택해 주세요.';
+          return;
+        }
+        var binfo = {
+          recipient: fieldValue(form, 'recipient').trim(),
+          phone: fieldValue(form, 'phone').trim(),
+          postcode: fieldValue(form, 'postcode').trim(),
+          address: [fieldValue(form, 'address').trim(), fieldValue(form, 'detail').trim()].filter(Boolean).join(' '),
+          memo: fieldValue(form, 'memo').trim()
+        };
+        if (!binfo.recipient || !binfo.phone || !binfo.address) {
+          if (berr) berr.textContent = '받는 사람·연락처·주소를 모두 입력해 주세요.';
+          return;
+        }
+        var bbtn = form.querySelector('button[type="submit"]');
+        if (bbtn) { bbtn.setAttribute('aria-disabled', 'true'); bbtn.textContent = '신청 중…'; }
+        Backend.requestBatchDelivery(batchIds, binfo).then(function (done) {
+          ui.selDraws = [];
+          closeModal();
+          ui.myTab = 'inventory';
+          renderAll();
+          var bcnt = Number(done && done.count) || batchIds.length;
+          var blegacy = Backend.mode !== 'local' && done && done.id && done.points_used == null;
+          if (blegacy) {
+            toast('합배송 신청은 접수됐어요. 다만 포인트 차감 설정(DB SQL)이 아직 적용되지 않아 차감되지 않았습니다.', 'err');
+          } else {
+            toast('합배송 신청을 접수했어요. 상품 ' + fmt(bcnt) + '건을 한 상자로 보내며 ' + fmt(DELIVERY_FEE_POINTS) + 'P가 차감됐어요.', 'ok');
+          }
+        }).catch(function (e4) {
+          if (berr) berr.textContent = errMsg(e4);
+          if (bbtn) { bbtn.removeAttribute('aria-disabled'); bbtn.textContent = '합배송 신청 · ' + fmt(DELIVERY_FEE_POINTS) + 'P'; }
+        });
+        return;
+      }
+
       if (type === 'goods-redeem') {
         var goErr = form.querySelector('[data-role="goods-error"]');
         var goItem = getGoodsItem(form.getAttribute('data-id'));
@@ -11889,6 +12163,21 @@
     document.addEventListener('change', function (e) {
       if (e.target && e.target.matches && e.target.matches('input[type="file"][data-upload]')) {
         handleUploadFile(e.target);
+        return;
+      }
+      /* v4.4.21 — 내 보관함 합배송 선택 */
+      if (e.target && e.target.matches && e.target.matches('[data-pick]')) {
+        var pickId = e.target.getAttribute('data-pick');
+        var sel = ui.selDraws || (ui.selDraws = []);
+        var at = sel.indexOf(pickId);
+        if (e.target.checked && at === -1) sel.push(pickId);
+        if (!e.target.checked && at !== -1) sel.splice(at, 1);
+        syncBatchSelectionUI();
+        return;
+      }
+      if (e.target && e.target.id === 'batchAll') {
+        ui.selDraws = e.target.checked ? holdItems().map(function (d) { return d.id; }) : [];
+        syncBatchSelectionUI();
         return;
       }
       if (e.target.id === 'fairBoardSelect') {
@@ -12282,7 +12571,7 @@
         '<h3>3. 교환·환불되는 경우</h3>' +
         '<p>상품의 하자, 오배송, 공개한 등급·상품과 다른 상품이 지급된 경우에는 개봉 여부와 관계없이 교환 또는 환불해 드립니다. 수령 후 7일 이내에 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 알려 주세요.</p>' +
         '<h3>4. 배송비</h3>' +
-        '<p>보관함 배송 신청 1건당 4,000P(택배비 4,000원 상당)가 보유 굿즈 포인트에서 차감됩니다. 포인트가 4,000P 미만이면 배송 신청을 할 수 없으며, 차감된 포인트는 환급되지 않습니다. 제주·도서산간 추가 배송비는 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 안내해 드립니다. 단순 변심에 의한 반품은 왕복 배송비를 부담합니다.</p>' +
+        '<p>보관함 배송 신청 1회(개별 또는 합배송)당 4,000P(택배비 4,000원 상당)가 보유 굿즈 포인트에서 차감됩니다. 합배송은 여러 상품을 묶어 신청해도 4,000P가 한 번만 차감됩니다. 포인트가 4,000P 미만이면 배송 신청을 할 수 없으며, 차감된 포인트는 환급되지 않습니다. 제주·도서산간 추가 배송비는 카카오톡 채널 ‘쿠지킹’ 1:1 문의로 안내해 드립니다. 단순 변심에 의한 반품은 왕복 배송비를 부담합니다.</p>' +
         '<h3>5. 처리 기간</h3>' +
         '<p>접수 후 3영업일 이내에 회신하고, 환불이 확정되면 7일 이내에 결제 수단으로 환급합니다.</p>' +
         '<h3>6. 굿즈 포인트</h3>' +
