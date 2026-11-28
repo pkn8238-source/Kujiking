@@ -4405,3 +4405,24 @@ body.hide-coupon-fab .coupon-fab{display:none}
   .sms-notice-sub{font-size:11px}
   .sms-line{font-size:12px;padding:8px 10px}
 }
+
+/* =========================================================
+   v4.4.19 — 관리자 › 회원 관리 › 포인트 지급/차감 모달
+   (.ship-fee / .qty-row / .field 는 기존 공통 스타일을 그대로 씁니다)
+   ========================================================= */
+.points-toggle{display:flex;gap:8px;margin:2px 0 14px}
+.points-mode{
+  flex:1;padding:11px 12px;border-radius:12px;
+  border:1.5px solid var(--line-strong);background:var(--paper);
+  font-size:14px;font-weight:900;color:var(--muted);letter-spacing:-.01em;
+  transition:background .15s ease,color .15s ease,border-color .15s ease,box-shadow .15s ease;
+}
+.points-mode.is-on{box-shadow:0 2px 10px rgba(0,0,0,.07)}
+.points-mode.is-on.is-grant{background:#eef7ff;border-color:#2f6fb2;color:#1c4f86}
+.points-mode.is-on.is-deduct{background:#fff0f0;border-color:#c62828;color:#a01f1f}
+.points-quick{margin-top:8px}
+.points-reason{margin-top:14px}
+.points-fee{margin-top:14px}
+@media (max-width:420px){
+  .points-mode{font-size:13.5px;padding:10px 8px}
+}

@@ -1,5 +1,5 @@
 /* =========================================================
-   쿠지킹 KUJIKING — app.js  (v4.4.18, vanilla · no build step)
+   쿠지킹 KUJIKING — app.js  (v4.4.19, vanilla · no build step)
    ---------------------------------------------------------
    · 해시 라우팅: #/  #/board/:id  #/my  #/winners  #/fairness  #/admin
    · 회원가입/로그인, 내 쿠폰함, 내 보관함(배송·포인트 전환),
@@ -97,6 +97,7 @@
     memberQuery: '',
     grantUserId: null,
     revoke: null,
+    points: null,            /* 관리자: 포인트 지급·차감 모달 상태 (v4.4.19) */
     adminBusy: false,
     ready: false
   };
@@ -2277,6 +2278,38 @@
       }
       await this.loadAdmin();
       return res.data || {};
+    },
+
+    /* 관리자: 회원 포인트 임의 지급/차감 (v4.4.19)
+       delta 가 양수면 지급, 음수면 차감입니다. 잔액·권한은 서버 함수가 마지막으로 한 번 더 확인합니다.
+       Supabase 함수: supabase/kujiking_admin_adjust_points.sql → rpc('admin_adjust_points') */
+    async adjustUserPoints(userId, delta, reason) {
+      var d = Math.round(Number(delta) || 0);
+      if (!userId) throw new Error('대상 회원을 찾을 수 없습니다.');
+      if (!d) throw new Error('지급하거나 차감할 포인트를 1P 이상 입력해 주세요.');
+      if (this.mode === 'local') {
+        var u = userById(userId);
+        if (!u) throw new Error('대상 회원을 찾을 수 없습니다.');
+        var nextLocal = (Number(u.points) || 0) + d;
+        if (nextLocal < 0) throw new Error('보유 포인트보다 많이 차감할 수 없습니다.');
+        u.points = nextLocal;
+        persist();
+        buildLocalViews();
+        return { ok: true, userId: userId, delta: d, points: nextLocal, reason: reason || null };
+      }
+      var res = await this.sb.rpc('admin_adjust_points', {
+        p_user_id: userId, p_delta: d, p_reason: reason || null
+      });
+      if (res.error) {
+        if (isMissingRpc(res.error)) {
+          throw new Error('포인트 지급/차감은 서버 함수가 필요해요. supabase/kujiking_admin_adjust_points.sql 을 Supabase SQL Editor에서 한 번 실행해 주세요.');
+        }
+        throw new Error(res.error.message || '포인트를 반영하지 못했어요.');
+      }
+      await this.loadAdmin();
+      await this.refreshData();
+      var out = res.data || {};
+      return { ok: true, userId: userId, delta: d, points: Number(out.points), reason: reason || null };
     },
 
     async shipDelivery(id, carrier, tracking) {
@@ -9420,6 +9453,7 @@
               (Number(m.couponCount || 0) > 0
                 ? ' <button class="btn btn-danger-ghost btn-sm" data-action="revoke-open" data-id="' + h(m.id) + '">쿠폰 회수</button>'
                 : '') +
+              ' <button class="btn btn-outline btn-sm" data-action="points-open" data-id="' + h(m.id) + '">포인트 지급/차감</button>' +
               ' ' + adminBtn +
             '</td>' +
           '</tr>';
@@ -9796,6 +9830,91 @@
           '<button type="submit" class="btn btn-primary">지급하기</button>' +
         '</div>' +
       '</form>');
+  }
+
+  /* ---------- 포인트 지급 / 차감 (v4.4.19) ----------
+     관리자 › 회원 관리 › [포인트 지급/차감]
+     · 지급(+) / 차감(-) 을 고르고 금액·사유를 넣으면 확인 한 번 뒤 서버에 반영합니다.
+     · 잔액보다 많이 차감하는 요청은 앱에서 먼저 막고, 서버 함수(admin_adjust_points)가 다시 확인합니다. */
+  var POINTS_QUICK = [1000, 4000, 5000, 10000];
+
+  function openPointsModal(userId) {
+    var m = (state.adminMembers || []).filter(function (x) { return String(x.id) === String(userId); })[0];
+    if (!m) { toast('대상 회원을 찾을 수 없어요', 'err'); return; }
+    ui.points = {
+      userId: userId, nickname: m.nickname || '회원', contact: m.email || m.phone || '',
+      points: Number(m.points) || 0, mode: 'grant', amount: POINTS_QUICK[0], reason: ''
+    };
+    renderPointsModal();
+  }
+
+  function pointsDelta(p) {
+    var amt = Math.max(0, Math.round(Number(p.amount) || 0));
+    return p.mode === 'deduct' ? -amt : amt;
+  }
+
+  function pointsPreviewHTML(p) {
+    var delta = pointsDelta(p);
+    var before = Number(p.points) || 0;
+    var after = before + delta;
+    return '<div class="ship-fee points-fee">' +
+      '<span class="ship-fee-row"><em>현재 보유</em><b>' + fmt(before) + 'P</b></span>' +
+      '<span class="ship-fee-row"><em>' + (p.mode === 'deduct' ? '차감' : '지급') + '</em><b>' + (delta > 0 ? '+' : '') + fmt(delta) + 'P</b></span>' +
+      '<span class="ship-fee-row' + (after < 0 ? ' is-short' : ' is-after') + '"><em>반영 후 잔액</em><b>' + (after < 0 ? '부족' : fmt(after) + 'P') + '</b></span>' +
+      (after < 0 ? '<span class="ship-fee-warn">보유 포인트보다 많이 차감할 수 없습니다.</span>' : '') +
+    '</div>';
+  }
+
+  function renderPointsModal() {
+    var p = ui.points;
+    if (!p) return;
+    var amt = Math.max(0, Math.round(Number(p.amount) || 0));
+    openModal('<h2 class="modal-title" id="modalTitle">포인트 지급 / 차감</h2>' +
+      '<p class="modal-sub"><b>' + h(p.nickname) + '</b>' + (p.contact ? ' · ' + h(p.contact) : '') +
+        ' 님의 굿즈 포인트를 관리자가 직접 지급하거나 차감합니다.</p>' +
+      '<form data-form="points" novalidate>' +
+        '<div class="points-toggle" role="group" aria-label="지급 또는 차감 선택">' +
+          '<button type="button" class="points-mode' + (p.mode === 'deduct' ? '' : ' is-on is-grant') + '" data-action="points-mode" data-mode="grant">＋ 지급</button>' +
+          '<button type="button" class="points-mode' + (p.mode === 'deduct' ? ' is-on is-deduct' : '') + '" data-action="points-mode" data-mode="deduct">－ 차감</button>' +
+        '</div>' +
+        '<label class="field"><span>포인트 (P)</span>' +
+          '<input name="amount" type="number" inputmode="numeric" min="1" max="1000000" step="1" value="' + (amt || '') + '" placeholder="예: 5000" required></label>' +
+        '<div class="qty-row points-quick">' +
+          POINTS_QUICK.map(function (n) {
+            return '<button type="button" class="btn ' + (amt === n ? 'btn-dark' : 'btn-outline') + ' btn-sm" data-action="points-quick" data-amount="' + n + '">' + fmt(n) + 'P</button>';
+          }).join('') +
+        '</div>' +
+        '<label class="field points-reason"><span>사유 (선택)</span>' +
+          '<input name="reason" type="text" maxlength="80" value="' + h(p.reason || '') + '" placeholder="예: 배송비 보상 · 이벤트 지급"></label>' +
+        '<div id="pointsPreview">' + pointsPreviewHTML(p) + '</div>' +
+        '<p class="form-error" data-role="points-error" role="alert"></p>' +
+        '<div class="modal-actions">' +
+          '<button type="button" class="btn btn-outline" data-action="close-modal">취소</button>' +
+          '<button type="submit" class="btn btn-primary">' + (p.mode === 'deduct' ? '차감하기' : '지급하기') + '</button>' +
+        '</div>' +
+      '</form>');
+  }
+
+  /* 모달을 다시 그리지 않고 토글·빠른 금액·미리보기만 갱신 (입력 중인 사유가 지워지지 않게) */
+  function refreshPointsForm() {
+    var p = ui.points;
+    if (!p) return;
+    var prev = $('#pointsPreview');
+    if (prev) prev.innerHTML = pointsPreviewHTML(p);
+    $$('.points-mode').forEach(function (b) {
+      var on = b.getAttribute('data-mode') === p.mode;
+      b.classList.toggle('is-on', on);
+      b.classList.toggle('is-grant', on && p.mode !== 'deduct');
+      b.classList.toggle('is-deduct', on && p.mode === 'deduct');
+    });
+    var submit = $('form[data-form="points"] button[type="submit"]');
+    if (submit) submit.textContent = p.mode === 'deduct' ? '차감하기' : '지급하기';
+    var amt = Math.max(0, Math.round(Number(p.amount) || 0));
+    $$('[data-action="points-quick"]').forEach(function (b) {
+      var n = Number(b.getAttribute('data-amount')) || 0;
+      b.classList.toggle('btn-dark', n === amt);
+      b.classList.toggle('btn-outline', n !== amt);
+    });
   }
 
   /* ---------- 쿠폰 회수 (미사용 쿠폰 삭제) ---------- */
@@ -11137,6 +11256,20 @@
           break;
         }
         case 'revoke-open': openRevokeModal(id, 0); break;
+        case 'points-open': openPointsModal(id); break;
+        case 'points-mode':
+          if (!ui.points) break;
+          ui.points.mode = el.getAttribute('data-mode') === 'deduct' ? 'deduct' : 'grant';
+          refreshPointsForm();
+          break;
+        case 'points-quick': {
+          if (!ui.points) break;
+          ui.points.amount = Math.max(0, Math.round(Number(el.getAttribute('data-amount')) || 0));
+          var amtBox = $('form[data-form="points"] input[name="amount"]');
+          if (amtBox) amtBox.value = String(ui.points.amount);
+          refreshPointsForm();
+          break;
+        }
         case 'revoke-preset':
           if (ui.revoke) { ui.revoke.qty = Number(el.getAttribute('data-qty')) || 1; renderRevokePicker(); }
           break;
@@ -11635,6 +11768,53 @@
         return;
       }
 
+      if (type === 'points') {
+        var pt = ui.points;
+        if (!pt) return;
+        var ptErr = form.querySelector('[data-role="points-error"]');
+        var ptAmt = Math.round(Number(fieldValue(form, 'amount')) || 0);
+        if (!(ptAmt >= 1)) { if (ptErr) ptErr.textContent = '지급하거나 차감할 포인트를 1P 이상 입력해 주세요.'; return; }
+        if (ptAmt > 1000000) { if (ptErr) ptErr.textContent = '한 번에 1,000,000P까지 반영할 수 있어요.'; return; }
+        var ptDelta = pt.mode === 'deduct' ? -ptAmt : ptAmt;
+        var ptAfter = (Number(pt.points) || 0) + ptDelta;
+        if (ptAfter < 0) {
+          if (ptErr) ptErr.textContent = '보유 포인트보다 많이 차감할 수 없습니다. (현재 ' + fmt(pt.points) + 'P)';
+          return;
+        }
+        var ptReason = fieldValue(form, 'reason').trim();
+        var ptBtn = form.querySelector('button[type="submit"]');
+        pt.amount = ptAmt;
+        pt.reason = ptReason;
+        confirmDialog({
+          title: pt.mode === 'deduct' ? '포인트를 차감할까요?' : '포인트를 지급할까요?',
+          message: '<b>' + h(pt.nickname) + '</b> 님의 포인트를 <b>' + (ptDelta > 0 ? '+' : '') + fmt(ptDelta) + 'P</b> ' +
+            (pt.mode === 'deduct' ? '차감합니다.' : '지급합니다.') +
+            '<br><span class="muted small">현재 ' + fmt(pt.points) + 'P → 반영 후 <b>' + fmt(ptAfter) + 'P</b>' +
+              (ptReason ? ' · 사유: ' + h(ptReason) : '') + '</span>',
+          confirmLabel: pt.mode === 'deduct' ? '차감' : '지급',
+          danger: pt.mode === 'deduct'
+        }).then(function (ok) {
+          if (!ok) { renderPointsModal(); return; }   /* 취소하면 입력하던 내용 그대로 되돌아온다 */
+          if (ptBtn) { ptBtn.setAttribute('aria-disabled', 'true'); ptBtn.textContent = '반영 중…'; }
+          Backend.adjustUserPoints(pt.userId, ptDelta, ptReason).then(function (r) {
+            var left = (r && r.points != null && !isNaN(Number(r.points))) ? Number(r.points) : ptAfter;
+            var name = pt.nickname || '회원';
+            ui.points = null;
+            closeModal();
+            renderAdmin();
+            renderHeader();
+            toast(name + ' 님에게 ' + (ptDelta > 0 ? '+' : '') + fmt(ptDelta) + 'P ' + (ptDelta > 0 ? '지급' : '차감') +
+              ' 완료 (잔액 ' + fmt(left) + 'P)', 'ok');
+          }).catch(function (e7) {
+            /* 실패하면 넣었던 값을 그대로 살려 모달을 다시 열고 이유를 보여 준다 */
+            renderPointsModal();
+            var errBox = $('[data-role="points-error"]');
+            if (errBox) errBox.textContent = errMsg(e7);
+          });
+        });
+        return;
+      }
+
       if (type === 'ship') {
         var carrier = fieldValue(form, 'carrier');
         var tracking = fieldValue(form, 'tracking').trim();
@@ -11683,6 +11863,14 @@
         });
       }
       if (e.target.id === 'revokeQty') refreshRevokePicks(e.target.value);
+      if (ui.points && e.target.closest('form[data-form="points"]')) {
+        if (e.target.name === 'amount') {
+          ui.points.amount = Math.max(0, Math.round(Number(e.target.value) || 0));
+          refreshPointsForm();
+        } else if (e.target.name === 'reason') {
+          ui.points.reason = e.target.value;
+        }
+      }
       if (e.target.id === 'memberSearch') {
         ui.memberQuery = e.target.value;
         clearTimeout(ui._memberTimer);
